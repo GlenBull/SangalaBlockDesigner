@@ -233,8 +233,18 @@
 const STUD = 8, PLATE = 3.2;
 
 /* Parts are organised by KIND, and each kind offers its sizes - the left-rail flyout picks
-   the kind, the submenu picks the size. Design numbers still to be checked against the
-   catalogue. */
+   the kind, the submenu picks the size.
+
+   EVERY NUMBER AND SIZE BELOW WAS READ FROM THE LDRAW LIBRARY, not typed from memory and not
+   checked by hand: `python tools/ldparts.py show 3005 3004 ...` resolves each number, reads the
+   part's own name off its first line, and measures its geometry (2026-08-11, all 15 confirmed).
+   Two facts that came out of the measuring and are easy to get wrong:
+     - a part's bounding box INCLUDES its stud (24 LDU body + 4 LDU stud = 3.5 plates for a
+       brick, 8 + 4 = 1.5 for a plate), so `h` below is the BODY in plates: brick 3, plate 1;
+     - four of these numbers are superseded in LDraw and answer "~Moved to": 3023 -> 3023b,
+       3040 -> 3040b, 3665 -> 3665a, 3660 -> 3660a. The number a student ORDERS by is the one
+       kept here; the redirect only matters when reading the geometry.
+   To check them again, or to add a part, run the tool - do not edit numbers by hand. */
 const KINDS = {
   brick:    {label:"Brick",          shape:"rect",     h:3,
              sizes:[{w:1,id:"3005",n:"1x1"},{w:2,id:"3004",n:"1x2"},{w:4,id:"3010",n:"1x4"},{w:6,id:"3009",n:"1x6"}]},
