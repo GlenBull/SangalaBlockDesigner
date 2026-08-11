@@ -1,0 +1,6 @@
+# The LDraw parts library lives beside the application so it is never lost again
+# (it used to sit in a session scratchpad, which does not survive a thread), but it
+# is 24,591 part files and a 145 MB archive - reference data, not this project's
+# source. Re-fetch with:
+#   curl -sL -o LDraw/complete.zip https://library.ldraw.org/library/updates/complete.zip
+LDraw/
