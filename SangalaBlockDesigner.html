@@ -183,6 +183,21 @@
     <div class="swrow" id="swatches"></div>
     <div class="hint" id="status">Pick a part from the rail, then click the frame to place it.</div>
 
+    <!-- BRICK SIZE, in Studio's words and beside the part rather than buried in Settings, which
+         is Glen's complaint about where Studio keeps it. A short list cannot hold the part a
+         student actually wants - 2 x 3 is the commonest brick there is - so the size is TYPED
+         and the design number is looked up in the LDraw table below. -->
+    <div id="sizebox" style="margin-top:.7rem">
+      <h2 class="marker sub" style="margin-bottom:.2rem">Brick Size</h2>
+      <div class="two">
+        <label class="fld" style="margin-top:0">Columns
+          <input type="number" id="szCols" min="1" max="16" step="1" value="2"></label>
+        <label class="fld" style="margin-top:0">Rows
+          <input type="number" id="szRows" min="1" max="16" step="1" value="1"></label>
+      </div>
+      <div class="hint" id="szNote" style="margin-top:.35rem"></div>
+    </div>
+
     <div id="setup" style="display:none">
       <h2 class="marker sub">Workspace</h2>
       <div class="showrow" style="margin-top:.55rem;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .85rem;font-size:.85rem;color:#5a4a34">
@@ -267,6 +282,11 @@ const KINDS = {
   wedge:    {label:"Wedge Plate",    shape:"wedge",    h:1,
              sizes:[{w:4,id:"41769",n:"2x4 Right"},{w:4,id:"41770",n:"2x4 Left"}]}
 };
+/* rows x columns -> design number, for the kinds that come in many sizes. GENERATED from the
+   LDraw library by tools/sizes_from_ldraw.py - 22 brick sizes and 34 plate sizes, every number
+   read off the part's own description. Do not hand-edit: rerun the tool. */
+const SIZES = {"brick":{"10x10":"733","12x24":"30072","1x1":"3005","1x10":"6111","1x12":"6112","1x16":"2465","1x2":"3004","1x3":"3622","1x4":"3010","1x6":"3009","1x8":"3008","2x10":"3006","2x2":"3003","2x3":"3002","2x4":"3001","2x6":"2456","2x8":"3007","4x10":"6212","4x12":"4202","4x6":"2356","8x16":"4204","8x8":"4201"},"plate":{"1x1":"3024","1x10":"4477","1x12":"60479","1x2":"3023","1x3":"3623","1x4":"3710","1x5":"78329","1x6":"3666","1x8":"3460","2x10":"3832","2x12":"2445","2x14":"91988","2x16":"4282","2x2":"3022","2x3":"3021","2x4":"3020","2x6":"3795","2x8":"3034","3x3":"11212","4x10":"3030","4x12":"3029","4x4":"3031","4x6":"3032","4x8":"3035","6x10":"3033","6x12":"3028","6x14":"3456","6x16":"3027","6x24":"3026","6x6":"3958","6x8":"3036","8x11":"728","8x16":"92438","8x8":"41539"}};
+
 const COLORS = [
   {code:15,name:"White",hex:"#f4f4f4"},{code:71,name:"Light Bluish Gray",hex:"#a0a5a9"},
   {code:72,name:"Dark Bluish Gray",hex:"#6c6e68"},{code:0,name:"Black",hex:"#1b2a34"},
@@ -385,18 +405,34 @@ function drawBrick(b,ghost){
      program the student arrives from. */
   const p=b.p, c=COLORS[b.colorIdx], fl=b.flip;
   const x=mx(b.col*STUD), y=mx(b.row*PLATE), w=mx(p.w*STUD), h=mx(p.h*PLATE);
+  /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR. A fixed brown ring works on
+     Studio's unfilled white shapes and disappears on a filled black one - which is how a black
+     brick came out as a blob with nothing legible on it. So the outline and the studs are the
+     brick's colour lightened on a dark part and darkened on a light one, which reads on all
+     nine and keeps each brick recognisably its own colour. */
+  const clamp=v=>v<0?0:v>255?255:v|0;
+  const tint=(hex,f)=>{const n=parseInt(hex.slice(1),16);
+    return "rgb("+clamp(((n>>16)&255)*f)+","+clamp(((n>>8)&255)*f)+","+clamp((n&255)*f)+")";};
+  const L=(()=>{const n=parseInt(c.hex.slice(1),16);
+    return (0.2126*((n>>16)&255)+0.7152*((n>>8)&255)+0.0722*(n&255))/255;})();
+  const dark=L<0.38;
+  const edge=dark?tint(c.hex,2.1):tint(c.hex,0.52);
+  const studFace=dark?tint(c.hex,1.55):tint(c.hex,0.90);
+  const studEdge=dark?tint(c.hex,2.6):tint(c.hex,0.60);
   ctx.globalAlpha = ghost?.5:1;
   shape(p,b.col,b.row,fl);
   ctx.fillStyle=c.hex; ctx.fill();
-  ctx.strokeStyle="#8a8a8a"; ctx.lineWidth=1.5; ctx.stroke();
-  /* One ring per stud, on the 8 mm pitch. Studio's own two exceptions come with the convention:
-     a sloped row carries no stud, and a cone has none where a round brick has one. */
+  ctx.strokeStyle=edge; ctx.lineWidth=1.5; ctx.stroke();
+  /* One stud per stud cell, on the 8 mm pitch. Studio's own two exceptions come with the
+     convention: a sloped row carries no stud, and a cone has none where a round brick has one. */
   if(p.shape!=="cone"){
-    const r=Math.min(Math.max(1.1, mx(2.4)), Math.min(h, mx(STUD))/2 - 0.5);
-    ctx.strokeStyle="#8a5a2b"; ctx.lineWidth=1;
+    const r=Math.min(Math.max(1.4, mx(2.4)), Math.min(h, mx(STUD))/2 - 1);
+    ctx.lineWidth=1;
     for(let i=0;i<p.w;i++){
       if(p.shape==="slope" && (fl ? i===0 : i===p.w-1)) continue;
-      ctx.beginPath(); ctx.arc(x+mx(STUD)*(i+.5), y+h/2, r, 0, 6.2832); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+mx(STUD)*(i+.5), y+h/2, r, 0, 6.2832);
+      ctx.fillStyle=studFace; ctx.fill();
+      ctx.strokeStyle=studEdge; ctx.stroke();
     }
   }
   if(ghost){ ctx.globalAlpha=1; ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=2;
@@ -442,6 +478,7 @@ $("partmenu").querySelectorAll("button[data-kind]").forEach(b=>{
       btn.onclick=(ev)=>{
         ev.stopPropagation();
         part={kind:k, w:sz.w, id:sz.id, n:sz.n};
+        syncSizeFields();                       /* the fields always show the part in hand */
         closeMenus(); setTool("place");
         say("Click the frame to place a "+K.label+" "+sz.n+" (design "+sz.id+").");
         draw();
@@ -456,6 +493,44 @@ document.addEventListener("click",(e)=>{
   if($("partmenu").style.display!=="none" && !$("partmenu").contains(e.target)
      && !$("sizemenu").contains(e.target) && !$("tPart").contains(e.target)) closeMenus();
 });
+
+/* ---------- Brick Size: type the size, look the part up ----------
+   A menu can only offer the sizes somebody thought to list, and the commonest brick of all -
+   2 x 3 - was not among them. So Columns and Rows are TYPED, and the design number comes out
+   of the generated LDraw table. A size that does not exist is SAID so, never invented: there
+   is no 3 x 5 brick, and a parts list that claims one cannot be ordered from. */
+const sizeable = k => !!SIZES[k];
+function syncSizeFields(){
+  const t=String(part.n||"").split("x");
+  if(t.length===2){ $("szRows").value=parseInt(t[0],10)||1; $("szCols").value=parseInt(t[1],10)||1; }
+  $("szCols").disabled=$("szRows").disabled=!sizeable(part.kind);
+  $("szNote").textContent = sizeable(part.kind)
+    ? KINDS[part.kind].label+" "+part.n.replace("x"," x ")+"  ·  design "+part.id
+    : KINDS[part.kind].label+" comes in the sizes on the part menu.";
+}
+function applySize(){
+  const k=part.kind;
+  if(!sizeable(k)) return syncSizeFields();
+  const cols=Math.max(1,Math.min(16,parseInt($("szCols").value,10)||1));
+  const rows=Math.max(1,Math.min(16,parseInt($("szRows").value,10)||1));
+  /* A part is named ONE way by the catalogue - the 1 x 6 brick is 3009 however you turn it - so
+     asking for 6 rows by 1 column finds the same part and is reported by the catalogue's name,
+     not the typed one. The typed figures still say how it LIES on the plate. */
+  const tbl=SIZES[k];
+  let id=tbl[rows+"x"+cols], R=rows, C=cols;
+  if(!id && tbl[cols+"x"+rows]){ id=tbl[cols+"x"+rows]; R=cols; C=rows; }
+  if(!id){
+    $("szNote").textContent="There is no "+KINDS[k].label.toLowerCase()+" "+rows+" x "+cols+" in the catalog.";
+    return;
+  }
+  part={kind:k, w:cols, d:rows, id:id, n:R+"x"+C};
+  $("szNote").textContent=KINDS[k].label+" "+R+" x "+C+"  ·  design "+id;
+  setTool("place");
+  say("Click the frame to place a "+KINDS[k].label+" "+R+" x "+C+" (design "+id+").");
+  draw();
+}
+$("szCols").oninput=applySize;
+$("szRows").oninput=applySize;
 
 /* ---------- right panel ---------- */
 function swatches(){
@@ -581,7 +656,7 @@ $("bAbout").onclick=()=>$("about").classList.add("show");
 $("aClose").onclick=()=>$("about").classList.remove("show");
 
 window.addEventListener("resize",fit);
-swatches(); fit();
+swatches(); syncSizeFields(); fit();
 </script>
 </body>
 </html>
