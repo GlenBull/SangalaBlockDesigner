@@ -325,8 +325,8 @@ function fit(){
   const C=bounds();
   const fw=Math.ceil(C.c/STUD)*STUD, fh=Math.ceil(C.d/STUD)*STUD;
   const side=Math.max(BASEPLATE*STUD, fw, fh);          /* square, like the plate itself */
-  padX=Math.round((side-fw)/2/STUD)*STUD;               /* whole studs, so columns stay whole */
-  padY=Math.round((side-fh)/2/PLATE)*PLATE;             /* whole plates, so rows stay whole */
+  padX=Math.round((side-fw)/2/STUD)*STUD;               /* whole studs, both ways, so a column */
+  padY=Math.round((side-fh)/2/STUD)*STUD;               /* and a row both land on the lattice */
   modelW=side; modelH=side;
   const bd=cv.parentElement.getBoundingClientRect();
   PX=Math.max(1.2, Math.min(9,(bd.height-36)/modelH,(bd.width-36)/modelW));
@@ -334,8 +334,10 @@ function fit(){
   draw();
 }
 const mx=v=>v*PX;
-const cur=()=>({shape:KINDS[part.kind].shape, h:KINDS[part.kind].h, w:part.w, id:part.id,
-                name:KINDS[part.kind].label+" "+part.n});
+/* w and d are the FOOTPRINT in studs (columns across, rows deep); h is the part's THICKNESS in
+   plates - 3 for a brick, 1 for a plate - which is how far it stands proud of the layer behind. */
+const cur=()=>({shape:KINDS[part.kind].shape, h:KINDS[part.kind].h, w:part.w, d:part.d||1,
+                id:part.id, name:KINDS[part.kind].label+" "+part.n});
 
 /* ---------- drawing ---------- */
 function drawGrid(){
@@ -378,20 +380,24 @@ function drawGuide(){
     ctx.strokeStyle="#8a8a8a"; ctx.lineWidth=1; ctx.stroke();
   });
 }
+/* THE FOOTPRINT, SEEN FACE ON - both axes in studs, because the figure is built in RELIEF: the
+   parts lie on the plate with their studs towards you and each layer stands one plate proud of
+   the one behind. So a part's outline here is its PLAN, exactly as Studio's part icons draw it:
+   a rectangle for a brick, plate or slope; a circle for a round brick or a cone; a trapezoid for
+   the wedge plate, because a piece that narrows in plan cannot be a rectangle however it slopes.
+   Its 3 plates of thickness go AWAY from the viewer and are carried by the layer, not by height
+   on the screen - which is what the old wall elevation had them as. */
 function shape(p,col,row,fl){
-  const x=mx(col*STUD),y=mx(row*PLATE),w=mx(p.w*STUD),h=mx(p.h*PLATE);
+  const d=p.d||1;
+  const x=mx(col*STUD), y=mx(row*STUD), w=mx(p.w*STUD), h=mx(d*STUD);
   ctx.beginPath();
-  if(p.shape==="slope"){ if(fl){ctx.moveTo(x,y+h);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h);}
-                         else  {ctx.moveTo(x,y);ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);} }
-  else if(p.shape==="invslope"){ if(fl){ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x,y+h);}
-                                 else  {ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h);} }
-  /* A cone is the one of the three that changes the SILHOUETTE from this side: it tapers from a
-     full stud at the foot to the stud on top. A round brick does not - a cylinder seen from the
-     side is a rectangle, so it is told apart by its shading, below. Nor does a wedge plate, whose
-     taper is in PLAN; from the side it is simply a plate, and it carries a hint line instead. */
-  else if(p.shape==="cone"){ const t=w*0.55;
-    ctx.moveTo(x,y+h); ctx.lineTo(x+(w-t)/2,y); ctx.lineTo(x+(w+t)/2,y); ctx.lineTo(x+w,y+h); }
-  else ctx.rect(x,y,w,h);
+  if(p.shape==="round" || p.shape==="cone"){
+    ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, 6.2832);
+  } else if(p.shape==="wedge"){
+    const tip=h/2;                                   /* narrows to half its depth at one end */
+    if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y+tip/2); ctx.lineTo(x+w,y+h-tip/2); ctx.lineTo(x,y+h); }
+    else  { ctx.moveTo(x,y+tip/2); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h-tip/2); }
+  } else ctx.rect(x,y,w,h);
   ctx.closePath(); return {x,y,w,h};
 }
 function drawBrick(b,ghost){
@@ -403,8 +409,8 @@ function drawBrick(b,ghost){
      This replaces a moulded side elevation with lit and shaded faces and studs standing proud of
      the top, which was invented in this application alone and is why nothing here resembled the
      program the student arrives from. */
-  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip;
-  const x=mx(b.col*STUD), y=mx(b.row*PLATE), w=mx(p.w*STUD), h=mx(p.h*PLATE);
+  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, dp=p.d||1;
+  const x=mx(b.col*STUD), y=mx(b.row*STUD), w=mx(p.w*STUD), h=mx(dp*STUD);
   /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR. A fixed brown ring works on
      Studio's unfilled white shapes and disappears on a filled black one - which is how a black
      brick came out as a blob with nothing legible on it. So the outline and the studs are the
@@ -426,13 +432,17 @@ function drawBrick(b,ghost){
   /* One stud per stud cell, on the 8 mm pitch. Studio's own two exceptions come with the
      convention: a sloped row carries no stud, and a cone has none where a round brick has one. */
   if(p.shape!=="cone"){
-    const r=Math.min(Math.max(1.4, mx(2.4)), Math.min(h, mx(STUD))/2 - 1);
+    const r=Math.max(1.4, mx(2.4));
     ctx.lineWidth=1;
-    for(let i=0;i<p.w;i++){
-      if(p.shape==="slope" && (fl ? i===0 : i===p.w-1)) continue;
-      ctx.beginPath(); ctx.arc(x+mx(STUD)*(i+.5), y+h/2, r, 0, 6.2832);
-      ctx.fillStyle=studFace; ctx.fill();
-      ctx.strokeStyle=studEdge; ctx.stroke();
+    for(let ry=0;ry<dp;ry++){
+      /* the sloped row falls away, so it carries no stud - an inverted slope keeps them all */
+      if(p.shape==="slope" && (fl ? ry===0 : ry===dp-1)) continue;
+      for(let cx=0;cx<p.w;cx++){
+        ctx.beginPath();
+        ctx.arc(x+mx(STUD)*(cx+.5), y+mx(STUD)*(ry+.5), r, 0, 6.2832);
+        ctx.fillStyle=studFace; ctx.fill();
+        ctx.strokeStyle=studEdge; ctx.stroke();
+      }
     }
   }
   if(ghost){ ctx.globalAlpha=1; ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=2;
@@ -449,7 +459,8 @@ function draw(){
   ctx.fillText(n+" x "+n+" studs", 8, 17);
   ctx.save(); ctx.translate(mx(padX), mx(padY));
   if(showGuide) drawGuide();
-  bricks.forEach(b=>drawBrick(b,false));
+  /* back to front, so a brick standing proud covers the one it rests on */
+  bricks.slice().sort((a,b)=>(a.base||0)-(b.base||0)).forEach(b=>drawBrick(b,false));
   if(hover && tool==="place") drawBrick(hover,true);
   ctx.restore();
   bom();
@@ -477,7 +488,10 @@ $("partmenu").querySelectorAll("button[data-kind]").forEach(b=>{
       btn.classList.toggle("on", part.kind===k && part.id===sz.id);
       btn.onclick=(ev)=>{
         ev.stopPropagation();
-        part={kind:k, w:sz.w, id:sz.id, n:sz.n};
+        /* The footprint comes from the part's OWN NAME, both ways: the 2 x 1 slope is one stud
+           across and two deep, which the hand-written w in the table had backwards. */
+        const t=String(sz.n).match(/(\d+)\s*x\s*(\d+)/);
+        part={kind:k, w:t?+t[2]:(sz.w||1), d:t?+t[1]:1, id:sz.id, n:sz.n};
         syncSizeFields();                       /* the fields always show the part in hand */
         closeMenus(); setTool("place");
         say("Click the frame to place a "+K.label+" "+sz.n+" (design "+sz.id+").");
@@ -591,23 +605,53 @@ function cell(e){
      a size other than its backing width - a click would otherwise land a stud or two out. */
   const r=cv.getBoundingClientRect(), s=r.width?cv.width/r.width:1;
   const x=(e.clientX-r.left)*s/PX - padX, y=(e.clientY-r.top)*s/PX - padY;
-  return {col:Math.floor(x/STUD), row:Math.floor(y/PLATE)};
+  return {col:Math.floor(x/STUD), row:Math.floor(y/STUD)};
 }
-function hit(c){
-  for(let i=bricks.length-1;i>=0;i--){const b=bricks[i];
-    if(c.col>=b.col&&c.col<b.col+b.p.w&&c.row>=b.row&&c.row<b.row+b.p.h) return i;}
-  return -1;
+
+/* ---------- LAYERS ----------
+   Depth is made by PLACING, never by a spinner: unlike Studio, this program cannot elevate a
+   region on its own, because there would be nothing holding it up. A brick lands on whatever is
+   already under its footprint, so the only way to reach the second layer is to have built the
+   first - which is Glen's rule and also just what bricks do. Base is counted in plates from the
+   plate, the same unit and the same word as Studio's Base column. */
+const thick = p => p.h||1;
+const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+(b.p.d||1)});
+function overlaps(a,b){ const A=foot(a), B=foot(b);
+  return A.x0<B.x1 && B.x0<A.x1 && A.y0<B.y1 && B.y0<A.y1; }
+function restingBase(nb){        /* the base it would take: the top of whatever it comes to rest on */
+  let base=0;
+  bricks.forEach(b=>{ if(overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
+  return base;
 }
+function carries(b){             /* is anything resting ON this one? */
+  return bricks.some(o=>o!==b && overlaps(o,b) && o.base===b.base+thick(b.p));
+}
+function hit(c){                 /* the topmost brick under the pointer */
+  let best=-1, top=-1;
+  bricks.forEach((b,i)=>{ const f=foot(b);
+    if(c.col>=f.x0 && c.col<f.x1 && c.row>=f.y0 && c.row<f.y1 && b.base>=top){ best=i; top=b.base; } });
+  return best;
+}
+const plates = n => n+(n===1?" plate":" plates");
 cv.addEventListener("mousemove",e=>{
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e); hover={p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip}; draw();
+  const c=cell(e), nb={p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip};
+  nb.base=restingBase(nb); hover=nb; draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
   const c=cell(e);
-  if(tool==="erase"){ const i=hit(c); if(i>=0){bricks.splice(i,1);draw();} return; }
+  if(tool==="erase"){
+    const i=hit(c); if(i<0) return;
+    if(carries(bricks[i])){ say("That brick is holding another one up — take the one above it off first."); return; }
+    bricks.splice(i,1); draw(); return;
+  }
   if(tool!=="place") return;
-  bricks.push({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip}); draw();
+  const nb={p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip};
+  nb.base=restingBase(nb);
+  bricks.push(nb);
+  say(nb.p.name+" placed at base "+plates(nb.base)+".");
+  draw();
 });
 window.addEventListener("keydown",e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){bricks.pop();draw();e.preventDefault();}
