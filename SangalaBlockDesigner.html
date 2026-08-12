@@ -226,7 +226,6 @@
   <button data-kind="cone">&#128314; Cone</button>
   <button data-kind="wedge">&#9699; Wedge Plate</button>
 </div>
-<div id="sizemenu" class="menu" style="position:fixed;z-index:32;display:none"></div>
 
 <input type="file" id="fOpen" accept=".block,.model,.json" style="display:none">
 
@@ -397,7 +396,8 @@ function shape(p,col,row,fl){
     const tip=h/2;                                   /* narrows to half its depth at one end */
     if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y+tip/2); ctx.lineTo(x+w,y+h-tip/2); ctx.lineTo(x,y+h); }
     else  { ctx.moveTo(x,y+tip/2); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h-tip/2); }
-  } else ctx.rect(x,y,w,h);
+  } else if(ctx.roundRect){ ctx.roundRect(x,y,w,h,Math.min(mx(1.4), Math.min(w,h)/5)); }
+  else ctx.rect(x,y,w,h);
   ctx.closePath(); return {x,y,w,h};
 }
 function drawBrick(b,ghost){
@@ -422,13 +422,37 @@ function drawBrick(b,ghost){
   const L=(()=>{const n=parseInt(c.hex.slice(1),16);
     return (0.2126*((n>>16)&255)+0.7152*((n>>8)&255)+0.0722*(n&255))/255;})();
   const dark=L<0.38;
-  const edge=dark?tint(c.hex,2.1):tint(c.hex,0.52);
-  const studFace=dark?tint(c.hex,1.55):tint(c.hex,0.90);
-  const studEdge=dark?tint(c.hex,2.6):tint(c.hex,0.60);
+  /* THE TONES ARE BLENDED TOWARDS WHITE OR BLACK, not multiplied. Multiplying amplifies whichever
+     channel already dominates, so black (27,42,52) came out BLUE and brown came out salmon - both
+     visible the moment the nine colours were rendered in a row and looked at. A blend keeps the
+     hue and lands where it is aimed, whatever the colour's brightness. */
+  const mix=(hex,to,f)=>{const n=parseInt(hex.slice(1),16), m=parseInt(to.slice(1),16),
+    b=(a,z)=>clamp(a+(z-a)*f);
+    return "rgb("+b((n>>16)&255,(m>>16)&255)+","+b((n>>8)&255,(m>>8)&255)+","+b(n&255,m&255)+")";};
+  const W="#ffffff", K="#000000";
+  const edge=dark?mix(c.hex,W,0.34):mix(c.hex,K,0.42);
+  const studFace=dark?mix(c.hex,W,0.20):mix(c.hex,K,0.10);
+  const studEdge=dark?mix(c.hex,W,0.42):mix(c.hex,K,0.34);
+  const hi=mix(c.hex,W,dark?0.58:0.34);                /* lit side of a stud */
+  const sh=mix(c.hex,K,dark?0.16:0.22);                /* and its shaded side */
   ctx.globalAlpha = ghost?.5:1;
+
+  /* A PLACED BRICK STANDS PROUD OF WHAT IS BEHIND IT, so it casts a small shadow, and the
+     further out it is stacked the further the shadow falls. Flat colour alone is what made a
+     black brick read as a mass: nothing said it was an object sitting on something. */
+  const off=Math.max(1, mx(0.7)+(b.base||0)*mx(0.22));
+  ctx.save(); ctx.globalAlpha=(ghost?.12:.22); ctx.translate(off,off);
+  shape(p,b.col,b.row,fl); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
+
   shape(p,b.col,b.row,fl);
   ctx.fillStyle=c.hex; ctx.fill();
-  ctx.strokeStyle=edge; ctx.lineWidth=1.5; ctx.stroke();
+  /* an inner bevel: the same outline stroked wide and CLIPPED to the brick, so only its inside
+     half shows - the lit top edge of the moulding, which a single flat fill has no room for */
+  ctx.save(); shape(p,b.col,b.row,fl); ctx.clip();
+  ctx.strokeStyle=mix(c.hex,W,dark?0.26:0.30); ctx.lineWidth=Math.max(2, mx(0.7));
+  shape(p,b.col,b.row,fl); ctx.stroke(); ctx.restore();
+  shape(p,b.col,b.row,fl);
+  ctx.strokeStyle=edge; ctx.lineWidth=1.3; ctx.stroke();
   /* One stud per stud cell, on the 8 mm pitch. Studio's own two exceptions come with the
      convention: a sloped row carries no stud, and a cone has none where a round brick has one. */
   if(p.shape!=="cone"){
@@ -438,10 +462,18 @@ function drawBrick(b,ghost){
       /* the sloped row falls away, so it carries no stud - an inverted slope keeps them all */
       if(p.shape==="slope" && (fl ? ry===0 : ry===dp-1)) continue;
       for(let cx=0;cx<p.w;cx++){
-        ctx.beginPath();
-        ctx.arc(x+mx(STUD)*(cx+.5), y+mx(STUD)*(ry+.5), r, 0, 6.2832);
+        const sx=x+mx(STUD)*(cx+.5), sy=y+mx(STUD)*(ry+.5);
+        ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
         ctx.fillStyle=studFace; ctx.fill();
-        ctx.strokeStyle=studEdge; ctx.stroke();
+        /* a stud is a little cylinder, so it is lit on one side and shaded on the other -
+           two arcs inside its own rim, which is what stops it reading as a flat dot */
+        ctx.lineWidth=Math.max(1.2, r*0.3);
+        ctx.beginPath(); ctx.arc(sx,sy,r*0.78, Math.PI*0.85, Math.PI*1.85);
+        ctx.strokeStyle=hi; ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx,sy,r*0.78, Math.PI*1.85, Math.PI*0.85);
+        ctx.strokeStyle=sh; ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
+        ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
       }
     }
   }
@@ -466,8 +498,8 @@ function draw(){
   bom();
 }
 
-/* ---------- left-rail flyout: Studio's #partmenu pattern, plus a size submenu ---------- */
-function closeMenus(){ $("partmenu").style.display="none"; $("sizemenu").style.display="none"; }
+/* ---------- left-rail flyout: Studio's #partmenu pattern ---------- */
+function closeMenus(){ $("partmenu").style.display="none"; }
 $("tPart").onclick=(e)=>{
   e.stopPropagation();
   if(tool==="place"){ setTool("select"); closeMenus(); return; }
@@ -475,37 +507,22 @@ $("tPart").onclick=(e)=>{
   t.querySelectorAll("button[data-kind]").forEach(b=>b.classList.toggle("on", b.dataset.kind===part.kind));
   t.style.left=(r.right+8)+"px"; t.style.top=r.top+"px";
   t.style.display="flex"; t.style.flexDirection="column";
-  $("sizemenu").style.display="none";
 };
+/* THE MENU PICKS THE KIND, AND THAT IS ALL IT DOES. It used to open a submenu of four sizes,
+   which is both a second place to say the same thing and a shorter list than the catalogue holds
+   - Glen: "why do we list specific brick types if we're going to set this in the settings menu?"
+   The size is Columns and Rows in the panel, one place, any size the library has. */
 $("partmenu").querySelectorAll("button[data-kind]").forEach(b=>{
   b.onclick=(e)=>{
     e.stopPropagation();
-    const k=b.dataset.kind, K=KINDS[k], m=$("sizemenu"), r=b.getBoundingClientRect();
-    m.innerHTML="";
-    K.sizes.forEach(sz=>{
-      const btn=document.createElement("button");
-      btn.textContent=K.label+" "+sz.n+"   \u00b7   "+sz.id;
-      btn.classList.toggle("on", part.kind===k && part.id===sz.id);
-      btn.onclick=(ev)=>{
-        ev.stopPropagation();
-        /* The footprint comes from the part's OWN NAME, both ways: the 2 x 1 slope is one stud
-           across and two deep, which the hand-written w in the table had backwards. */
-        const t=String(sz.n).match(/(\d+)\s*x\s*(\d+)/);
-        part={kind:k, w:t?+t[2]:(sz.w||1), d:t?+t[1]:1, id:sz.id, n:sz.n};
-        syncSizeFields();                       /* the fields always show the part in hand */
-        closeMenus(); setTool("place");
-        say("Click the frame to place a "+K.label+" "+sz.n+" (design "+sz.id+").");
-        draw();
-      };
-      m.appendChild(btn);
-    });
-    m.style.left=(r.right+6)+"px"; m.style.top=r.top+"px";
-    m.style.display="flex"; m.style.flexDirection="column";
+    part={...part, kind:b.dataset.kind};
+    closeMenus();
+    applySize(true);                 /* re-reads the fields against the new kind's own sizes */
   };
 });
 document.addEventListener("click",(e)=>{
   if($("partmenu").style.display!=="none" && !$("partmenu").contains(e.target)
-     && !$("sizemenu").contains(e.target) && !$("tPart").contains(e.target)) closeMenus();
+     && !$("tPart").contains(e.target)) closeMenus();
 });
 
 /* ---------- Brick Size: type the size, look the part up ----------
@@ -513,7 +530,17 @@ document.addEventListener("click",(e)=>{
    2 x 3 - was not among them. So Columns and Rows are TYPED, and the design number comes out
    of the generated LDraw table. A size that does not exist is SAID so, never invented: there
    is no 3 x 5 brick, and a parts list that claims one cannot be ordered from. */
+/* Every kind gets a size table. Brick and plate come from the library - 22 and 34 sizes - and
+   the rest have only the few that exist, read off their own entries above, so one interface
+   covers all seven and a size that does not exist is refused the same way everywhere. */
+Object.keys(KINDS).forEach(k=>{
+  if(SIZES[k]) return;
+  SIZES[k]={};
+  (KINDS[k].sizes||[]).forEach(sz=>{ const m=String(sz.n).match(/(\d+)\s*x\s*(\d+)/);
+    if(m) SIZES[k][m[1]+"x"+m[2]]=sz.id; });
+});
 const sizeable = k => !!SIZES[k];
+const firstSize = k => Object.keys(SIZES[k]||{})[0];
 function syncSizeFields(){
   const t=String(part.n||"").split("x");
   if(t.length===2){ $("szRows").value=parseInt(t[0],10)||1; $("szCols").value=parseInt(t[1],10)||1; }
@@ -522,11 +549,19 @@ function syncSizeFields(){
     ? KINDS[part.kind].label+" "+part.n.replace("x"," x ")+"  ·  design "+part.id
     : KINDS[part.kind].label+" comes in the sizes on the part menu.";
 }
-function applySize(){
+function applySize(snap){
   const k=part.kind;
   if(!sizeable(k)) return syncSizeFields();
-  const cols=Math.max(1,Math.min(16,parseInt($("szCols").value,10)||1));
-  const rows=Math.max(1,Math.min(16,parseInt($("szRows").value,10)||1));
+  let cols=Math.max(1,Math.min(16,parseInt($("szCols").value,10)||1));
+  let rows=Math.max(1,Math.min(16,parseInt($("szRows").value,10)||1));
+  /* Switching kind: a cone comes only 1 x 1, so carrying 2 x 3 across would land on nothing.
+     Snap to the kind's own first size and show it, rather than leave the tool holding a part
+     that does not exist. Typing is never snapped - that would fight the person typing. */
+  if(snap && !(SIZES[k][rows+"x"+cols] || SIZES[k][cols+"x"+rows])){
+    const f=(firstSize(k)||"1x1").split("x");
+    rows=+f[0]; cols=+f[1];
+    $("szRows").value=rows; $("szCols").value=cols;
+  }
   /* A part is named ONE way by the catalogue - the 1 x 6 brick is 3009 however you turn it - so
      asking for 6 rows by 1 column finds the same part and is reported by the catalogue's name,
      not the typed one. The typed figures still say how it LIES on the plate. */
