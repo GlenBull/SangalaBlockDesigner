@@ -157,6 +157,8 @@
     <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, or a Block Designer design you saved (.block)"><span class="glyph">&#128194;</span><small>Open</small></button>
     <button class="tbtn" id="bSave" title="Save your design (.block)"><span class="glyph">&#128190;</span><small>Save</small></button>
     <button class="tbtn" id="bPrint" title="Print the parts list &mdash; every brick used, with its design number"><span class="glyph">&#128424;&#65039;</span><small>Print</small></button>
+    <!-- Studio's own 3D toggle, mark and label: the eye, "3D View". Same idea, same button. -->
+    <button class="tbtn" id="bView3D" title="3D View: see the design as layers standing off the plate. Press again to go back and build."><span class="glyph">&#128065;&#65039;</span><small>3D View</small></button>
     <button class="tbtn" id="bSettings" title="Setup: what the workspace shows &mdash; click to show or hide"><span class="glyph">&#9881;&#65039;</span><small>Settings</small></button>
   </div>
   <div class="spacer"></div>
@@ -301,6 +303,7 @@ let guide = CRANE.slice(), bricks = [];
 let part = {kind:"brick", w:2, id:"3004", n:"1x2"};   // the part the Toolbar has chosen
 let selCol = 3, flip = false;
 let tool = "select", showGuide = true, showGrid = true;
+let view3D = false;      /* the 3D View is a way of LOOKING, not a mode you build in */
 
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
@@ -402,6 +405,44 @@ function shape(p,col,row,fl){
   else ctx.rect(x,y,w,h);
   ctx.closePath(); return {x,y,w,h};
 }
+/* THE TONES A BRICK IS DRAWN IN, in one place, because the flat view and the 3D View must not
+   drift apart. Blended towards white or black, never multiplied: multiplying amplifies whichever
+   channel already dominates, so black came out blue and brown came out salmon. A dark part is
+   lightened and a light one darkened, so all nine colours read and each stays its own colour. */
+const clamp = v => v<0?0:v>255?255:v|0;
+function tones(hex){
+  const n=parseInt(hex.slice(1),16);
+  const mix=(to,f)=>{const m=parseInt(to.slice(1),16), b=(a,z)=>clamp(a+(z-a)*f);
+    return "rgb("+b((n>>16)&255,(m>>16)&255)+","+b((n>>8)&255,(m>>8)&255)+","+b(n&255,m&255)+")";};
+  const W="#ffffff", K="#000000";
+  const L=(0.2126*((n>>16)&255)+0.7152*((n>>8)&255)+0.0722*(n&255))/255, dark=L<0.38;
+  return { dark, mix, W, K,
+    edge:     dark?mix(W,0.34):mix(K,0.42),
+    bevel:    mix(W,dark?0.26:0.30),
+    studFace: dark?mix(W,0.20):mix(K,0.10),
+    studEdge: dark?mix(W,0.42):mix(K,0.34),
+    hi:       mix(W,dark?0.58:0.34),      /* lit side of a stud */
+    sh:       mix(K,dark?0.16:0.22),      /* and its shaded side */
+    side:     mix(K,0.20),                /* a wall turned away from the light */
+    top:      mix(W,0.14) };              /* and one turned towards it */
+}
+
+/* The same footprint as shape() draws, as POINTS, which the projection needs to sweep into walls.
+   A circle is taken as a 20-gon; the rounded corners of a rectangle are not carried, because a
+   1.4 mm radius does not survive the projection and would only complicate the walls. */
+function footPoly(p,col,row,fl){
+  const d=p.d||1, x=mx(col*STUD), y=mx(row*STUD), w=mx(p.w*STUD), h=mx(d*STUD), pts=[];
+  if(p.shape==="round" || p.shape==="cone"){
+    const cx=x+w/2, cy=y+h/2;
+    for(let i=0;i<20;i++){ const a=i/20*6.2832; pts.push([cx+(w/2)*Math.cos(a), cy+(h/2)*Math.sin(a)]); }
+  } else if(p.shape==="wedge"){
+    const tip=h/2;
+    if(fl) pts.push([x,y],[x+w,y+tip/2],[x+w,y+h-tip/2],[x,y+h]);
+    else   pts.push([x,y+tip/2],[x+w,y],[x+w,y+h],[x,y+h-tip/2]);
+  } else pts.push([x,y],[x+w,y],[x+w,y+h],[x,y+h]);
+  return pts;
+}
+
 function drawBrick(b,ghost){
   /* A BRICK IS DRAWN THE WAY STUDIO DRAWS A PART, in Studio's own three marks: the colour as the
      fill, a GRAY outline (#8a8a8a) which is Studio's mark for a part rather than a cut line, and
@@ -413,30 +454,10 @@ function drawBrick(b,ghost){
      program the student arrives from. */
   const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, dp=p.d||1;
   const x=mx(b.col*STUD), y=mx(b.row*STUD), w=mx(p.w*STUD), h=mx(dp*STUD);
-  /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR. A fixed brown ring works on
-     Studio's unfilled white shapes and disappears on a filled black one - which is how a black
-     brick came out as a blob with nothing legible on it. So the outline and the studs are the
-     brick's colour lightened on a dark part and darkened on a light one, which reads on all
-     nine and keeps each brick recognisably its own colour. */
-  const clamp=v=>v<0?0:v>255?255:v|0;
-  const tint=(hex,f)=>{const n=parseInt(hex.slice(1),16);
-    return "rgb("+clamp(((n>>16)&255)*f)+","+clamp(((n>>8)&255)*f)+","+clamp((n&255)*f)+")";};
-  const L=(()=>{const n=parseInt(c.hex.slice(1),16);
-    return (0.2126*((n>>16)&255)+0.7152*((n>>8)&255)+0.0722*(n&255))/255;})();
-  const dark=L<0.38;
-  /* THE TONES ARE BLENDED TOWARDS WHITE OR BLACK, not multiplied. Multiplying amplifies whichever
-     channel already dominates, so black (27,42,52) came out BLUE and brown came out salmon - both
-     visible the moment the nine colours were rendered in a row and looked at. A blend keeps the
-     hue and lands where it is aimed, whatever the colour's brightness. */
-  const mix=(hex,to,f)=>{const n=parseInt(hex.slice(1),16), m=parseInt(to.slice(1),16),
-    b=(a,z)=>clamp(a+(z-a)*f);
-    return "rgb("+b((n>>16)&255,(m>>16)&255)+","+b((n>>8)&255,(m>>8)&255)+","+b(n&255,m&255)+")";};
-  const W="#ffffff", K="#000000";
-  const edge=dark?mix(c.hex,W,0.34):mix(c.hex,K,0.42);
-  const studFace=dark?mix(c.hex,W,0.20):mix(c.hex,K,0.10);
-  const studEdge=dark?mix(c.hex,W,0.42):mix(c.hex,K,0.34);
-  const hi=mix(c.hex,W,dark?0.58:0.34);                /* lit side of a stud */
-  const sh=mix(c.hex,K,dark?0.16:0.22);                /* and its shaded side */
+  /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR - see tones() above. A fixed brown
+     ring works on Studio's unfilled white shapes and disappears on a filled black one, which is
+     how a black brick came out as a blob with nothing legible on it. */
+  const T=tones(c.hex), edge=T.edge, studFace=T.studFace, studEdge=T.studEdge, hi=T.hi, sh=T.sh;
   ctx.globalAlpha = ghost?.5:1;
 
   /* A PLACED BRICK STANDS PROUD OF WHAT IS BEHIND IT, so it casts a small shadow, and the
@@ -451,7 +472,7 @@ function drawBrick(b,ghost){
   /* an inner bevel: the same outline stroked wide and CLIPPED to the brick, so only its inside
      half shows - the lit top edge of the moulding, which a single flat fill has no room for */
   ctx.save(); shape(p,b.col,b.row,fl); ctx.clip();
-  ctx.strokeStyle=mix(c.hex,W,dark?0.26:0.30); ctx.lineWidth=Math.max(2, mx(0.7));
+  ctx.strokeStyle=T.bevel; ctx.lineWidth=Math.max(2, mx(0.7));
   shape(p,b.col,b.row,fl); ctx.stroke(); ctx.restore();
   shape(p,b.col,b.row,fl);
   ctx.strokeStyle=edge; ctx.lineWidth=1.3; ctx.stroke();
@@ -483,6 +504,49 @@ function drawBrick(b,ghost){
              shape(p,b.col,b.row,fl); ctx.stroke(); }
   ctx.globalAlpha=1;
 }
+
+/* ---------- 3D VIEW: A PROJECTION, NOT AN EXTRUSION ----------
+   This tool cannot elevate a region the way Studio does, because nothing would be holding it up.
+   So the 3D View projects what has actually been built: the figure stays where it is and every
+   PLATE of depth steps it up and to the right by a fixed amount - Glen: "increments will be fixed
+   - we're limited to quantum steps in plate size jumps." Half a plate on screen per plate of
+   depth, which is a cabinet projection: a brick standing 3 plates proud steps a visible but
+   modest distance, and the picture still reads as the crane rather than as a diagram.
+   Three flat tones, the convention the instruction-booklet renderer in Studio's repo uses: the
+   face in its own colour, a wall turned away from the light darker, one turned towards it
+   lighter, every face outlined in the brick's own edge tone. */
+function drawBrick3D(b){
+  const p=b.p, c=COLORS[b.colorIdx], T=tones(c.hex);
+  const base=b.base||0, t=thick(p), S=Math.max(2, mx(PLATE)*0.55);
+  const pts=footPoly(p,b.col,b.row,b.flip);
+  const at=(a,z)=>a.map(q=>[q[0]+z*S, q[1]-z*S]);
+  const bk=at(pts,base), fr=at(pts,base+t);
+  const poly=a=>{ ctx.beginPath();
+    a.forEach((q,i)=> i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])); ctx.closePath(); };
+  ctx.lineWidth=1;
+  for(let i=0;i<pts.length;i++){
+    const j=(i+1)%pts.length;
+    const dx=pts[j][0]-pts[i][0], dy=pts[j][1]-pts[i][1];
+    const nx=dy, ny=-dx;                    /* outward normal of a clockwise polygon, y down */
+    if(nx-ny <= 0) continue;                /* facing away from the projection: not drawn */
+    poly([bk[i],bk[j],fr[j],fr[i]]);
+    ctx.fillStyle = Math.abs(nx)>Math.abs(ny) ? T.side : T.top;
+    ctx.fill(); ctx.strokeStyle=T.edge; ctx.stroke();
+  }
+  poly(fr); ctx.fillStyle=c.hex; ctx.fill(); ctx.strokeStyle=T.edge; ctx.stroke();
+  if(p.shape!=="cone"){                     /* the studs sit on the face that points at you */
+    const r=Math.max(1.4, mx(2.4)), dp=p.d||1, z=base+t;
+    for(let ry=0;ry<dp;ry++){
+      if(p.shape==="slope" && (b.flip ? ry===0 : ry===dp-1)) continue;
+      for(let cx=0;cx<p.w;cx++){
+        const sx=mx(b.col*STUD)+mx(STUD)*(cx+.5)+z*S, sy=mx(b.row*STUD)+mx(STUD)*(ry+.5)-z*S;
+        ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
+        ctx.fillStyle=T.studFace; ctx.fill();
+        ctx.strokeStyle=T.studEdge; ctx.lineWidth=1; ctx.stroke();
+      }
+    }
+  }
+}
 function draw(){
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
   if(showGrid) drawGrid();
@@ -494,8 +558,12 @@ function draw(){
   ctx.save(); ctx.translate(mx(padX), mx(padY));
   if(showGuide) drawGuide();
   /* back to front, so a brick standing proud covers the one it rests on */
-  bricks.slice().sort((a,b)=>(a.base||0)-(b.base||0)).forEach(b=>drawBrick(b,false));
-  if(hover && tool==="place") drawBrick(hover,true);
+  const order=bricks.slice().sort((a,b)=>(a.base||0)-(b.base||0));
+  if(view3D) order.forEach(drawBrick3D);
+  else {
+    order.forEach(b=>drawBrick(b,false));
+    if(hover && tool==="place") drawBrick(hover,true);
+  }
   ctx.restore();
   bom();
 }
@@ -654,6 +722,17 @@ $("tErase").onclick =()=>{closeMenus();setTool(tool==="erase"?"select":"erase");
                           say(tool==="erase"?"Click a brick to take it off.":"Select / move.");};
 $("tFlip").onclick  =()=>{flip=!flip;$("tFlip").classList.toggle("on",flip);
                           say("Slopes now face "+(flip?"right":"left")+".");draw();};
+/* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
+   is up, exactly as Studio does ("press 3D View again to edit"). */
+$("bView3D").onclick=()=>{
+  view3D=!view3D;
+  $("bView3D").classList.toggle("on", view3D);
+  closeMenus(); hover=null;
+  if(view3D){ setTool("select");
+    say("3D View: the layers stand off the plate, a plate of depth at a time. Press 3D View again to build.");
+  } else say("Select / move.");
+  draw();
+};
 let setupOpen=false;
 $("bSettings").onclick=()=>{
   setupOpen=!setupOpen;
@@ -699,12 +778,14 @@ function hit(c){                 /* the topmost brick under the pointer */
 }
 const plates = n => n+(n===1?" plate":" plates");
 cv.addEventListener("mousemove",e=>{
+  if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
   const c=cell(e), nb={p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip};
   nb.base=restingBase(nb); hover=nb; draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
+  if(view3D) return;                                       /* looking, not building */
   const c=cell(e);
   if(tool==="erase"){
     const i=hit(c); if(i<0) return;
