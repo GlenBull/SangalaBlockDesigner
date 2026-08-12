@@ -956,14 +956,66 @@ function renderPreview(){
    Across the plate is X, up the plate is Z, and DEPTH - the direction a layer stands proud -
    is Y, one plate at a time. The studs are little cylinders on the face, so the model reads
    as LEGO rather than as blocks. One "piece" per brick, so each keeps its own colour. */
+
+/* The camera opens looking at the FACE of the relief, slightly turned so the layers read.
+   Studio's own defaults (yaw -0.6, pitch 0.95) are aimed down at an object standing on a print
+   bed; a relief seen from up there is foreshortened to a ridge. Orbiting from here is Studio's.
+   Set AFTER Studio's block, not before it: assigning to pvYaw above its own `let` is a temporal
+   dead zone error that kills the whole script at load, which is exactly what happened. */
+pvYaw=-0.45; pvPitch=0.22;
+
+/* One box, twelve triangles, wound outward - shared by the bricks and by the frame below. */
+function boxTris(x0,x1,y0,y1,z0,z1,out){
+  const P=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]];
+  const F=[[0,2,1],[0,3,2],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
+  F.forEach(f=>out.push([P[f[0]],P[f[1]],P[f[2]]]));
+}
+
+/* THE FRAME, IN 3D. Glen, looking at a lone brick in space: "if you don't show the frame of the
+   crane, you get this. how is this useful?" Studio's renderer already has the channel for it -
+   guides are rasterised into their OWN depth buffer and painted only where no real part covers
+   them, so the frame shows as the pale silhouette still waiting to be filled and recedes as the
+   build takes its place.
+   Each region is taken CELL BY CELL on the stud grid, by a point-in-polygon test at the centre of
+   each cell, so the guide sits on the same lattice the bricks land on and a student can see which
+   studs are still to be covered. A pierced region keeps its gap - the crane's legs are one outline
+   with the space between them held as a hole. Each cell carries the region's own DEPTH and BASE
+   in plates, straight out of the Studio model: Frame 1, Grass 2, the body parts 4, the Wing 7. */
+function frameToGuideTris(){
+  const H=modelH, out=[];
+  const inPoly=(px,py,poly)=>{ let inside=false;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+      if(((yi>py)!==(yj>py)) && px < (xj-xi)*(py-yi)/((yj-yi)||1e-9)+xi) inside=!inside; }
+    return inside; };
+  guide.forEach(g=>{
+    if(!g.poly || !g.poly.length) return;
+    /* A region sitting at base 0 IS the plate - the crane's blue backdrop - and drawing it puts a
+       wall across the whole view with the figure hidden behind it. The guide is the FIGURE to be
+       built; the plate it is built on is not something a student has to fill. */
+    if(!(g.base>0)) return;
+    const depth=Math.max(1, g.depth||1), base=g.base||0;
+    let ax=1e9, ay=1e9, bx=-1e9, by=-1e9;
+    g.poly.forEach(q=>{ ax=Math.min(ax,q[0]); ay=Math.min(ay,q[1]); bx=Math.max(bx,q[0]); by=Math.max(by,q[1]); });
+    const y1=-base*PLATE, y0=y1-depth*PLATE;
+    for(let sy=Math.floor(ay/STUD); sy<=Math.ceil(by/STUD); sy++)
+      for(let sx=Math.floor(ax/STUD); sx<=Math.ceil(bx/STUD); sx++){
+        const cx=(sx+0.5)*STUD, cy=(sy+0.5)*STUD;
+        if(!inPoly(cx,cy,g.poly)) continue;
+        if((g.holes||[]).some(h=>inPoly(cx,cy,h))) continue;
+        boxTris(sx*STUD,(sx+1)*STUD, y0,y1, H-(sy+1)*STUD, H-sy*STUD, out);
+      }
+  });
+  return out;
+}
+
 function bricksToTris(){
   const H = modelH, parts=[], cols=[], tris=[];
-  const box=(x0,x1,y0,y1,z0,z1,out)=>{
-    const P=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]];
-    const F=[[0,2,1],[0,3,2],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
-    F.forEach(f=>out.push([P[f[0]],P[f[1]],P[f[2]]]));
-  };
-  const cyl=(cx,cz,y0,y1,r,out)=>{                     /* a stud: axis along Y, the depth axis */
+  /* A STUD STANDS PROUD, so its walls must be wound OUTWARD and its cap must sit on the FREE
+     end. Called with the face first and the tip second: wound the other way round, every wall
+     normal points into the stud, the renderer culls the outside as a backface and you see the
+     inside of the cylinder - which is exactly why the studs came out as dents. */
+  const cyl=(cx,cz,y0,y1,r,out)=>{                     /* y0 = the brick's face, y1 = the tip */
     const N=10, ring=k=>[cx+r*Math.cos(k/N*6.2832), 0, cz+r*Math.sin(k/N*6.2832)];
     for(let k=0;k<N;k++){
       const a=ring(k), b=ring(k+1);
@@ -980,12 +1032,12 @@ function bricksToTris(){
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
     const y1=-(b.base||0)*PLATE, y0=y1-t*PLATE;
-    box(x0,x1,y0,y1,z0,z1,mine);
+    boxTris(x0,x1,y0,y1,z0,z1,mine);
     if(p.shape!=="cone"){
       for(let ry=0;ry<d;ry++){
         if(p.shape==="slope" && (b.flip ? ry===0 : ry===d-1)) continue;
         for(let cx=0;cx<p.w;cx++)
-          cyl(x0+STUD*(cx+0.5), z1-STUD*(ry+0.5), y0-1.8, y0, 2.4, mine);
+          cyl(x0+STUD*(cx+0.5), z1-STUD*(ry+0.5), y0, y0-1.8, 2.4, mine);
       }
     }
     const c=COLORS[b.colorIdx], n=parseInt(c.hex.slice(1),16);
@@ -1019,7 +1071,7 @@ $("bView3D").onclick=()=>{
   $("pv").style.display = view3D ? "" : "none";
   if(view3D){
     setTool("select");
-    sizePvToCv(); pvSetTris(bricksToTris()); pvBounds(); renderPreview();
+    sizePvToCv(); pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); pvBounds(); renderPreview();
     say("3D View: drag to rotate, scroll to zoom. Press 3D View again to build.");
   } else { say("Select / move."); draw(); }
 };
