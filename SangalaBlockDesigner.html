@@ -233,9 +233,17 @@
             <option value="relief">Relief</option>
           </select>
         </label>
+        <label style="display:flex;align-items:center;gap:.35rem;width:100%" title="The surface the design sits on, as Sangala Studio offers it: a LEGO baseplate for brick work, or one of the two sheets. The page never changes size to suit a design - a design too big for it is reported instead.">
+          <span style="font-weight:700">Page size</span>
+          <select id="pagesize" style="width:auto">
+            <option value="baseplate" selected>LEGO baseplate 32 x 32 studs</option>
+            <option value="letter">Letter 8.5 x 11 in</option>
+            <option value="12x12">Scrapbook 12 x 12 in</option>
+          </select>
+        </label>
         <label style="display:flex;align-items:center;gap:.35rem" title="Scale the frame to the figure you are actually building. The Studio design and the LEGO model are not the same size in studs - halve the frame and its head becomes 2 studs across, like the real one.">
           <span style="font-weight:700">Frame scale</span>
-          <input type="number" id="frScale" min="10" max="400" step="5" value="30" style="width:5.5rem"> %
+          <input type="number" id="frScale" min="10" max="400" step="5" value="100" style="width:5.5rem"> %
         </label>
         <span style="font-weight:700">Show</span>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the frame outline you are building against"><input type="checkbox" id="ckFrame" checked style="width:auto;margin:0"> Frame</label>
@@ -359,7 +367,14 @@ const CRANE = [{"name":"Body","fill":"#6c6e68","depth":4,"base":1,"poly":[[112,1
    down and start something else. Studio boots with an empty page and a design arrives only through
    Open; so does this. The crane that used to be built in is now a project like any other:
    Projects\Crane (Frame).block, alongside Crane 8.model and Crane (Relief 8).model. */
-let guideRaw = [], frameScale = 0.30;
+/* FRAME SCALE STARTS AT 1, because Studio applies none. Studio opens a .model at the coordinates it
+   was saved with and nothing scales it on the way in; the only reason a design is smaller than the
+   page there is that the author drew it that way. The 0.30 this used to start at was measured against
+   the 8 x 16 plate, so on Studio's 32 x 32 page the same import came in at a third of its size — Glen,
+   with the two applications side by side: "compare in studio and in block designer; they clearly work
+   differently." The control stays: rescaling a frame to the figure being built is a judgement a
+   student makes deliberately, after the design is in front of them. */
+let guideRaw = [], frameScale = 1;
 let guide = [], bricks = [];
 function applyFrameScale(){
   const k=frameScale;
@@ -429,7 +444,23 @@ const WS_MARGIN=150;    /* mm of corkboard you can PARK on and pan to reach. Lar
    Studio uses. The crane's 8 x 16 belongs to the crane, not to the surface it is designed on. */
 const BASEPLATE_STUDS = 32, BASEPLATE_MM = BASEPLATE_STUDS*STUD;
 const BASEPLATE_W = BASEPLATE_STUDS, BASEPLATE_H = BASEPLATE_STUDS;
-const modelW = BASEPLATE_MM, modelH = BASEPLATE_MM;
+/* THE PAGE IS CHOSEN, NOT FIXED — Studio's setPageSize(), copied with its three options
+   (SangalaStudio.html:171 and :509-513). These are the only two lines that ever write modelW/modelH,
+   which is what makes the page independent of the design, and the menu is the only thing that calls
+   it besides a saved project restoring the author's choice. Block Designer defaults to the baseplate
+   rather than Letter because brick work is what it does — the same reason Studio switches itself to
+   the baseplate when a mosaic is imported (:1496). Without this menu the two applications could not
+   be made to show the same design the same way: Studio was on Letter and this was on a square 32. */
+let modelW = BASEPLATE_MM, modelH = BASEPLATE_MM, pageKind = "baseplate";
+function setPageSize(v){ pageKind=v;
+  if(v==="12x12"){modelW=304.8;modelH=304.8;}
+  else if(v==="letter"){modelW=215.9;modelH=279.4;}
+  else {modelW=BASEPLATE_MM;modelH=BASEPLATE_MM;}
+  sizeCanvas(); worldParams(); clampPan(); draw(); }
+function pageLabel(){   /* Studio's matLabel(): a baseplate is counted in studs, a sheet in inches */
+  if(pageKind==="baseplate") return BASEPLATE_STUDS+" x "+BASEPLATE_STUDS+" studs";
+  const f=x=>{const r=Math.round(x/25.4*10)/10; return Number.isInteger(r)?String(r):r.toFixed(1);};
+  return f(modelW)+" x "+f(modelH)+" in"; }
 const say = m => { $("status").textContent = m; };
 
 /* ---------- geometry ---------- */
@@ -725,7 +756,7 @@ function draw(){
   /* The page's size, upright at its top-left in Studio's own gray 13 px - the mark a student
      reads in the other program to know what surface they are working on. */
   ctx.fillStyle="#9aa0a6"; ctx.font="13px sans-serif";
-  ctx.fillText(Math.round(modelW/STUD)+" x "+Math.round(modelH/STUD)+" studs", 8, 17);
+  ctx.fillText(pageLabel(), 8, 17);
   /* No second translate: the frame and the bricks are drawn at their own coordinates on the plate,
      exactly as Studio draws a design at the coordinates it was saved with. */
   if(showGuide) drawGuide();
@@ -1420,6 +1451,11 @@ $("frScale").onchange=e=>{
   say("Frame scaled to "+Math.round(frameScale*100)+"% - it is "
       +Math.round(modelW/STUD)+" studs across the plate now.");
 };
+/* Studio: `$("pagesize").onchange=e=>setPageSize(e.target.value)` (:1138) — the menu is the only
+   caller besides a saved project restoring the choice its author made. */
+$("pagesize").onchange=e=>{ setPageSize(e.target.value);
+  say("Page is now "+pageLabel()+". The design is unchanged.");
+  offPageWarning(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
 
@@ -1622,7 +1658,9 @@ $("bSave").onclick=()=>download("crane.block",
      Saving the scaled copy and restoring the scale beside it means the next touch of the Frame scale
      control multiplies an already-scaled frame a second time — a design saved at 30% and nudged to
      40% renders at 12% while the status line reports 40%. */
-  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,mode:mode,frameScale:frameScale,guide:guideRaw,
+  /* pageSize, as Studio stores it (:1719) - "a mosaic authored on a LEGO baseplate reopens on the
+     baseplate, not on a Letter page it overflows" */
+  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,mode:mode,pageSize:pageKind,frameScale:frameScale,guide:guideRaw,
     /* d is the footprint's DEPTH in studs and base is where the brick sits in plates. Both were
        missing: the format predates the relief rebuild, so a saved design reopened one stud deep
        with every brick on the plate. A file written before this has neither, and the loader
@@ -1648,22 +1686,39 @@ function loadModel(j){
      depth, no base and no piercing: the crane's legs came in as one solid trunk and the 3D View had
      nothing to show. Depth and base are converted to PLATES, which is what a guide region is counted
      in here (the built-in CRANE data carries depth 4, base 1 - see the constant above). */
+  /* PLACE IT AS STUDIO PLACES IT. A .model does not store where a design sits on the page in its
+     polygons — it stores the polygons in design coordinates and the placement separately, and Studio
+     applies the two together in placeParams()/placePoly (SangalaStudio.html:716-717):
+         s  = settings.scale / 100
+         ox = offMM(offx), oy = offMM(offy)      offMM: units==="in" ? v*25.4 : v   (:487)
+         point -> [x*s + ox, y*s + oy]
+     Reading the polygons alone put the design at the page's top-left corner at raw size, which is why
+     the same file looked different in the two windows side by side. */
+  const st=j.settings||{}, inch=(j.units==="in");
+  const offMM=v=>inch?v*25.4:v;
+  const s=(+st.scale||100)/100, ox=offMM(+j.offx||0), oy=offMM(+j.offy||0);
+  const place=p=>[p[0]*s+ox, p[1]*s+oy];
   objs.forEach(o=>{ let a=o.attrs||{}; if(Array.isArray(a)) a=Object.fromEntries(a);
     if(Array.isArray(o.poly)&&o.poly.length>2)
       g.push({name:a["data-name"]||"", fill:a["data-fill"]||"#909aa2",
               depth:Math.max(1, Math.round((+a["data-z"]||PLATE)/PLATE)),
               base:Math.round((+a["data-z0"]||0)/PLATE),
-              poly:o.poly.map(p=>[p[0],p[1]]),
-              holes:(o.holes||[]).map(h=>h.map(p=>[p[0],p[1]]))}); });
+              poly:o.poly.map(place),
+              holes:(o.holes||[]).map(h=>h.map(place))}); });
   if(!g.length) return alert("No outlines in that model.");
+  /* AT ITS OWN SIZE. A .model carries no frame scale, so importing one resets the control to 100% and
+     the design lands at the coordinates Studio saved it with — which is what Studio does with the same
+     file. Leaving the control at whatever it happened to hold silently reinterpreted the import. */
+  frameScale=1; $("frScale").value=100;
   guideRaw=g; applyFrameScale();
-  say("Frame brought in: "+g.length+" outlines.");
+  say("Frame brought in: "+g.length+" outlines, at full size.");
 }
 $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer or Studio file");
     mode=d.mode==="relief"?"relief":"standing"; $("selMode").value=mode;
+    if(d.pageSize){ $("pagesize").value=d.pageSize; setPageSize(d.pageSize); }   /* the author's page, restored */
     frameScale=+d.frameScale||1; $("frScale").value=Math.round(frameScale*100);
     /* The file now stores the UNSCALED frame, so scale it on the way in exactly as an import does.
        applyFrameScale clears the bricks, so it cannot run here - the bricks are loaded below. */
