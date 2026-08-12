@@ -1022,8 +1022,20 @@ function frameToGuideTris(){
   return out;
 }
 
+/* THE BRICKS AND THE FRAME MUST START FROM THE SAME SURFACE. The Studio model builds its relief
+   on a backdrop plate - the crane's Frame region, 1 plate at base 0 - and its figure begins on top
+   of that, at base 1. A brick placed here began at base 0, on the plate itself, so it sat one
+   plate BEHIND everything the frame describes and could never be flush with it: it floated inside
+   the massing with a gap at its back, which is what makes it look detached as the view turns.
+   The offset is read from the model rather than assumed: it is the top of whatever sits at base 0. */
+function plateOrigin(){
+  let t=0;
+  guide.forEach(g=>{ if(!(g.base>0)) t=Math.max(t, (g.base||0)+(g.depth||1)); });
+  return t;
+}
+
 function bricksToTris(){
-  const H = modelH, parts=[], cols=[], tris=[];
+  const H = modelH, O = plateOrigin(), parts=[], cols=[], tris=[];
   /* A STUD STANDS PROUD, so its walls must be wound OUTWARD and its cap must sit on the FREE
      end. Called with the face first and the tip second: wound the other way round, every wall
      normal points into the stud, the renderer culls the outside as a backface and you see the
@@ -1044,7 +1056,7 @@ function bricksToTris(){
     /* DEPTH RUNS ALONG -Y, because at the camera Studio starts with, +Y is the direction going
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
-    const y1=-(b.base||0)*PLATE, y0=y1-t*PLATE;
+    const y1=-((b.base||0)+O)*PLATE, y0=y1-t*PLATE;
     boxTris(x0,x1,y0,y1,z0,z1,mine);
     if(p.shape!=="cone"){
       for(let ry=0;ry<d;ry++){
