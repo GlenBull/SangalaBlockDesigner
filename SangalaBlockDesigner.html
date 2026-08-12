@@ -336,6 +336,7 @@ function fit(){
   const bd=cv.parentElement.getBoundingClientRect();
   PX=Math.max(1.2, Math.min(9,(bd.height-36)/modelH,(bd.width-36)/modelW));
   cv.width=Math.round(modelW*PX); cv.height=Math.round(modelH*PX);
+  buildFrameTop();
   draw();
 }
 const mx=v=>v*PX;
@@ -1007,7 +1008,7 @@ function frameToGuideTris(){
        wall across the whole view with the figure hidden behind it. The guide is the FIGURE to be
        built; the plate it is built on is not something a student has to fill. */
     if(!(g.base>0)) return;
-    const depth=Math.max(1, g.depth||1), base=g.base||0;
+    const depth=1, base=0;                 /* thin, like a baseplate - see buildFrameTop */
     let ax=1e9, ay=1e9, bx=-1e9, by=-1e9;
     g.poly.forEach(q=>{ ax=Math.min(ax,q[0]); ay=Math.min(ay,q[1]); bx=Math.max(bx,q[0]); by=Math.max(by,q[1]); });
     const y1=-base*PLATE, y0=y1-depth*PLATE;
@@ -1022,20 +1023,8 @@ function frameToGuideTris(){
   return out;
 }
 
-/* THE BRICKS AND THE FRAME MUST START FROM THE SAME SURFACE. The Studio model builds its relief
-   on a backdrop plate - the crane's Frame region, 1 plate at base 0 - and its figure begins on top
-   of that, at base 1. A brick placed here began at base 0, on the plate itself, so it sat one
-   plate BEHIND everything the frame describes and could never be flush with it: it floated inside
-   the massing with a gap at its back, which is what makes it look detached as the view turns.
-   The offset is read from the model rather than assumed: it is the top of whatever sits at base 0. */
-function plateOrigin(){
-  let t=0;
-  guide.forEach(g=>{ if(!(g.base>0)) t=Math.max(t, (g.base||0)+(g.depth||1)); });
-  return t;
-}
-
 function bricksToTris(){
-  const H = modelH, O = plateOrigin(), parts=[], cols=[], tris=[];
+  const H = modelH, parts=[], cols=[], tris=[];
   /* A STUD STANDS PROUD, so its walls must be wound OUTWARD and its cap must sit on the FREE
      end. Called with the face first and the tip second: wound the other way round, every wall
      normal points into the stud, the renderer culls the outside as a backface and you see the
@@ -1056,7 +1045,7 @@ function bricksToTris(){
     /* DEPTH RUNS ALONG -Y, because at the camera Studio starts with, +Y is the direction going
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
-    const y1=-((b.base||0)+O)*PLATE, y0=y1-t*PLATE;
+    const y1=-(b.base||0)*PLATE, y0=y1-t*PLATE;
     boxTris(x0,x1,y0,y1,z0,z1,mine);
     if(p.shape!=="cone"){
       for(let ry=0;ry<d;ry++){
@@ -1125,12 +1114,53 @@ function cell(e){
    already under its footprint, so the only way to reach the second layer is to have built the
    first - which is Glen's rule and also just what bricks do. Base is counted in plates from the
    plate, the same unit and the same word as Studio's Base column. */
+/* THE FRAME IS THE BASEPLATE. Glen: "i can place one brick on top of another or on a baseplate;
+   the top brick always sticks... If you think of the frame as the equivalent of the baseplate,
+   why can't we just port the solution that works in studio?" Right - and the missing half was
+   that the frame was not SUPPORT. A brick landed on the plate whatever it was placed over, so a
+   brick put on the crane's head started behind the head's own surface and ended up inside it.
+   frameTop holds, per stud cell, the top of the frame there in plates - the crane's head is 4
+   plates deep on a 1-plate backdrop, so its top is 5 - and a brick placed on that cell lands on
+   5, stuck to the surface it was placed on. The backdrop counts too: it IS the baseplate, so a
+   brick placed on bare frame lands on 1, not 0. Rebuilt whenever the frame changes. */
+let frameTop = new Map();
+const cellKey = (c,r) => c+","+r;
+function buildFrameTop(){
+  frameTop = new Map();
+  const inPoly=(px,py,poly)=>{ let inside=false;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+      if(((yi>py)!==(yj>py)) && px < (xj-xi)*(py-yi)/((yj-yi)||1e-9)+xi) inside=!inside; }
+    return inside; };
+  guide.forEach(g=>{
+    if(!g.poly || !g.poly.length) return;
+    /* ONE PLATE, wherever the frame is. Glen: "the frame should not be thick; it should be
+       thin, like the baseplate." So the region's own depth (4 plates for the body, 7 for the
+       wing) is no longer geometry - it is the target still to be reached, and it is kept in the
+       data for that - while the frame the bricks LAND on is a plate, like any baseplate. */
+    const top=1;
+    let ax=1e9, ay=1e9, bx=-1e9, by=-1e9;
+    g.poly.forEach(q=>{ ax=Math.min(ax,q[0]); ay=Math.min(ay,q[1]); bx=Math.max(bx,q[0]); by=Math.max(by,q[1]); });
+    for(let r=Math.floor(ay/STUD); r<=Math.ceil(by/STUD); r++)
+      for(let c=Math.floor(ax/STUD); c<=Math.ceil(bx/STUD); c++){
+        const px=(c+0.5)*STUD, py=(r+0.5)*STUD;
+        if(!inPoly(px,py,g.poly)) continue;
+        if((g.holes||[]).some(h=>inPoly(px,py,h))) continue;
+        const k=cellKey(c,r);
+        if(top>(frameTop.get(k)||0)) frameTop.set(k,top);
+      }
+  });
+}
+
 const thick = p => p.h||1;
 const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+(b.p.d||1)});
 function overlaps(a,b){ const A=foot(a), B=foot(b);
   return A.x0<B.x1 && B.x0<A.x1 && A.y0<B.y1 && B.y0<A.y1; }
 function restingBase(nb){        /* the base it would take: the top of whatever it comes to rest on */
   let base=0;
+  const f=foot(nb);
+  for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++)      /* the frame, cell by cell */
+    base=Math.max(base, frameTop.get(cellKey(c,r))||0);
   bricks.forEach(b=>{ if(overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
   return base;
 }
