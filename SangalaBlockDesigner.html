@@ -206,6 +206,13 @@
     <div id="setup" style="display:none">
       <h2 class="marker sub">Workspace</h2>
       <div class="showrow" style="margin-top:.55rem;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .85rem;font-size:.85rem;color:#5a4a34">
+        <label style="display:flex;align-items:center;gap:.35rem;width:100%" title="Standing: the figure is stacked in courses, studs up, the way the LEGO crane is built. Relief: the parts lie on the plate with their studs towards you, a plate of depth at a time, the way a Studio relief is built.">
+          <span style="font-weight:700">Build</span>
+          <select id="selMode" style="width:auto">
+            <option value="standing">Standing figure</option>
+            <option value="relief">Relief</option>
+          </select>
+        </label>
         <span style="font-weight:700">Show</span>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the frame outline you are building against"><input type="checkbox" id="ckFrame" checked style="width:auto;margin:0"> Frame</label>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the stud grid"><input type="checkbox" id="ckGrid" checked style="width:auto;margin:0"> Grid</label>
@@ -304,6 +311,19 @@ let guide = CRANE.slice(), bricks = [];
 let part = {kind:"brick", w:2, id:"3004", n:"1x2"};   // the part the Toolbar has chosen
 let selCol = 3, flip = false;
 let tool = "select", showGuide = true, showGrid = true;
+/* TWO WAYS TO BUILD, and the frame serves both - it is the same silhouette either way.
+   STANDING is the figure in the photographs: bricks stacked in courses, studs up, gravity from
+   the ground, and the model a stud or two thick. The screen's vertical axis is therefore PLATES,
+   because a plate sits on a brick.
+   RELIEF is a Studio relief: the parts lie on the plate with their studs towards you and each
+   layer stands one plate proud of the one behind, so both screen axes are studs and depth is
+   plates. Glen's Crane (Relief 8) is one of these.
+   Everything below asks the mode for its units rather than assuming either. */
+let mode = "standing";
+const vUnit  = () => mode==="standing" ? PLATE : STUD;        /* mm per row of the screen grid */
+const rowsOf = p => mode==="standing" ? (p.h||1) : (p.d||1);  /* rows the part covers on screen */
+const deepOf = p => mode==="standing" ? (p.d||1)*STUD : (p.h||1)*PLATE;   /* mm of thickness */
+
 let view3D = false;      /* the 3D View is a way of LOOKING, not a mode you build in */
 
 const $ = id => document.getElementById(id);
@@ -331,7 +351,7 @@ function fit(){
   const fw=Math.ceil(C.c/STUD)*STUD, fh=Math.ceil(C.d/STUD)*STUD;
   const side=Math.max(BASEPLATE*STUD, fw, fh);          /* square, like the plate itself */
   padX=Math.round((side-fw)/2/STUD)*STUD;               /* whole studs, both ways, so a column */
-  padY=Math.round((side-fh)/2/STUD)*STUD;               /* and a row both land on the lattice */
+  padY=Math.round((side-fh)/2/vUnit())*vUnit();         /* and a row both land on the lattice */
   modelW=side; modelH=side;
   const bd=cv.parentElement.getBoundingClientRect();
   PX=Math.max(1.2, Math.min(9,(bd.height-36)/modelH,(bd.width-36)/modelW));
@@ -356,9 +376,19 @@ function drawGrid(){
   const r = Math.max(0.7, mx(1.5));
   ctx.save();
   ctx.strokeStyle="#dde5ea"; ctx.lineWidth=1;
-  for(let y=STUD/2; y<modelH; y+=STUD){        /* square, both ways: it is a baseplate */
-    for(let x=STUD/2; x<modelW; x+=STUD){
-      ctx.beginPath(); ctx.arc(mx(x), mx(y), r, 0, 6.2832); ctx.stroke();
+  if(mode==="standing"){
+    /* Seen from the side, the lattice is the COURSES: a faint line every brick (3 plates), and a
+       stud pitch across. A ring per stud would be a lie here - the studs are on top, not facing. */
+    for(let y=0; y<=modelH+0.01; y+=PLATE*3){
+      ctx.beginPath(); ctx.moveTo(0,mx(y)); ctx.lineTo(mx(modelW),mx(y)); ctx.stroke(); }
+    ctx.strokeStyle="#e8eef2";
+    for(let x=0; x<=modelW+0.01; x+=STUD){
+      ctx.beginPath(); ctx.moveTo(mx(x),0); ctx.lineTo(mx(x),mx(modelH)); ctx.stroke(); }
+  } else {
+    for(let y=STUD/2; y<modelH; y+=STUD){      /* square, both ways: it is a baseplate */
+      for(let x=STUD/2; x<modelW; x+=STUD){
+        ctx.beginPath(); ctx.arc(mx(x), mx(y), r, 0, 6.2832); ctx.stroke();
+      }
     }
   }
   ctx.restore();
@@ -394,8 +424,7 @@ function drawGuide(){
    Its 3 plates of thickness go AWAY from the viewer and are carried by the layer, not by height
    on the screen - which is what the old wall elevation had them as. */
 function shape(p,col,row,fl){
-  const d=p.d||1;
-  const x=mx(col*STUD), y=mx(row*STUD), w=mx(p.w*STUD), h=mx(d*STUD);
+  const x=mx(col*STUD), y=mx(row*vUnit()), w=mx(p.w*STUD), h=mx(rowsOf(p)*vUnit());
   ctx.beginPath();
   if(p.shape==="round" || p.shape==="cone"){
     ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, 6.2832);
@@ -433,7 +462,7 @@ function tones(hex){
    A circle is taken as a 20-gon; the rounded corners of a rectangle are not carried, because a
    1.4 mm radius does not survive the projection and would only complicate the walls. */
 function footPoly(p,col,row,fl){
-  const d=p.d||1, x=mx(col*STUD), y=mx(row*STUD), w=mx(p.w*STUD), h=mx(d*STUD), pts=[];
+  const x=mx(col*STUD), y=mx(row*vUnit()), w=mx(p.w*STUD), h=mx(rowsOf(p)*vUnit()), pts=[];
   if(p.shape==="round" || p.shape==="cone"){
     const cx=x+w/2, cy=y+h/2;
     for(let i=0;i<20;i++){ const a=i/20*6.2832; pts.push([cx+(w/2)*Math.cos(a), cy+(h/2)*Math.sin(a)]); }
@@ -454,8 +483,8 @@ function drawBrick(b,ghost){
      This replaces a moulded side elevation with lit and shaded faces and studs standing proud of
      the top, which was invented in this application alone and is why nothing here resembled the
      program the student arrives from. */
-  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, dp=p.d||1;
-  const x=mx(b.col*STUD), y=mx(b.row*STUD), w=mx(p.w*STUD), h=mx(dp*STUD);
+  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, dp=rowsOf(p);
+  const x=mx(b.col*STUD), y=mx(b.row*vUnit()), w=mx(p.w*STUD), h=mx(dp*vUnit());
   /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR - see tones() above. A fixed brown
      ring works on Studio's unfilled white shapes and disappears on a filled black one, which is
      how a black brick came out as a blob with nothing legible on it. */
@@ -480,7 +509,21 @@ function drawBrick(b,ghost){
   ctx.strokeStyle=edge; ctx.lineWidth=1.3; ctx.stroke();
   /* One stud per stud cell, on the 8 mm pitch. Studio's own two exceptions come with the
      convention: a sloped row carries no stud, and a cone has none where a round brick has one. */
-  if(p.shape!=="cone"){
+  if(p.shape!=="cone" && mode==="standing"){
+    /* STANDING: the studs stand PROUD OF THE TOP, because that is where they are on a brick you
+       look at from the side. Drawn before nothing else covers them - they belong to this part. */
+    const sw=mx(4.8), sh=Math.max(1.4, mx(1.7));
+    for(let cx=0;cx<p.w;cx++){
+      if(p.shape==="slope" && (fl ? cx===0 : cx===p.w-1)) continue;   /* the fallen end has none */
+      const px2=x+mx(STUD)*(cx+.5);
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(px2-sw/2, y-sh, sw, sh*2, Math.min(sh,sw/2));
+      else ctx.rect(px2-sw/2, y-sh, sw, sh*2);
+      ctx.fillStyle=studFace; ctx.fill();
+      ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
+    }
+  }
+  if(p.shape!=="cone" && mode!=="standing"){
     const r=Math.max(1.4, mx(2.4));
     ctx.lineWidth=1;
     for(let ry=0;ry<dp;ry++){
@@ -1038,14 +1081,64 @@ function bricksToTris(){
       out.push([[cx,y1,cz],A1,B1]);                                    /* cap, facing out */
     }
   };
+  /* A stud on a STANDING brick points UP, so its cylinder runs along Z, not along the depth. */
+  const cylZ=(cx,cy,z0,z1,r,out)=>{
+    const N=10, ring=k=>[cx+r*Math.cos(k/N*6.2832), cy+r*Math.sin(k/N*6.2832)];
+    for(let k=0;k<N;k++){
+      const a=ring(k), b2=ring(k+1);
+      const A0=[a[0],a[1],z0], A1=[a[0],a[1],z1], B0=[b2[0],b2[1],z0], B1=[b2[0],b2[1],z1];
+      out.push([A0,B1,B0]); out.push([A0,A1,B1]);
+      out.push([[cx,cy,z1],B1,A1]);
+    }
+  };
   bricks.forEach(b=>{
-    const p=b.p, d=p.d||1, t=thick(p), mine=[];
+    const p=b.p, d=p.d||1, t=thick(p), mine=[], vu=vUnit(), rws=rowsOf(p);
     const x0=b.col*STUD, x1=(b.col+p.w)*STUD;
-    const z1=H-b.row*STUD, z0=H-(b.row+d)*STUD;
+    const z1=H-b.row*vu, z0=H-(b.row+rws)*vu;
     /* DEPTH RUNS ALONG -Y, because at the camera Studio starts with, +Y is the direction going
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
-    const y1=-(b.base||0)*PLATE, y0=y1-t*PLATE;
+    const y1 = mode==="standing" ? 0 : -(b.base||0)*PLATE;   /* standing: thickness towards you */
+    const y0 = y1 - deepOf(p);
+    if(mode==="standing"){
+      /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
+         the corner at its fallen end, along the LENGTH, which is what you see from the side. */
+      if(p.shape==="slope" || p.shape==="invslope"){
+        const xHi = b.flip ? x1 : x0, xLo = b.flip ? x0 : x1;
+        const inv = p.shape==="invslope";
+        const zKeep = inv ? z0 : z1;                   /* an inverted slope keeps its underside */
+        const zCut  = inv ? z1 : z0;
+        const A=[xHi,y0,z0], B=[xHi,y0,z1], C=[xHi,y1,z1], D=[xHi,y1,z0];
+        const E=[xLo,y0,zKeep], F=[xLo,y1,zKeep];
+        const q=(a,b3,c3,d3)=>{ mine.push([a,b3,c3]); mine.push([a,c3,d3]); };
+        q(A,D,C,B); q(A,B,E,E); q(A,E,F,D); q(B,C,F,E);
+        mine.push([A,E,B]); mine.push([D,F,C]);
+        void zCut;
+      } else if(p.shape==="round" || p.shape==="cone"){
+        const cx=(x0+x1)/2, cy=(y0+y1)/2, r=(x1-x0)/2, rTip=p.shape==="cone"?r*0.42:r;
+        const N=16;
+        for(let k=0;k<N;k++){
+          const a0=k/N*6.2832, a1=(k+1)/N*6.2832;
+          const P=(a,rr,z)=>[cx+rr*Math.cos(a), cy+rr*Math.sin(a), z];
+          const A=P(a0,r,z0), B=P(a1,r,z0), C=P(a1,rTip,z1), D=P(a0,rTip,z1);
+          mine.push([A,B,C]); mine.push([A,C,D]);
+          mine.push([[cx,cy,z1],D,C]); mine.push([[cx,cy,z0],B,A]);
+        }
+      } else {
+        boxTris(x0,x1,y0,y1,z0,z1,mine);
+      }
+      if(p.shape!=="cone"){
+        for(let cx=0;cx<p.w;cx++){
+          if(p.shape==="slope" && (b.flip ? cx===0 : cx===p.w-1)) continue;
+          for(let dy=0; dy<d; dy++)
+            cylZ(x0+STUD*(cx+0.5), y1-STUD*(dy+0.5), z1, z1+1.8, 2.4, mine);
+        }
+      }
+      const c2=COLORS[b.colorIdx], n2=parseInt(c2.hex.slice(1),16);
+      parts.push(mine); cols.push([(n2>>16)&255,(n2>>8)&255,n2&255]);
+      mine.forEach(t2=>tris.push(t2));
+      return;
+    }
     /* THE PART'S OWN SHAPE, not a box for everything. Glen, on a pair of inverted slopes that
        came out as plain cubes: "the bricks that you originally placed were 2 x 2 LEGO bricks.
        They did not have sloped sides at all." They were boxes because this built one for every
@@ -1133,6 +1226,13 @@ $("bSettings").onclick=()=>{
   $("bSettings").classList.toggle("on", setupOpen);
   if(setupOpen) $("setup").scrollIntoView({block:"nearest"});
 };
+$("selMode").onchange=e=>{
+  mode=e.target.value; bricks=[];        /* the two grids do not share coordinates */
+  say(mode==="standing"
+      ? "Standing figure: bricks stack in courses from the ground, studs up."
+      : "Relief: each layer stands one plate proud of the one behind, studs towards you.");
+  fit();
+};
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
 
@@ -1142,7 +1242,7 @@ function cell(e){
      a size other than its backing width - a click would otherwise land a stud or two out. */
   const r=cv.getBoundingClientRect(), s=r.width?cv.width/r.width:1;
   const x=(e.clientX-r.left)*s/PX - padX, y=(e.clientY-r.top)*s/PX - padY;
-  return {col:Math.floor(x/STUD), row:Math.floor(y/STUD)};
+  return {col:Math.floor(x/STUD), row:Math.floor(y/vUnit())};
 }
 
 /* ---------- LAYERS ----------
@@ -1161,9 +1261,15 @@ function cell(e){
    5, stuck to the surface it was placed on. The backdrop counts too: it IS the baseplate, so a
    brick placed on bare frame lands on 1, not 0. Rebuilt whenever the frame changes. */
 let frameTop = new Map();
+/* STANDING needs a different question of the frame: not "how high does it stand" but "is the
+   silhouette behind this cell", because a brick placed on the crane's head is held by the frame
+   the way a brick is held by a backing board. Without it a brick placed on the head falls to the
+   ground, and the figure could only be built from the feet up - which is not how Glen is reading
+   the parts off the photograph. Indexed in the mode's own vertical unit, so it follows a switch. */
+let frameHas = new Set();
 const cellKey = (c,r) => c+","+r;
 function buildFrameTop(){
-  frameTop = new Map();
+  frameTop = new Map(); frameHas = new Set();
   const inPoly=(px,py,poly)=>{ let inside=false;
     for(let i=0,j=poly.length-1;i<poly.length;j=i++){
       const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
@@ -1186,11 +1292,19 @@ function buildFrameTop(){
         const k=cellKey(c,r);
         if(top>(frameTop.get(k)||0)) frameTop.set(k,top);
       }
+    const vu=vUnit();
+    for(let r=Math.floor(ay/vu); r<=Math.ceil(by/vu); r++)
+      for(let c=Math.floor(ax/STUD); c<=Math.ceil(bx/STUD); c++){
+        const px=(c+0.5)*STUD, py=(r+0.5)*vu;
+        if(!inPoly(px,py,g.poly)) continue;
+        if((g.holes||[]).some(h=>inPoly(px,py,h))) continue;
+        frameHas.add(cellKey(c,r));
+      }
   });
 }
 
 const thick = p => p.h||1;
-const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+(b.p.d||1)});
+const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+rowsOf(b.p)});
 function overlaps(a,b){ const A=foot(a), B=foot(b);
   return A.x0<B.x1 && B.x0<A.x1 && A.y0<B.y1 && B.y0<A.y1; }
 function restingBase(nb){        /* the base it would take: the top of whatever it comes to rest on */
@@ -1202,7 +1316,32 @@ function restingBase(nb){        /* the base it would take: the top of whatever 
   return base;
 }
 function carries(b){             /* is anything resting ON this one? */
+  if(mode==="standing"){         /* resting ON it means sitting directly above it */
+    const f=foot(b);
+    return bricks.some(o=>{ if(o===b) return false; const g=foot(o);
+      return g.x1>f.x0 && f.x1>g.x0 && g.y1===f.y0; });
+  }
   return bricks.some(o=>o!==b && overlaps(o,b) && o.base===b.base+thick(b.p));
+}
+/* STANDING: a part FALLS to what holds it up. The click chooses the columns; gravity chooses the
+   row, so a brick can never be left floating - which is the whole difference between stacking a
+   figure and painting one. The ground is the bottom of the plate. */
+function landRow(nb){
+  const f=foot(nb);
+  let support=Math.round(modelH/vUnit());
+  bricks.forEach(o=>{ const g=foot(o);
+    if(g.x1>f.x0 && f.x1>g.x0) support=Math.min(support, g.y0); });
+  return support - rowsOf(nb.p);
+}
+function onFrame(nb){             /* is the silhouette behind any of this part's cells? */
+  const f=foot(nb);
+  for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++) if(frameHas.has(cellKey(c,r))) return true;
+  return false;
+}
+function settle(nb){             /* put the part where the mode says it comes to rest */
+  if(mode==="standing"){ if(!onFrame(nb)) nb.row=landRow(nb); nb.base=0; }
+  else nb.base=restingBase(nb);
+  return nb;
 }
 function hit(c){                 /* the topmost brick under the pointer */
   let best=-1, top=-1;
@@ -1214,8 +1353,7 @@ const plates = n => n+(n===1?" plate":" plates");
 cv.addEventListener("mousemove",e=>{
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e), nb={p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip};
-  nb.base=restingBase(nb); hover=nb; draw();
+  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip}); draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
@@ -1227,10 +1365,11 @@ cv.addEventListener("click",e=>{
     bricks.splice(i,1); draw(); return;
   }
   if(tool!=="place") return;
-  const nb={p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip};
-  nb.base=restingBase(nb);
+  const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip});
   bricks.push(nb);
-  say(nb.p.name+" placed at base "+plates(nb.base)+".");
+  say(mode==="standing"
+      ? nb.p.name+" placed, resting on "+(landRow(nb)+rowsOf(nb.p)>=Math.round(modelH/vUnit())-0.5 ? "the ground" : "the course below")+"."
+      : nb.p.name+" placed at base "+plates(nb.base)+".");
   draw();
 });
 window.addEventListener("keydown",e=>{
@@ -1244,7 +1383,7 @@ function download(name,text,mime){
   a.download=name; a.click();
 }
 $("bSave").onclick=()=>download("crane.block",
-  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,guide:guide,
+  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,mode:mode,guide:guide,
     /* d is the footprint's DEPTH in studs and base is where the brick sits in plates. Both were
        missing: the format predates the relief rebuild, so a saved design reopened one stud deep
        with every brick on the plate. A file written before this has neither, and the loader
@@ -1275,6 +1414,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer or Studio file");
+    mode=d.mode==="relief"?"relief":"standing"; $("selMode").value=mode;
     guide=d.guide||[]; buildFrameTop();          /* the frame must be indexed before anything lands on it */
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
