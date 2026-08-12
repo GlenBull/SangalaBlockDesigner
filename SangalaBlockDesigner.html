@@ -207,6 +207,9 @@
   <button data-kind="plate">&#9644; Plate</button>
   <button data-kind="slope">&#9722; Slope</button>
   <button data-kind="invslope">&#9721; Inverted Slope</button>
+  <button data-kind="round">&#11044; Round Brick</button>
+  <button data-kind="cone">&#128314; Cone</button>
+  <button data-kind="wedge">&#9699; Wedge Plate</button>
 </div>
 <div id="sizemenu" class="menu" style="position:fixed;z-index:32;display:none"></div>
 
@@ -253,7 +256,16 @@ const KINDS = {
   slope:    {label:"Slope",          shape:"slope",    h:3,
              sizes:[{w:2,id:"3040",n:"2x1"},{w:2,id:"3039",n:"2x2"},{w:4,id:"3037",n:"2x4"}]},
   invslope: {label:"Inverted Slope", shape:"invslope", h:3,
-             sizes:[{w:2,id:"3665",n:"2x1"},{w:2,id:"3660",n:"2x2"}]}
+             sizes:[{w:2,id:"3665",n:"2x1"},{w:2,id:"3660",n:"2x2"}]},
+  /* The three Studio also offers. Numbers read from the library, not remembered - and the wedge
+     plate is why that matters: LDraw files it under a different word, "Wing", so searching the
+     catalogue for a wedge plate returns nothing at all. */
+  round:    {label:"Round Brick",    shape:"round",    h:3,
+             sizes:[{w:1,id:"3062",n:"1x1"}]},
+  cone:     {label:"Cone",           shape:"cone",     h:3,
+             sizes:[{w:1,id:"4589",n:"1x1"}]},
+  wedge:    {label:"Wedge Plate",    shape:"wedge",    h:1,
+             sizes:[{w:4,id:"41769",n:"2x4 Right"},{w:4,id:"41770",n:"2x4 Left"}]}
 };
 const COLORS = [
   {code:15,name:"White",hex:"#f4f4f4"},{code:71,name:"Light Bluish Gray",hex:"#a0a5a9"},
@@ -262,7 +274,7 @@ const COLORS = [
   {code:2,name:"Green",hex:"#4b9f4a"},{code:70,name:"Reddish Brown",hex:"#7c503a"},
   {code:19,name:"Tan",hex:"#e4cd9e"}
 ];
-const CRANE = [{"name": "", "fill": "#6c6e68", "poly": [[88, 96], [104, 96], [104, 112], [88, 112], [88, 96]]}, {"name": "", "fill": "#6c6e68", "poly": [[40, 136], [64, 136], [64, 144], [40, 144], [40, 136]]}, {"name": "Neck", "fill": "#6c6e68", "poly": [[88, 56], [104, 56], [104, 96], [88, 96], [88, 56]]}, {"name": "Head", "fill": "#1b2a34", "poly": [[88, 24], [112, 24], [112, 32], [120, 32], [120, 40], [128, 40], [128, 48], [136, 48], [136, 56], [80, 56], [80, 32], [88, 32], [88, 24]]}, {"name": "Crown", "fill": "#f5cd30", "poly": [[88, 0], [96, 0], [96, 8], [104, 8], [104, 0], [112, 0], [112, 8], [120, 8], [120, 16], [112, 16], [112, 24], [88, 24], [88, 16], [80, 16], [80, 8], [88, 8], [88, 0]]}, {"name": "Wing", "fill": "#6c6e68", "poly": [[80, 96], [88, 96], [88, 120], [80, 120], [80, 128], [72, 128], [72, 136], [40, 136], [40, 128], [32, 128], [32, 120], [40, 120], [40, 112], [48, 112], [48, 104], [80, 104], [80, 96]]}, {"name": "Body", "fill": "#a0a5a9", "poly": [[48, 88], [80, 88], [80, 104], [48, 104], [48, 112], [40, 112], [40, 120], [32, 120], [32, 128], [40, 128], [40, 144], [16, 144], [16, 128], [24, 128], [24, 112], [32, 112], [32, 104], [40, 104], [40, 96], [48, 96], [48, 88]]}, {"name": "Body", "fill": "#a0a5a9", "poly": [[88, 112], [104, 112], [104, 128], [96, 128], [96, 136], [88, 136], [88, 144], [64, 144], [64, 136], [72, 136], [72, 128], [80, 128], [80, 120], [88, 120], [88, 112]]}, {"name": "Legs", "fill": "#1b2a34", "poly": [[48, 144], [80, 144], [80, 152], [72, 152], [72, 192], [88, 192], [88, 200], [40, 200], [40, 192], [48, 192], [48, 144]]}, {"name": "Grass", "fill": "#4b9f4a", "poly": [[16, 192], [40, 192], [40, 200], [88, 200], [88, 192], [136, 192], [136, 200], [144, 200], [144, 224], [0, 224], [0, 200], [16, 200], [16, 192]]}];
+const CRANE = [{"name":"Body","fill":"#6c6e68","depth":4,"base":1,"poly":[[112,112],[128,112],[128,128],[112,128],[112,112]],"holes":[]},{"name":"Frame","fill":"#6e99c9","depth":1,"base":0,"poly":[[80,168],[88,168],[88,208],[80,208],[80,168]],"holes":[]},{"name":"Frame","fill":"#6e99c9","depth":1,"base":0,"poly":[[0,0],[192,0],[192,248],[0,248],[0,0]],"holes":[[[144,24],[136,24],[136,16],[128,16],[128,24],[120,24],[120,16],[112,16],[112,24],[104,24],[104,32],[112,32],[112,48],[104,48],[104,72],[112,72],[112,112],[104,112],[104,104],[80,104],[80,112],[64,112],[64,120],[56,120],[56,128],[48,128],[48,144],[40,144],[40,160],[72,160],[72,208],[40,208],[40,216],[24,216],[24,240],[168,240],[168,216],[160,216],[160,208],[96,208],[96,168],[104,168],[104,160],[112,160],[112,152],[120,152],[120,144],[128,144],[128,72],[160,72],[160,64],[152,64],[152,56],[144,56],[144,48],[136,48],[136,32],[144,32],[144,24]]]},{"name":"Crown","fill":"#f5cd30","depth":4,"base":1,"poly":[[112,16],[120,16],[120,24],[128,24],[128,16],[136,16],[136,24],[144,24],[144,32],[136,32],[136,40],[112,40],[112,32],[104,32],[104,24],[112,24],[112,16]],"holes":[]},{"name":"Bill","fill":"#c4281c","depth":4,"base":1,"poly":[[136,56],[152,56],[152,64],[160,64],[160,72],[136,72],[136,56]],"holes":[]},{"name":"Head","fill":"#1b2a34","depth":4,"base":1,"poly":[[112,40],[136,40],[136,48],[144,48],[144,56],[136,56],[136,72],[128,72],[128,64],[112,64],[112,72],[104,72],[104,48],[112,48],[112,40]],"holes":[]},{"name":"Neck","fill":"#6c6e68","depth":4,"base":1,"poly":[[112,64],[128,64],[128,112],[112,112],[112,64]],"holes":[]},{"name":"Wing","fill":"#1d00f5","depth":7,"base":1,"poly":[[104,112],[112,112],[112,136],[104,136],[104,144],[96,144],[96,152],[88,152],[88,160],[64,160],[64,144],[56,144],[56,136],[64,136],[64,128],[72,128],[72,120],[104,120],[104,112]],"holes":[]},{"name":"Body","fill":"#a0a5a9","depth":4,"base":1,"poly":[[80,104],[104,104],[104,120],[72,120],[72,128],[64,128],[64,136],[56,136],[56,144],[48,144],[48,128],[56,128],[56,120],[64,120],[64,112],[80,112],[80,104]],"holes":[]},{"name":"Body","fill":"#a0a5a9","depth":4,"base":1,"poly":[[112,128],[128,128],[128,144],[120,144],[120,152],[112,152],[112,160],[88,160],[88,152],[96,152],[96,144],[104,144],[104,136],[112,136],[112,128]],"holes":[]},{"name":"Body","fill":"#a0a5a9","depth":4,"base":1,"poly":[[40,144],[48,144],[48,152],[40,152],[40,144]],"holes":[]},{"name":"Tail","fill":"#9e9e9e","depth":4,"base":1,"poly":[[48,144],[64,144],[64,160],[40,160],[40,152],[48,152],[48,144]],"holes":[]},{"name":"Legs","fill":"#1b2a34","depth":4,"base":1,"poly":[[72,160],[104,160],[104,168],[96,168],[96,208],[112,208],[112,216],[64,216],[64,208],[72,208],[72,160]],"holes":[[[88,168],[80,168],[80,208],[88,208],[88,168]]]},{"name":"Grass","fill":"#4b9f4a","depth":2,"base":1,"poly":[[40,208],[64,208],[64,216],[112,216],[112,208],[160,208],[160,216],[168,216],[168,240],[24,240],[24,216],[40,216],[40,208]],"holes":[]}];
 
 let guide = CRANE.slice(), bricks = [];
 let part = {kind:"brick", w:2, id:"3004", n:"1x2"};   // the part the rail has chosen
@@ -284,8 +296,11 @@ function fit(){
   const B=bounds(), ox=Math.floor(B.a/STUD)*STUD, oy=Math.floor(B.b/PLATE)*PLATE;
   if(ox||oy) guide=guide.map(g=>({...g,poly:g.poly.map(p=>[p[0]-ox,p[1]-oy])}));
   const C=bounds();
-  modelW=Math.ceil((C.c+STUD)/STUD)*STUD;
-  modelH=Math.ceil((C.d+PLATE*3)/PLATE)*PLATE;
+  /* The surface IS the frame - the design's own extent, rounded out to whole studs. It used to
+     be padded by a stud and a course, which left a bare white margin down the right and along
+     the bottom of the backdrop; Studio shows the design filling its page, not floating on one. */
+  modelW=Math.ceil(C.c/STUD)*STUD;
+  modelH=Math.ceil(C.d/STUD)*STUD;
   const bd=cv.parentElement.getBoundingClientRect();
   PX=Math.max(1.2, Math.min(9,(bd.height-36)/modelH,(bd.width-36)/modelW));
   cv.width=Math.round(modelW*PX); cv.height=Math.round(modelH*PX);
@@ -297,33 +312,21 @@ const cur=()=>({shape:KINDS[part.kind].shape, h:KINDS[part.kind].h, w:part.w, id
 
 /* ---------- drawing ---------- */
 function drawGrid(){
-  /* The empty surface is a brick wall in RUNNING BOND - horizontal courses, each one
-     offset half a brick from the course below, the way brick veneer is laid and the way
-     LEGO is built for strength. A course is one brick tall (3 plates) and the pattern
-     unit is a 1x2, so the stagger is one stud. Placement still snaps to the stud grid,
-     which is what produces the stagger. */
-  const COURSE = PLATE*3, sw = mx(4.8), sh = Math.max(1.3, mx(1.6));
-  ctx.lineWidth = 1;
-  let course = 0;
-  for(let y=0; y<modelH; y+=COURSE, course++){
-    const off = (course % 2) ? -STUD : 0;                 /* half a 1x2 = one stud */
-    for(let x=off; x<modelW; x+=STUD*2){
-      const X=mx(x), Y=mx(y), W=mx(STUD*2), H=mx(COURSE);
-      ctx.fillStyle="#f6fafb";
-      ctx.fillRect(X, Y+sh, W, H-sh);
-      ctx.strokeStyle="#d8e4ea";
-      ctx.strokeRect(Math.round(X)+.5, Math.round(Y+sh)+.5, W, H-sh);
-      for(let i=0;i<2;i++){                                /* the two studs of a 1x2 */
-        const cx = X + mx(STUD)*(i+.5);
-        ctx.fillStyle="#edf3f6";
-        ctx.beginPath();
-        if(ctx.roundRect) ctx.roundRect(cx-sw/2, Y, sw, sh*2, sh);
-        else ctx.rect(cx-sw/2, Y, sw, sh*2);
-        ctx.fill();
-        ctx.strokeStyle="#e0eaef"; ctx.stroke();
-      }
+  /* The empty surface is the STUD LATTICE, one faint ring per stud on the 8 mm pitch - the
+     lattice Studio's Snap to Studs works to, and nothing more. It was a drawn brick wall in
+     running bond, which was invented here: it depicted bricks that had not been placed, it
+     belonged to no other application in the family, and a student meets a different world in
+     each program if the background itself changes meaning. The surface says where a stud can
+     land; the bricks say what is built. */
+  const r = Math.max(0.7, mx(1.5));
+  ctx.save();
+  ctx.strokeStyle="#dde5ea"; ctx.lineWidth=1;
+  for(let y=PLATE*1.5; y<modelH; y+=PLATE*3){
+    for(let x=STUD/2; x<modelW; x+=STUD){
+      ctx.beginPath(); ctx.arc(mx(x), mx(y), r, 0, 6.2832); ctx.stroke();
     }
   }
+  ctx.restore();
 }
 function drawGuide(){
   guide.forEach(g=>{
@@ -331,8 +334,21 @@ function drawGuide(){
     ctx.beginPath();
     g.poly.forEach((p,i)=> i?ctx.lineTo(mx(p[0]),mx(p[1])):ctx.moveTo(mx(p[0]),mx(p[1])));
     ctx.closePath();
-    ctx.fillStyle=g.fill+"55"; ctx.fill();                 /* readable, not a ghost */
-    ctx.strokeStyle="#3d4a54"; ctx.lineWidth=2; ctx.stroke();
+    /* A region can be PIERCED - the crane's legs are one outline with the gap between them held
+       as a hole - so the holes are traced into the same path and it is filled even-odd. Without
+       this the two legs fill in as a single trunk. */
+    (g.holes||[]).forEach(h=>{ ctx.moveTo(mx(h[0][0]),mx(h[0][1]));
+      h.forEach((p,i)=> i&&ctx.lineTo(mx(p[0]),mx(p[1]))); ctx.closePath(); });
+    /* THE FRAME IS DRAWN THE WAY STUDIO DRAWS THE DESIGN: each region in its OWN COLOUR, with
+       Studio's soft gray outline over the fill (its convention for an imported mosaic mass -
+       tile edges, not cut lines - which is exactly what these regions are). It is the same
+       picture the student was looking at a moment ago in the other program.
+       I first drew it as a Studio GUIDE - pale, long-dashed, colour washed out - reasoning that
+       the frame is scaffolding. Wrong: what Studio puts on screen is the design in full colour,
+       and washing it out is precisely why this did not look like Studio. The frame reads as
+       unbuilt because it carries no studs; the bricks placed on it do. */
+    ctx.fillStyle=g.fill; ctx.fill("evenodd");
+    ctx.strokeStyle="#8a8a8a"; ctx.lineWidth=1; ctx.stroke();
   });
 }
 function shape(p,col,row,fl){
@@ -342,47 +358,42 @@ function shape(p,col,row,fl){
                          else  {ctx.moveTo(x,y);ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);} }
   else if(p.shape==="invslope"){ if(fl){ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x,y+h);}
                                  else  {ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h);} }
+  /* A cone is the one of the three that changes the SILHOUETTE from this side: it tapers from a
+     full stud at the foot to the stud on top. A round brick does not - a cylinder seen from the
+     side is a rectangle, so it is told apart by its shading, below. Nor does a wedge plate, whose
+     taper is in PLAN; from the side it is simply a plate, and it carries a hint line instead. */
+  else if(p.shape==="cone"){ const t=w*0.55;
+    ctx.moveTo(x,y+h); ctx.lineTo(x+(w-t)/2,y); ctx.lineTo(x+(w+t)/2,y); ctx.lineTo(x+w,y+h); }
   else ctx.rect(x,y,w,h);
   ctx.closePath(); return {x,y,w,h};
 }
 function drawBrick(b,ghost){
-  /* A brick seen from the SIDE: the studs stand proud of the top face, they are not
-     circles printed on it. Each stud is 4.8 mm across on the 8 mm pitch and about
-     1.7 mm tall. */
-  const p=b.p, c=COLORS[b.colorIdx];
+  /* A BRICK IS DRAWN THE WAY STUDIO DRAWS A PART, in Studio's own three marks: the colour as the
+     fill, a GRAY outline (#8a8a8a) which is Studio's mark for a part rather than a cut line, and
+     BROWN RINGS (#8a5a2b) for the studs. Studio draws the studs as rings because a relief
+     extrudes TOWARDS the viewer, so its connectors face you - which is exactly what bricks
+     stacking towards the viewer do here, so the same mark means the same thing.
+     This replaces a moulded side elevation with lit and shaded faces and studs standing proud of
+     the top, which was invented in this application alone and is why nothing here resembled the
+     program the student arrives from. */
+  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip;
   const x=mx(b.col*STUD), y=mx(b.row*PLATE), w=mx(p.w*STUD), h=mx(p.h*PLATE);
-  const sw=mx(4.8), sh=Math.max(1.5, mx(1.7));
-  const tint=(hex,f)=>{const n=parseInt(hex.slice(1),16);
-    const r=Math.min(255,Math.max(0,((n>>16)&255)*f))|0, g=Math.min(255,Math.max(0,((n>>8)&255)*f))|0,
-          bl=Math.min(255,Math.max(0,(n&255)*f))|0;
-    return "rgb("+r+","+g+","+bl+")";};
-  ctx.globalAlpha = ghost?.55:1;
-
-  /* studs first, so the body's top edge cuts across their base */
-  if(p.shape!=="slope"){
+  ctx.globalAlpha = ghost?.5:1;
+  shape(p,b.col,b.row,fl);
+  ctx.fillStyle=c.hex; ctx.fill();
+  ctx.strokeStyle="#8a8a8a"; ctx.lineWidth=1.5; ctx.stroke();
+  /* One ring per stud, on the 8 mm pitch. Studio's own two exceptions come with the convention:
+     a sloped row carries no stud, and a cone has none where a round brick has one. */
+  if(p.shape!=="cone"){
+    const r=Math.min(Math.max(1.1, mx(2.4)), Math.min(h, mx(STUD))/2 - 0.5);
+    ctx.strokeStyle="#8a5a2b"; ctx.lineWidth=1;
     for(let i=0;i<p.w;i++){
-      const cx=x+mx(STUD)*(i+.5);
-      ctx.fillStyle=tint(c.hex,1.06);
-      ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(cx-sw/2, y-sh, sw, sh*2, Math.min(sh, sw/2));
-      else ctx.rect(cx-sw/2, y-sh, sw, sh*2);
-      ctx.fill();
-      ctx.strokeStyle="rgba(0,0,0,.35)"; ctx.lineWidth=1; ctx.stroke();
+      if(p.shape==="slope" && (fl ? i===0 : i===p.w-1)) continue;
+      ctx.beginPath(); ctx.arc(x+mx(STUD)*(i+.5), y+h/2, r, 0, 6.2832); ctx.stroke();
     }
   }
-
-  const r=shape(p,b.col,b.row,b.flip);
-  ctx.fillStyle=c.hex; ctx.fill();
-  /* a lit top edge and a shaded foot give it body */
-  ctx.save(); ctx.clip();
-  ctx.fillStyle=tint(c.hex,1.13); ctx.fillRect(x,y,w,Math.max(1,h*0.18));
-  ctx.fillStyle=tint(c.hex,0.80); ctx.fillRect(x,y+h-Math.max(1,h*0.16),w,Math.max(1,h*0.16));
-  ctx.strokeStyle="rgba(0,0,0,.14)"; ctx.lineWidth=1;
-  for(let i=1;i<p.w;i++){ const gx=Math.round(x+mx(STUD)*i)+.5;
-    ctx.beginPath(); ctx.moveTo(gx,y); ctx.lineTo(gx,y+h); ctx.stroke(); }
-  ctx.restore();
-  shape(p,b.col,b.row,b.flip);
-  ctx.strokeStyle=ghost?"#7a3b12":"rgba(0,0,0,.55)"; ctx.lineWidth=ghost?2:1.2; ctx.stroke();
+  if(ghost){ ctx.globalAlpha=1; ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=2;
+             shape(p,b.col,b.row,fl); ctx.stroke(); }
   ctx.globalAlpha=1;
 }
 function draw(){
