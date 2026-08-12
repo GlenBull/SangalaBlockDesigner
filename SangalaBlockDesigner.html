@@ -284,6 +284,13 @@ let tool = "select", showGuide = true, showGrid = true;
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
 let PX = 3, modelW = 144, modelH = 224, hover = null;
+/* THE SURFACE IS A BASEPLATE, and Studio already says so: its page menu offers "LEGO baseplate
+   32 x 32 studs" beside Letter and the 12 in scrapbook sheet. So the design sits on a page here
+   exactly as it sits on one in Studio - the same white sheet on the same cork - and the page is
+   counted in studs, because "10.1 x 10.1 in" tells a builder nothing. The plate grows in whole
+   studs if a design will not fit on 32. padX/padY centre the design on it. */
+const BASEPLATE = 32;
+let padX = 0, padY = 0;
 const say = m => { $("status").textContent = m; };
 
 /* ---------- geometry ---------- */
@@ -296,11 +303,11 @@ function fit(){
   const B=bounds(), ox=Math.floor(B.a/STUD)*STUD, oy=Math.floor(B.b/PLATE)*PLATE;
   if(ox||oy) guide=guide.map(g=>({...g,poly:g.poly.map(p=>[p[0]-ox,p[1]-oy])}));
   const C=bounds();
-  /* The surface IS the frame - the design's own extent, rounded out to whole studs. It used to
-     be padded by a stud and a course, which left a bare white margin down the right and along
-     the bottom of the backdrop; Studio shows the design filling its page, not floating on one. */
-  modelW=Math.ceil(C.c/STUD)*STUD;
-  modelH=Math.ceil(C.d/STUD)*STUD;
+  const fw=Math.ceil(C.c/STUD)*STUD, fh=Math.ceil(C.d/STUD)*STUD;
+  const side=Math.max(BASEPLATE*STUD, fw, fh);          /* square, like the plate itself */
+  padX=Math.round((side-fw)/2/STUD)*STUD;               /* whole studs, so columns stay whole */
+  padY=Math.round((side-fh)/2/PLATE)*PLATE;             /* whole plates, so rows stay whole */
+  modelW=side; modelH=side;
   const bd=cv.parentElement.getBoundingClientRect();
   PX=Math.max(1.2, Math.min(9,(bd.height-36)/modelH,(bd.width-36)/modelW));
   cv.width=Math.round(modelW*PX); cv.height=Math.round(modelH*PX);
@@ -321,7 +328,7 @@ function drawGrid(){
   const r = Math.max(0.7, mx(1.5));
   ctx.save();
   ctx.strokeStyle="#dde5ea"; ctx.lineWidth=1;
-  for(let y=PLATE*1.5; y<modelH; y+=PLATE*3){
+  for(let y=STUD/2; y<modelH; y+=STUD){        /* square, both ways: it is a baseplate */
     for(let x=STUD/2; x<modelW; x+=STUD){
       ctx.beginPath(); ctx.arc(mx(x), mx(y), r, 0, 6.2832); ctx.stroke();
     }
@@ -399,9 +406,16 @@ function drawBrick(b,ghost){
 function draw(){
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
   if(showGrid) drawGrid();
+  /* The page's size, upright at its top-left in Studio's own gray 13 px - the mark a student
+     reads in the other program to know what surface they are working on. */
+  ctx.fillStyle="#9aa0a6"; ctx.font="13px sans-serif";
+  const n=Math.round(modelW/STUD);
+  ctx.fillText(n+" x "+n+" studs", 8, 17);
+  ctx.save(); ctx.translate(mx(padX), mx(padY));
   if(showGuide) drawGuide();
   bricks.forEach(b=>drawBrick(b,false));
   if(hover && tool==="place") drawBrick(hover,true);
+  ctx.restore();
   bom();
 }
 
@@ -497,8 +511,12 @@ $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
 
 function cell(e){
-  const r=cv.getBoundingClientRect();
-  return {col:Math.floor((e.clientX-r.left)/PX/STUD), row:Math.floor((e.clientY-r.top)/PX/PLATE)};
+  /* The design is centred on the plate, so the pointer is measured from the DESIGN's origin,
+     not the canvas corner. The scale factor guards the case where CSS displays the canvas at
+     a size other than its backing width - a click would otherwise land a stud or two out. */
+  const r=cv.getBoundingClientRect(), s=r.width?cv.width/r.width:1;
+  const x=(e.clientX-r.left)*s/PX - padX, y=(e.clientY-r.top)*s/PX - padY;
+  return {col:Math.floor(x/STUD), row:Math.floor(y/PLATE)};
 }
 function hit(c){
   for(let i=bricks.length-1;i>=0;i--){const b=bricks[i];
