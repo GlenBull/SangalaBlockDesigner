@@ -808,10 +808,23 @@ function renderPreview(){
           gz[i]=z; gc[i]=Math.max(1,Math.min(255,(s*255)|0));
         } }
     }
+    /* ONE DELIBERATE DEPARTURE FROM STUDIO, and the reason for it. Studio's rule is "a real part
+       here wins outright", which suits massing you build INSIDE. Here the frame SURROUNDS the
+       bricks, so a brick behind the crane still painted over it, and orbiting made the brick
+       appear to jump from one side of the frame to the other (Glen, 2026-08-11).
+       Depth alone is not the answer either: bricks placed INTO the massing sit inside it, and a
+       plain depth test would swallow them. So the guide is drawn where it is NEARER than the
+       brick, and blended rather than replacing - a brick behind the frame is veiled by it and
+       stays where it is, a brick in front is untouched, and empty frame reads as before. */
     for(let i=0;i<W*H;i++){
-      if(!gc[i] || pvZbuf[i]!==Infinity) continue;    // a real part here wins outright
-      const s=gc[i]/255, p=i<<2;                     // clearly darker than the sky behind it, or a ghost
-      px[p]=(104+62*s)|0; px[p+1]=(120+62*s)|0; px[p+2]=(142+58*s)|0; px[p+3]=255;   // reads as no ghost at all
+      if(!gc[i] || gz[i]>=pvZbuf[i]) continue;        // a nearer brick wins
+      const s=gc[i]/255, p=i<<2;
+      /* Full strength over empty space; a THIN veil over a brick, so a brick inside the massing
+         still reads as the student's own work rather than as part of the ghost. */
+      const a = pvZbuf[i]===Infinity ? 1 : 0.42;
+      const r=(104+62*s), g2=(120+62*s), b2=(142+58*s);
+      px[p]=(px[p]+(r-px[p])*a)|0; px[p+1]=(px[p+1]+(g2-px[p+1])*a)|0;
+      px[p+2]=(px[p+2]+(b2-px[p+2])*a)|0; px[p+3]=255;
     }
   }
   // ---- loose holes: a hole with nothing to carve makes no material, so without this it is INVISIBLE in
