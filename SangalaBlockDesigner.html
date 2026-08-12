@@ -1046,7 +1046,44 @@ function bricksToTris(){
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
     const y1=-(b.base||0)*PLATE, y0=y1-t*PLATE;
-    boxTris(x0,x1,y0,y1,z0,z1,mine);
+    /* THE PART'S OWN SHAPE, not a box for everything. Glen, on a pair of inverted slopes that
+       came out as plain cubes: "the bricks that you originally placed were 2 x 2 LEGO bricks.
+       They did not have sloped sides at all." They were boxes because this built one for every
+       part - so a slope, an inverted slope, a wedge plate and a cone all looked like 3003, and
+       there was no way to judge a placement by looking at it.
+         slope     - full height at one end, falling to nothing across its depth
+         invslope  - the same wedge upside down: the fall is on the underside
+         round     - a cylinder
+         cone      - a cylinder tapered to the stud
+         wedge     - the trapezoid it already has in plan, given thickness
+       Everything else is still a box, which is what a brick and a plate are. */
+    const quad=(a,b2,c2,d2,o)=>{ o.push([a,b2,c2]); o.push([a,c2,d2]); };
+    if(p.shape==="slope" || p.shape==="invslope"){
+      /* the ramp runs along the depth (rows); flip swaps which end keeps its full height */
+      const zHi = b.flip ? z0 : z1, zLo = b.flip ? z1 : z0;   /* hi end keeps the full face */
+      const inv = p.shape==="invslope";
+      const yTip = inv ? y1 : y0;      /* an inverted slope keeps its FRONT face and cuts behind */
+      const A=[x0,y0,zHi], B=[x1,y0,zHi], C=[x1,y1,zHi], D=[x0,y1,zHi];      /* full end */
+      const E=[x0,yTip,zLo], F=[x1,yTip,zLo];                                /* the thin edge */
+      quad(A,D,C,B,mine);                                   /* the full-height end face */
+      quad(A,B,F,E,mine);                                   /* the front (studded) face or ramp */
+      quad(D,E,F,C,mine);                                   /* the back face or ramp */
+      mine.push([A,E,D]); mine.push([B,C,F]);               /* the two triangular sides */
+    } else if(p.shape==="round" || p.shape==="cone"){
+      const cx=(x0+x1)/2, cz=(z0+z1)/2, r=(x1-x0)/2;
+      const rTip = p.shape==="cone" ? r*0.42 : r;            /* a cone narrows to its stud */
+      const N=16;
+      for(let k=0;k<N;k++){
+        const a0=k/N*6.2832, a1=(k+1)/N*6.2832;
+        const P=(a,rr,y)=>[cx+rr*Math.cos(a), y, cz+rr*Math.sin(a)];
+        const A=P(a0,r,y1), B=P(a1,r,y1), C=P(a1,rTip,y0), D=P(a0,rTip,y0);
+        quad(A,B,C,D,mine);                                  /* the wall */
+        mine.push([[cx,y0,cz],D,C]);                         /* the face towards the viewer */
+        mine.push([[cx,y1,cz],B,A]);                         /* and the one against the plate */
+      }
+    } else {
+      boxTris(x0,x1,y0,y1,z0,z1,mine);
+    }
     if(p.shape!=="cone"){
       for(let ry=0;ry<d;ry++){
         if(p.shape==="slope" && (b.flip ? ry===0 : ry===d-1)) continue;
