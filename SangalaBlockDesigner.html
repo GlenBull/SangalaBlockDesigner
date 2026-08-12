@@ -7,7 +7,7 @@
 <style>
   /* Look and feel shared with Sangala Studio (Silhouette Tools/SangalaStudio.html). Copied, not
      linked: when Studio's styling changes, port it here deliberately. No coupling to break.
-     Four regions mirror Studio: menu bar (header) · left tool rail (.ltools) · workspace
+     Four regions mirror Studio: menu bar (header) · left toolbar (.ltools) · workspace
      (.board) · right control panel (#build, the Fabricate-panel equivalent). */
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#26303a;background:#37587a;
@@ -39,7 +39,7 @@
   .spacer{flex:1}
   .projline{margin-top:.4rem;font-size:.85rem;font-weight:700;color:#5a4a34;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-  /* --- left tool rail --- */
+  /* --- left toolbar --- */
   .ltools{display:flex;flex-direction:column;gap:.4rem;align-self:start}
   .ltitle{font-size:.8rem;color:#eaf1f8;text-align:center;margin:.1rem 0 .1rem}
   .ltbtn{width:52px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;
@@ -50,7 +50,7 @@
   .ltbtn:disabled{opacity:.38;cursor:default;box-shadow:none}
   .ltbtn:disabled:hover{background:linear-gradient(#fffdf7,#e8dcc2)}
 
-  /* --- three-region stage: left rail (auto) · workspace (1fr) · control panel (300px) --- */
+  /* --- three-region stage: left toolbar (auto) · workspace (1fr) · control panel (300px) --- */
   .stage{flex:1;min-height:0;display:grid;grid-template-columns:auto minmax(340px,1fr) 300px;grid-template-rows:minmax(0,1fr);gap:.7rem;padding:.7rem;overflow:hidden}
   .panel{border-radius:12px;padding:.7rem;border:2px solid #d8c4a0;background:#efe0c4;box-shadow:0 3px 8px rgba(0,0,0,.25)}
   .panel h2{margin:.1rem 0 .5rem;font-size:1.05rem;color:#7a3b12}
@@ -127,7 +127,7 @@
   .card button{margin-top:.6rem;padding:.35rem .9rem;border:1px solid #c9b48c;border-radius:8px;background:linear-gradient(#fffdf7,#efe6d3);color:#7a3b12;cursor:pointer;font-size:.9rem}
   .card button:hover{background:#fff}
 
-/* ---- copied verbatim from Sangala Studio: the left-rail flyout ---- */
+/* ---- copied verbatim from Sangala Studio: the left toolbar flyout ---- */
 .menu{background:#efe0c4;border:2px solid #d8c4a0;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,.3);padding:.3rem;flex-direction:column;gap:.15rem}
 .menu button{font-size:.92rem;text-align:left;padding:.45rem .8rem;border:none;background:none;border-radius:6px;cursor:pointer;color:#5a4a34;white-space:nowrap}
 .menu button:hover{background:#e0cfa8}
@@ -165,7 +165,7 @@
 
 <div class="stage">
 
-  <!-- (2) LEFT TOOL RAIL -->
+  <!-- (2) LEFT TOOLBAR -->
   <div class="ltools">
     <div class="ltitle marker">Tools</div>
     <button class="ltbtn on" id="tSelect" title="Select / move (normal mode)"><svg width="21" height="21" viewBox="0 0 24 24" style="display:block" aria-hidden="true"><path d="M5.5 3.2 L5.5 20.5 L9.8 16.5 L12.5 22.5 L15 21.3 L12.3 15.5 L18.2 15.5 Z" fill="#fff" stroke="#5a2f10" stroke-width="1.7" stroke-linejoin="round"/></svg><small>Select</small></button>
@@ -183,7 +183,7 @@
   <div id="build" class="panel">
     <h2 class="marker">Color</h2>
     <div class="swrow" id="swatches"></div>
-    <div class="hint" id="status">Pick a part from the rail, then click the frame to place it.</div>
+    <div class="hint" id="status">Pick a part from the Toolbar, then click the frame to place it.</div>
 
     <!-- BRICK SIZE, in Studio's words and beside the part rather than buried in Settings, which
          is Glen's complaint about where Studio keeps it. A short list cannot hold the part a
@@ -218,7 +218,7 @@
   </div>
 </div>
 
-<!-- left-rail flyout, and its size submenu: Studio's #partmenu pattern -->
+<!-- left toolbar flyout: Studio's #partmenu pattern -->
 <div id="partmenu" class="menu" style="position:fixed;z-index:31;display:none">
   <button data-kind="brick">&#129521; Brick</button>
   <button data-kind="plate">&#9644; Plate</button>
@@ -251,7 +251,7 @@
    Parts panel: "Depth and Base are in plates - 3 plates = 1 brick." */
 const STUD = 8, PLATE = 3.2;
 
-/* Parts are organised by KIND, and each kind offers its sizes - the left-rail flyout picks
+/* Parts are organised by KIND, and each kind offers its sizes - the left toolbar flyout picks
    the kind, the submenu picks the size.
 
    EVERY NUMBER AND SIZE BELOW WAS READ FROM THE LDRAW LIBRARY, not typed from memory and not
@@ -286,7 +286,7 @@ const KINDS = {
 /* rows x columns -> design number, for the kinds that come in many sizes. GENERATED from the
    LDraw library by tools/sizes_from_ldraw.py - 22 brick sizes and 34 plate sizes, every number
    read off the part's own description. Do not hand-edit: rerun the tool. */
-const SIZES = {"brick":{"10x10":"733","12x24":"30072","1x1":"3005","1x10":"6111","1x12":"6112","1x16":"2465","1x2":"3004","1x3":"3622","1x4":"3010","1x6":"3009","1x8":"3008","2x10":"3006","2x2":"3003","2x3":"3002","2x4":"3001","2x6":"2456","2x8":"3007","4x10":"6212","4x12":"4202","4x6":"2356","8x16":"4204","8x8":"4201"},"plate":{"1x1":"3024","1x10":"4477","1x12":"60479","1x2":"3023","1x3":"3623","1x4":"3710","1x5":"78329","1x6":"3666","1x8":"3460","2x10":"3832","2x12":"2445","2x14":"91988","2x16":"4282","2x2":"3022","2x3":"3021","2x4":"3020","2x6":"3795","2x8":"3034","3x3":"11212","4x10":"3030","4x12":"3029","4x4":"3031","4x6":"3032","4x8":"3035","6x10":"3033","6x12":"3028","6x14":"3456","6x16":"3027","6x24":"3026","6x6":"3958","6x8":"3036","8x11":"728","8x16":"92438","8x8":"41539"}};
+const SIZES = {"brick":{"1x1":"3005","1x2":"3004","1x3":"3622","1x4":"3010","1x6":"3009","1x8":"3008","2x2":"3003","2x3":"3002","2x4":"3001","2x6":"2456","2x8":"3007"},"plate":{"1x1":"3024","1x2":"3023","1x3":"3623","1x4":"3710","1x6":"3666","1x8":"3460","2x2":"3022","2x3":"3021","2x4":"3020","2x6":"3795","2x8":"3034"}};
 
 const COLORS = [
   {code:15,name:"White",hex:"#f4f4f4"},{code:71,name:"Light Bluish Gray",hex:"#a0a5a9"},
@@ -298,7 +298,7 @@ const COLORS = [
 const CRANE = [{"name":"Body","fill":"#6c6e68","depth":4,"base":1,"poly":[[112,112],[128,112],[128,128],[112,128],[112,112]],"holes":[]},{"name":"Frame","fill":"#6e99c9","depth":1,"base":0,"poly":[[80,168],[88,168],[88,208],[80,208],[80,168]],"holes":[]},{"name":"Frame","fill":"#6e99c9","depth":1,"base":0,"poly":[[0,0],[192,0],[192,248],[0,248],[0,0]],"holes":[[[144,24],[136,24],[136,16],[128,16],[128,24],[120,24],[120,16],[112,16],[112,24],[104,24],[104,32],[112,32],[112,48],[104,48],[104,72],[112,72],[112,112],[104,112],[104,104],[80,104],[80,112],[64,112],[64,120],[56,120],[56,128],[48,128],[48,144],[40,144],[40,160],[72,160],[72,208],[40,208],[40,216],[24,216],[24,240],[168,240],[168,216],[160,216],[160,208],[96,208],[96,168],[104,168],[104,160],[112,160],[112,152],[120,152],[120,144],[128,144],[128,72],[160,72],[160,64],[152,64],[152,56],[144,56],[144,48],[136,48],[136,32],[144,32],[144,24]]]},{"name":"Crown","fill":"#f5cd30","depth":4,"base":1,"poly":[[112,16],[120,16],[120,24],[128,24],[128,16],[136,16],[136,24],[144,24],[144,32],[136,32],[136,40],[112,40],[112,32],[104,32],[104,24],[112,24],[112,16]],"holes":[]},{"name":"Bill","fill":"#c4281c","depth":4,"base":1,"poly":[[136,56],[152,56],[152,64],[160,64],[160,72],[136,72],[136,56]],"holes":[]},{"name":"Head","fill":"#1b2a34","depth":4,"base":1,"poly":[[112,40],[136,40],[136,48],[144,48],[144,56],[136,56],[136,72],[128,72],[128,64],[112,64],[112,72],[104,72],[104,48],[112,48],[112,40]],"holes":[]},{"name":"Neck","fill":"#6c6e68","depth":4,"base":1,"poly":[[112,64],[128,64],[128,112],[112,112],[112,64]],"holes":[]},{"name":"Wing","fill":"#1d00f5","depth":7,"base":1,"poly":[[104,112],[112,112],[112,136],[104,136],[104,144],[96,144],[96,152],[88,152],[88,160],[64,160],[64,144],[56,144],[56,136],[64,136],[64,128],[72,128],[72,120],[104,120],[104,112]],"holes":[]},{"name":"Body","fill":"#a0a5a9","depth":4,"base":1,"poly":[[80,104],[104,104],[104,120],[72,120],[72,128],[64,128],[64,136],[56,136],[56,144],[48,144],[48,128],[56,128],[56,120],[64,120],[64,112],[80,112],[80,104]],"holes":[]},{"name":"Body","fill":"#a0a5a9","depth":4,"base":1,"poly":[[112,128],[128,128],[128,144],[120,144],[120,152],[112,152],[112,160],[88,160],[88,152],[96,152],[96,144],[104,144],[104,136],[112,136],[112,128]],"holes":[]},{"name":"Body","fill":"#a0a5a9","depth":4,"base":1,"poly":[[40,144],[48,144],[48,152],[40,152],[40,144]],"holes":[]},{"name":"Tail","fill":"#9e9e9e","depth":4,"base":1,"poly":[[48,144],[64,144],[64,160],[40,160],[40,152],[48,152],[48,144]],"holes":[]},{"name":"Legs","fill":"#1b2a34","depth":4,"base":1,"poly":[[72,160],[104,160],[104,168],[96,168],[96,208],[112,208],[112,216],[64,216],[64,208],[72,208],[72,160]],"holes":[[[88,168],[80,168],[80,208],[88,208],[88,168]]]},{"name":"Grass","fill":"#4b9f4a","depth":2,"base":1,"poly":[[40,208],[64,208],[64,216],[112,216],[112,208],[160,208],[160,216],[168,216],[168,240],[24,240],[24,216],[40,216],[40,208]],"holes":[]}];
 
 let guide = CRANE.slice(), bricks = [];
-let part = {kind:"brick", w:2, id:"3004", n:"1x2"};   // the part the rail has chosen
+let part = {kind:"brick", w:2, id:"3004", n:"1x2"};   // the part the Toolbar has chosen
 let selCol = 3, flip = false;
 let tool = "select", showGuide = true, showGrid = true;
 
@@ -500,7 +500,7 @@ function draw(){
   bom();
 }
 
-/* ---------- left-rail flyout: Studio's #partmenu pattern ---------- */
+/* ---------- left toolbar flyout: Studio's #partmenu pattern ---------- */
 function closeMenus(){ $("partmenu").style.display="none"; }
 $("tPart").onclick=(e)=>{
   e.stopPropagation();
@@ -543,9 +543,11 @@ Object.keys(KINDS).forEach(k=>{
 });
 const sizeable = k => !!SIZES[k];
 const firstSize = k => Object.keys(SIZES[k]||{})[0];
+let lastR=1, lastC=2;   /* what the fields last held, so a spinner's DIRECTION of travel is known */
 function syncSizeFields(){
   const t=String(part.n||"").split("x");
-  if(t.length===2){ $("szRows").value=parseInt(t[0],10)||1; $("szCols").value=parseInt(t[1],10)||1; }
+  if(t.length===2){ $("szRows").value=lastR=parseInt(t[0],10)||1;
+                    $("szCols").value=lastC=parseInt(t[1],10)||1; }
   $("szCols").disabled=$("szRows").disabled=!sizeable(part.kind);
   $("szNote").textContent = sizeable(part.kind)
     ? KINDS[part.kind].label+" "+part.n.replace("x"," x ")+"  ·  design "+part.id
@@ -570,11 +572,37 @@ function applySize(snap){
   const tbl=SIZES[k];
   let id=tbl[rows+"x"+cols], R=rows, C=cols;
   if(!id && tbl[cols+"x"+rows]){ id=tbl[cols+"x"+rows]; R=cols; C=rows; }
+  /* THE SPINNER STEPS TO THE NEXT SIZE THAT EXISTS. LEGO's sizes are sparse - with 10 columns
+     there is a 1, a 2, a 4 and a 10, and nothing between - so a plain 1-at-a-time spinner lands
+     on five sizes in a row that cannot be ordered, appears to lock at the last one that worked,
+     and gives no way back. Moving on in the direction of travel keeps every click meaningful. */
   if(!id){
-    $("szNote").textContent="There is no "+KINDS[k].label.toLowerCase()+" "+rows+" x "+cols+" in the catalog.";
+    const dR=rows-lastR, dC=cols-lastC;
+    const step=(from,dir,test)=>{ for(let v=from+dir; v>=1 && v<=16; v+=dir) if(test(v)) return v; return 0; };
+    const okR=v=>tbl[v+"x"+cols]||tbl[cols+"x"+v], okC=v=>tbl[rows+"x"+v]||tbl[v+"x"+rows];
+    let r2=0,c2=0;
+    if(dR){ r2=step(rows, dR>0?1:-1, okR) || step(rows, dR>0?-1:1, okR); if(r2){ rows=r2; $("szRows").value=r2; } }
+    else if(dC){ c2=step(cols, dC>0?1:-1, okC) || step(cols, dC>0?-1:1, okC); if(c2){ cols=c2; $("szCols").value=c2; } }
+    id = tbl[rows+"x"+cols] || tbl[cols+"x"+rows];
+    if(id && !(tbl[rows+"x"+cols])){ R=cols; C=rows; } else { R=rows; C=cols; }
+  }
+  if(!id){
+    /* Nothing in that column at all - say what DOES exist rather than only saying no. */
+    const avail=[...new Set(Object.keys(tbl).flatMap(key=>{
+      const [a,b]=key.split("x").map(Number);
+      return b===cols ? [a] : (a===cols ? [b] : []);
+    }))].sort((x,y)=>x-y);
+    $("szNote").textContent="There is no "+KINDS[k].label.toLowerCase()+" "+rows+" x "+cols+" in the catalog."
+      + (avail.length ? "  With "+cols+(cols===1?" column: ":" columns: ")+avail.join(", ")
+                        +(avail.length>1?" rows.":" row.") : "");
     return;
   }
   part={kind:k, w:cols, d:rows, id:id, n:R+"x"+C};
+  /* Show what was actually used: spinning below 1 left a 0 in the field while the tool held a
+     1 x 10. Only written back when it differs, so typing a second digit is never interrupted. */
+  if(String(rows)!==$("szRows").value) $("szRows").value=rows;
+  if(String(cols)!==$("szCols").value) $("szCols").value=cols;
+  lastR=rows; lastC=cols;
   $("szNote").textContent=KINDS[k].label+" "+R+" x "+C+"  ·  design "+id;
   setTool("place");
   say("Click the frame to place a "+KINDS[k].label+" "+R+" x "+C+" (design "+id+").");

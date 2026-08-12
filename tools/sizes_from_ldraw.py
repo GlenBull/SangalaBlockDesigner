@@ -19,6 +19,17 @@ APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 KINDS = {"brick": "Brick", "plate": "Plate"}
 PAT = re.compile(r"^(Brick|Plate)\s+(\d+)\s+x\s+(\d+)$")
 
+# THE INVENTORY IS NOT THE CATALOGUE (Glen, 2026-08-11): "if it is rare and our students will
+# never see it, let's not include it in our inventory." The library holds everything LEGO ever
+# moulded - a 10 x 10 brick (733, first issued 1999) is a real brick and measures like one, but
+# no student will have it. So the table is filtered to the sizes that are in an ordinary brick
+# set, given as pairs (smaller, larger) and matched either way round.
+# PROVISIONAL: replace this with the kit inventory once the list of what actually goes in the box
+# is settled - the same list for Uganda and Virginia, so a design built at one site can be built
+# at the other.
+KEEP = {(1, 1), (1, 2), (1, 3), (1, 4), (1, 6), (1, 8),
+        (2, 2), (2, 3), (2, 4), (2, 6), (2, 8)}
+
 
 def first_line(path):
     with io.open(path, encoding="utf-8", errors="replace") as f:
@@ -50,6 +61,8 @@ def scan():
         if not m:
             continue
         word, a, b = m.group(1), int(m.group(2)), int(m.group(3))
+        if (min(a, b), max(a, b)) not in KEEP:
+            continue
         kind = "brick" if word == "Brick" else "plate"
         key = "%dx%d" % (a, b)
         prev = found[kind].get(key)
