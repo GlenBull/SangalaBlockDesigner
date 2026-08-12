@@ -31,7 +31,13 @@ convention. "Why do you persist in reinventing the wheel?" is the standing corre
 
 ## What is here
 - **`SangalaBlockDesigner.html`** — the whole application, one self-contained file. Menu bar, left
-  tool rail (Select / Place / Erase / Flip, then Show: Frame, Grid), parts panel on the right.
+  Toolbar (Select / Place / Erase / Flip, then Show: Frame, Grid), parts panel on the right.
+  **The column of tools on the left is the TOOLBAR. Never "rail" (Glen, Part 19, 2026-08-11).** The
+  applications already say so — the status line reads "Pick a part from the Toolbar" — and the word
+  "rail" appears nowhere in this file. It was my coinage, it survived only in my own writing, and it
+  reached the first draft of the Sangala Tools Technical Manual because the agreement was never
+  written down. The regions are: menu bar across the top, Toolbar down the left, workspace in the
+  middle, control panel on the right.
 - **`Crane.ico`** — the application icon, a crowned crane built from bricks, made the way Mosaic's
   turaco was made. Studio = buffalo, Mosaic = turaco, Block Designer = crane.
 - **`Crane 8.model`** — a Studio model kept beside the application as a sample frame to import.
@@ -39,7 +45,7 @@ convention. "Why do you persist in reinventing the wheel?" is the standing corre
 ## Facts about the program
 - Its own file extension is **`.block`**; it also opens Studio's **`.model`** to take a frame from it.
 - The part flyout is **Studio's `#partmenu` pattern** — a kind menu (Brick, Plate, Slope, Inverted
-  Slope) with a size submenu beside it, opening at the rail's right edge.
+  Slope) with a size submenu beside it, opening at the Toolbar's right edge.
 - Geometry follows LEGO, not the drawing grid: a stud is **8 mm**; bricks are drawn in **side view**,
   studs standing proud above the top face, courses in running bond.
 - Nothing is placed automatically. The student picks every part and places it — that is the point of

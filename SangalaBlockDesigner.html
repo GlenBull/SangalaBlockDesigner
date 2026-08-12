@@ -10,8 +10,13 @@
      Four regions mirror Studio: menu bar (header) · left toolbar (.ltools) · workspace
      (.board) · right control panel (#build, the Fabricate-panel equivalent). */
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#26303a;background:#37587a;
-       height:100vh;overflow:hidden;display:flex;flex-direction:column}   /* pin to the viewport - no page scroll */
+  /* STUDIO'S PAGE, verbatim. It was pinned to the viewport with overflow:hidden, which is what let the
+     workspace be CHOPPED - three nested clipping boxes (body, .stage, .board) and a canvas whose size
+     came from that chain. Studio has none of them: nothing can clip the board, so the whole workspace
+     is on screen at all times. Glen: "Why can't you re-use the known working solution from Sangala
+     Studio instead of recreating a different non-working approach?" */
+  html{scrollbar-gutter:stable}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#26303a;background:#37587a}
   .denim{background-color:#3f6b8e;
     background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.05) 0 2px,transparent 2px 4px),
                      repeating-linear-gradient(-45deg,rgba(0,0,0,.06) 0 2px,transparent 2px 4px);}
@@ -51,7 +56,10 @@
   .ltbtn:disabled:hover{background:linear-gradient(#fffdf7,#e8dcc2)}
 
   /* --- three-region stage: left toolbar (auto) · workspace (1fr) · control panel (300px) --- */
-  .stage{flex:1;min-height:0;display:grid;grid-template-columns:auto minmax(340px,1fr) 300px;grid-template-rows:minmax(0,1fr);gap:.7rem;padding:.7rem;overflow:hidden}
+  /* Studio's .stage, verbatim but for the panel's width: a plain three-column grid, the workspace a
+     bare 1fr with no floor, so the board keeps shrinking with the window instead of forcing the page
+     wider than it. */
+  .stage{display:grid;grid-template-columns:auto 1fr 300px;gap:.7rem;padding:.7rem}
   .panel{border-radius:12px;padding:.7rem;border:2px solid #d8c4a0;background:#efe0c4;box-shadow:0 3px 8px rgba(0,0,0,.25)}
   .panel h2{margin:.1rem 0 .5rem;font-size:1.05rem;color:#7a3b12}
   .panel h2.sub{margin-top:.6rem;font-size:.95rem}
@@ -61,11 +69,17 @@
   .two{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
 
   /* --- workspace / mat --- */
+  /* Studio's .board, verbatim: no overflow, no min-height, no display. Nothing here can crop the canvas. */
   .board{position:relative;border-radius:12px;padding:14px;border:6px solid #8a6a44;
-    box-shadow:inset 0 0 24px rgba(60,40,20,.4);min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
-  #build{overflow-y:auto;min-height:0}   /* the panel scrolls on its own if tall; the workspace never does */
+    box-shadow:inset 0 0 24px rgba(60,40,20,.4)}
+  #build{display:flex;flex-direction:column}   /* column, so the zoom control can pin to the bottom - Studio's #fab */
   body.dropping .board{border-color:#2d7bb8;box-shadow:0 0 0 4px rgba(45,123,184,.55),inset 0 0 24px rgba(60,40,20,.4)}
-  #cv{border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.35);background:#fff}   /* size is set in JS at device resolution, for crisp pixels */
+  /* Studio's canvas rule, verbatim. The HEIGHT COMES FROM THE VIEWPORT, not from the parent chain -
+     which is the whole reason Studio's workspace is always fully on screen and never depends on how a
+     row or a flex box happened to resolve. The canvas is the whole workspace; the plate is drawn on it. */
+  canvas{display:block;width:100%;height:calc(100vh - 178px);border-radius:6px;touch-action:none;background:transparent}
+  #pv{position:absolute;border-radius:8px;cursor:grab;touch-action:none}   /* Studio's: the 3D view overlays the design canvas rather than stacking below it */
+  #pv:active{cursor:grabbing}
   #empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#6b5a44;text-align:center;font-size:1rem;line-height:1.6;user-select:none;pointer-events:none;opacity:.95}
   #empty b{display:block;font-size:1.15rem;margin-bottom:.3rem;color:#4a3620}
 
@@ -136,7 +150,13 @@
 .menu button.on{background:#d8c4a0;font-weight:600}
 
 /* ---- Block Designer only ---- */
-#cv{border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.35);background:#fff;max-height:100%;max-width:100%}
+/* The zoom cluster, copied from Studio's #zoomctl: minus, the percentage, plus, Fit - pinned to the
+   bottom of the control panel and centred, exactly where a student meets it in the other program. */
+#zoomctl{margin-top:auto;align-self:center;display:flex;gap:4px;align-items:center;background:rgba(255,255,255,.92);border:1px solid #c9b48c;border-radius:9px;padding:3px 5px;box-shadow:0 1px 4px rgba(0,0,0,.2);font-size:.82rem;color:#5a4326;user-select:none}
+#zoomctl button{width:26px;height:24px;border:1px solid #c9b48c;border-radius:6px;background:linear-gradient(#fffdf7,#efe6d3);cursor:pointer;font-size:1rem;line-height:1;color:#7a3b12}
+#zoomctl button:hover{background:#fff}
+#zoomctl #zoomFit{width:auto;padding:0 7px;font-size:.78rem}
+#zoomctl #zoomPct{min-width:3.05em;text-align:center;font-variant-numeric:tabular-nums}
 .swrow{display:flex;flex-wrap:wrap;gap:5px;margin:.3rem 0 .2rem}
 .sw{width:26px;height:26px;border-radius:5px;border:2px solid #efe0c4;outline:1px solid #b09a72;cursor:pointer}
 .sw.on{outline:2px solid #7a3b12;transform:scale(1.09)}
@@ -228,6 +248,13 @@
       <div class="hint" style="margin-top:0">A stud is 8&nbsp;mm across and a plate is 3.2&nbsp;mm tall &mdash; 3 plates = 1 brick.</div>
       <table class="bom" id="bom"><tbody></tbody></table>
       <div class="hint" id="total"></div>
+    </div>
+    <!-- Studio's zoom cluster, in Studio's place: the bottom of the control panel. -->
+    <div id="zoomctl">
+      <button id="zoomOut" title="Zoom out">&minus;</button>
+      <span id="zoomPct">100%</span>
+      <button id="zoomIn" title="Zoom in">+</button>
+      <button id="zoomFit" title="Fit the whole plate">Fit</button>
     </div>
   </div>
 </div>
@@ -325,8 +352,15 @@ const CRANE = [{"name":"Body","fill":"#6c6e68","depth":4,"base":1,"poly":[[112,1
    2.5 times the head - so the HEIGHT is what the scale is anchored to, and some regions will not
    match their parts. The control in Settings is there because that is a judgement, not a
    constant. */
-let guideRaw = CRANE.slice(), frameScale = 0.30;
-let guide = CRANE.slice(), bricks = [];
+/* THE APPLICATION OPENS TO A BLANK WORKSPACE, as Studio does. Glen: "why is the project hardwired
+   into block designer when i open it? what if i want to work a different project. the app should
+   open to a blank workspace just like studio." It used to boot with `CRANE.slice()` — the crane was
+   not a project you had opened, it was compiled into the application, and there was no way to put it
+   down and start something else. Studio boots with an empty page and a design arrives only through
+   Open; so does this. The crane that used to be built in is now a project like any other:
+   Projects\Crane (Frame).block, alongside Crane 8.model and Crane (Relief 8).model. */
+let guideRaw = [], frameScale = 0.30;
+let guide = [], bricks = [];
 function applyFrameScale(){
   const k=frameScale;
   guide = guideRaw.map(g=>({...g,
@@ -355,36 +389,123 @@ let view3D = false;      /* the 3D View is a way of LOOKING, not a mode you buil
 
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
-let PX = 3, modelW = 144, modelH = 224, hover = null;
+let PX = 3, hover = null;   /* modelW/modelH are constants beside the baseplate below - Studio's PAGE_W/PAGE_H */
+/* MAGNIFY - Studio's, copied whole (SangalaStudio.html: "magnify: wheel zoom (toward cursor),
+   buttons, pan (middle-mouse / Space+drag)"). THE WORKSPACE DOES NOT CHANGE SIZE WHEN YOU ZOOM.
+   Glen: "In studio, the workspace stays constant, but the user zooms in and out... When a feature
+   works a certain way in Sangala Studio, we should not break the design and user expectations by
+   doing it a different way." So the canvas fills the board, the plate is drawn on it at
+   PX = baseK * zoom, and pan is a translate in canvas pixels - the same wheel step, the same
+   100%-2000% range, the same "- 100% + Fit" cluster in the same place. */
+let view={zoom:1,panX:0,panY:0};
+let baseK=3, MX=0, MY=0, DPR=1;   /* px per mm at Fit, and the mm that centre the plate in the canvas */
+/* Studio's two margins, its numbers and its reasoning, not scaled-down versions of them. */
+const VIEW_MARGIN=20;   /* mm of cork shown around the plate at the DEFAULT view (zoom 1 / Fit). Small, so the
+                           plate opens large and usable - no need to zoom in first. */
+const WS_MARGIN=150;    /* mm of corkboard you can PARK on and pan to reach. Large, because the whole board is
+                           workspace, as in Silhouette Studio. */
 /* THE SURFACE IS A BASEPLATE, and Studio already says so: its page menu offers "LEGO baseplate
    32 x 32 studs" beside Letter and the 12 in scrapbook sheet. So the design sits on a page here
    exactly as it sits on one in Studio - the same white sheet on the same cork - and the page is
-   counted in studs, because "10.1 x 10.1 in" tells a builder nothing. The plate grows in whole
-   studs if a design will not fit on 32. padX/padY centre the design on it. */
-const BASEPLATE = 32;
-let padX = 0, padY = 0;
+   counted in studs, because "10.1 x 10.1 in" tells a builder nothing.
+   IT IS THE CRANE'S OWN PLATE, 8 x 16, not Studio's 32 x 32 square. Glen, looking at the figure
+   on 32: "there is no way to zoom in so that i can see the figure. at that scale, the details of
+   the figure are not visible." On a square 32 the frame filled a quarter of the sheet each way
+   and every detail went with it. 8 x 16 is Glen's measurement of the plate the crane stands on.
+   THE PLATE IS A CONSTANT, EXACTLY AS STUDIO'S PAGE IS. Studio declares PAGE_W/PAGE_H once and
+   assigns them in three places, all inside setPageSize() — the page menu, a file type that declares
+   its own surface, and a saved project restoring the author's choice. NOTHING in Studio measures the
+   design: a design too big for the page draws a warning, "Design runs off the page - lower Scale or
+   move it", and the page is left alone. Block Designer used to grow the plate to the design, re-base
+   the design to the origin and pad it into the middle — five steps with no counterpart in Studio,
+   and the source of every "the workspace is chopped" report this morning. All five are gone, and so
+   are padX/padY: a design sits at the coordinates it was saved with, on a plate of the stated size. */
+/* STUDIO'S CONSTANT, copied: SangalaStudio.html:507 —
+     const BASEPLATE_STUDS=32, STUD_MM=8, BASEPLATE_MM=BASEPLATE_STUDS*STUD_MM;
+   sized from the stud pitch rather than a literal 256 so the two cannot drift, and chosen from
+   Studio's own page menu as "LEGO baseplate 32 x 32 studs". That is the page brick work is done on.
+   I had set this to 8 x 16, which is Glen's measurement of the plate the finished CRANE stands on —
+   a fact about the model, not about the workspace — and it made the page a quarter of the size
+   Studio uses. The crane's 8 x 16 belongs to the crane, not to the surface it is designed on. */
+const BASEPLATE_STUDS = 32, BASEPLATE_MM = BASEPLATE_STUDS*STUD;
+const BASEPLATE_W = BASEPLATE_STUDS, BASEPLATE_H = BASEPLATE_STUDS;
+const modelW = BASEPLATE_MM, modelH = BASEPLATE_MM;
 const say = m => { $("status").textContent = m; };
 
 /* ---------- geometry ---------- */
 function bounds(){
   let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;
   guide.forEach(g=>g.poly.forEach(p=>{if(p[0]<a)a=p[0];if(p[0]>c)c=p[0];if(p[1]<b)b=p[1];if(p[1]>d)d=p[1];}));
-  return isFinite(a)?{a,b,c,d}:{a:0,b:0,c:144,d:224};
+  /* NO DESIGN: the plate is the BASEPLATE, not an invented 144 x 224 mm. Opening a blank project used
+     to give an 18 x 28 plate, which is neither the baseplate nor anything a builder asked for. */
+  return isFinite(a)?{a,b,c,d}:{a:0,b:0,c:BASEPLATE_W*STUD,d:BASEPLATE_H*STUD};
 }
+/* Re-index the frame and redraw. What it no longer does is size anything: the plate is a constant,
+   so there is nothing to fit. Studio's equivalent of the tail is simply draw(), which sizes the
+   canvas and computes worldParams inline; buildFrameTop stays because the frame must be indexed
+   before a brick can land on it. */
 function fit(){
-  const B=bounds(), ox=Math.floor(B.a/STUD)*STUD, oy=Math.floor(B.b/PLATE)*PLATE;
-  if(ox||oy) guide=guide.map(g=>({...g,poly:g.poly.map(p=>[p[0]-ox,p[1]-oy])}));
-  const C=bounds();
-  const fw=Math.ceil(C.c/STUD)*STUD, fh=Math.ceil(C.d/STUD)*STUD;
-  const side=Math.max(BASEPLATE*STUD, fw, fh);          /* square, like the plate itself */
-  padX=Math.round((side-fw)/2/STUD)*STUD;               /* whole studs, both ways, so a column */
-  padY=Math.round((side-fh)/2/vUnit())*vUnit();         /* and a row both land on the lattice */
-  modelW=side; modelH=side;
-  const bd=cv.parentElement.getBoundingClientRect();
-  PX=Math.max(1.2, Math.min(9,(bd.height-36)/modelH,(bd.width-36)/modelW));
-  cv.width=Math.round(modelW*PX); cv.height=Math.round(modelH*PX);
   buildFrameTop();
+  sizeCanvas(); worldParams(); clampPan();
   draw();
+  offPageWarning();
+}
+/* Studio's answer to a design bigger than its page, copied: say so, and leave the page alone.
+   SangalaStudio.html:1082 — `if(bb[2]>dw||bb[3]>dh)say("Design runs off the page - lower Scale or
+   move it.")`. The wording here names the plate and the control that fixes it. */
+function offPageWarning(){
+  const B=bounds();
+  if(!guide.length) return;
+  if(B.c>modelW+0.01 || B.d>modelH+0.01 || B.a<-0.01 || B.b<-0.01)
+    say("The frame runs off the baseplate — lower Frame scale in Settings, or use a larger baseplate.");
+}
+/* The canvas is the WHOLE board, at device resolution for crisp pixels - it is not the plate. The
+   plate is painted on it, so there is room around it to zoom into and pan across. */
+function sizeCanvas(){
+  /* Studio's own three lines from its draw(): measure the canvas, back it at device resolution. Safe
+     here for the same reason it is safe there - the canvas takes its height from the viewport, so its
+     size is never a consequence of what is drawn on it. */
+  const rct=cv.getBoundingClientRect(); DPR=window.devicePixelRatio||1;
+  if(rct.width>2){ const bw=Math.round(rct.width*DPR), bh=Math.round(rct.height*DPR);
+    if(cv.width!==bw) cv.width=bw; if(cv.height!==bh) cv.height=bh; }
+}
+/* Studio's corkPattern(), verbatim - the same cork the page's CSS paints, as a canvas tile, because
+   the whole canvas IS the workspace and must look like the board. Painted rather than left to show
+   through: a canvas that does not exactly cover its parent's content box would otherwise reveal the
+   difference as a bare edge. */
+let corkPat=null, corkPatDpr=0;
+function corkPattern(){
+  /* THE TILE IS BUILT AT DEVICE RESOLUTION. The canvas is backed at devicePixelRatio with no
+     ctx.scale, so a 77 px tile drawn 1:1 covers only 77 DEVICE pixels — 44 CSS pixels on a 1.75
+     display. The board's own CSS cork is at 77 CSS pixels, so the painted cork came out finer and
+     lighter than the cork around it and the seam between them read as the workspace stopping early.
+     Drawn at 77*DPR with the context scaled, the two are the same texture at any display scale. */
+  if(corkPat && corkPatDpr===DPR) return corkPat;
+  const t=document.createElement("canvas");
+  t.width=Math.round(77*DPR); t.height=Math.round(77*DPR);   /* 7 and 11 both divide 77, so the two dot grids tile seamlessly */
+  const g=t.getContext("2d"); g.scale(DPR,DPR);
+  g.fillStyle="#c7a06a"; g.fillRect(0,0,77,77);
+  g.fillStyle="rgba(120,80,40,.30)";
+  for(let y=0;y<77;y+=7) for(let x=0;x<77;x+=7){ g.beginPath(); g.arc(x,y,1,0,6.2832); g.fill(); }
+  g.fillStyle="rgba(90,60,30,.22)";
+  for(let y=5;y<88;y+=11) for(let x=3;x<88;x+=11){ g.beginPath(); g.arc(x%77,y%77,1,0,6.2832); g.fill(); }
+  corkPat=ctx.createPattern(t,"repeat"); return corkPat;
+}
+/* STUDIO'S MEASURE, and no other. SangalaStudio.html:436-441 fits baseK to THE PAGE plus
+   VIEW_MARGIN — whatever the page is that day, Letter or the 12 inch sheet or its own 32 x 32
+   baseplate — and centres it with MX/MY. The baseplate here IS the page, so dw/dh are modelW/modelH.
+   I had invented a separate `WORKSPACE = 32 studs` constant to scale by, which is why an 8 x 16
+   baseplate came out a quarter of the width of the view: the plate was being drawn at a 32-stud
+   page's scale. Glen: "you should be able to use the measure that studio uses. Quit inventing new
+   things when you already have the reference that you need in studio."
+   The WORKSPACE that never shrinks is the board itself — the canvas fills it at every window size.
+   MX/MY are taken at baseK rather than at PX so they stay constant while zooming, which is what
+   makes the pointer-anchored arithmetic in setZoom exact. */
+function worldParams(){
+  const dw=modelW, dh=modelH;
+  baseK=Math.min(cv.width/(dw+2*VIEW_MARGIN), cv.height/(dh+2*VIEW_MARGIN));
+  PX=baseK*view.zoom;
+  MX=(cv.width/baseK-dw)/2; MY=(cv.height/baseK-dh)/2;
 }
 const mx=v=>v*PX;
 /* w and d are the FOOTPRINT in studs (columns across, rows deep); h is the part's THICKNESS in
@@ -394,28 +515,24 @@ const cur=()=>({shape:KINDS[part.kind].shape, h:KINDS[part.kind].h, w:part.w, d:
 
 /* ---------- drawing ---------- */
 function drawGrid(){
-  /* The empty surface is the STUD LATTICE, one faint ring per stud on the 8 mm pitch - the
-     lattice Studio's Snap to Studs works to, and nothing more. It was a drawn brick wall in
-     running bond, which was invented here: it depicted bricks that had not been placed, it
-     belonged to no other application in the family, and a student meets a different world in
-     each program if the background itself changes meaning. The surface says where a stud can
-     land; the bricks say what is built. */
+  /* THE GRID IS THE STUD LATTICE - one faint ring per stud on the 8 mm pitch, square both ways,
+     because that is what a baseplate is - and it is all the grid there is. Glen, looking at the
+     ruled courses this used to draw in the standing view: "graph paper is the wrong metaphor for
+     the background. We're not designing with graph paper, we're designing with LEGO bricks."
+     Studio settles the rest of it: Studio paints NO grid on its empty page at all, not even when
+     the page is its own "LEGO baseplate 32 x 32 studs" with Snap to Studs on - its 8 mm lattice is
+     snapping behaviour, and its brown stud rings are drawn on parts that have been PLACED. So the
+     empty plate here is Studio's empty page (white, one hairline border, the size in gray at the
+     corner) and the lattice is what the Grid checkbox adds to it, in BOTH ways of building - kept
+     because Glen asked for it kept. The ruled lines are gone; so is the older idea of a drawn brick
+     wall in running bond, which depicted bricks nobody had placed. The surface says where a stud
+     can land; the bricks say what is built. */
   const r = Math.max(0.7, mx(1.5));
   ctx.save();
   ctx.strokeStyle="#dde5ea"; ctx.lineWidth=1;
-  if(mode==="standing"){
-    /* Seen from the side, the lattice is the COURSES: a faint line every brick (3 plates), and a
-       stud pitch across. A ring per stud would be a lie here - the studs are on top, not facing. */
-    for(let y=0; y<=modelH+0.01; y+=PLATE*3){
-      ctx.beginPath(); ctx.moveTo(0,mx(y)); ctx.lineTo(mx(modelW),mx(y)); ctx.stroke(); }
-    ctx.strokeStyle="#e8eef2";
-    for(let x=0; x<=modelW+0.01; x+=STUD){
-      ctx.beginPath(); ctx.moveTo(mx(x),0); ctx.lineTo(mx(x),mx(modelH)); ctx.stroke(); }
-  } else {
-    for(let y=STUD/2; y<modelH; y+=STUD){      /* square, both ways: it is a baseplate */
-      for(let x=STUD/2; x<modelW; x+=STUD){
-        ctx.beginPath(); ctx.arc(mx(x), mx(y), r, 0, 6.2832); ctx.stroke();
-      }
+  for(let y=STUD/2; y<modelH; y+=STUD){
+    for(let x=STUD/2; x<modelW; x+=STUD){
+      ctx.beginPath(); ctx.arc(mx(x), mx(y), r, 0, 6.2832); ctx.stroke();
     }
   }
   ctx.restore();
@@ -596,14 +713,21 @@ function drawBrick(b,ghost){
 }
 
 function draw(){
-  ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
+  sizeCanvas(); worldParams();
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle=corkPattern(); ctx.fillRect(0,0,cv.width,cv.height);   /* corkboard everywhere, as Studio paints it */
+  ctx.save(); ctx.translate(view.panX+MX*PX, view.panY+MY*PX);   /* pan the magnified view; the plate sits centred in the cork */
+  /* THE PLATE, painted the way Studio paints its page: a white fill and a 1 px #cbb78f edge, nothing
+     else. The drop shadow I had added here was mine, and Studio does not draw one. */
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,mx(modelW),mx(modelH));
+  ctx.strokeStyle="#cbb78f"; ctx.lineWidth=1; ctx.strokeRect(0,0,mx(modelW),mx(modelH));
   if(showGrid) drawGrid();
   /* The page's size, upright at its top-left in Studio's own gray 13 px - the mark a student
      reads in the other program to know what surface they are working on. */
   ctx.fillStyle="#9aa0a6"; ctx.font="13px sans-serif";
-  const n=Math.round(modelW/STUD);
-  ctx.fillText(n+" x "+n+" studs", 8, 17);
-  ctx.save(); ctx.translate(mx(padX), mx(padY));
+  ctx.fillText(Math.round(modelW/STUD)+" x "+Math.round(modelH/STUD)+" studs", 8, 17);
+  /* No second translate: the frame and the bricks are drawn at their own coordinates on the plate,
+     exactly as Studio draws a design at the coordinates it was saved with. */
   if(showGuide) drawGuide();
   /* back to front, so a brick standing proud covers the one it rests on */
   const order=bricks.slice().sort((a,b)=>(a.base||0)-(b.base||0));
@@ -764,8 +888,8 @@ function bom(){
    when Studio's renderer changes, port it again deliberately.
    Only the host differs: bricksToTris() below feeds it boxes instead of Studio's meshes.
    ====================================================================================== */
-function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRect();
-  pv.width=Math.max(120,Math.round(bd.width-28)); pv.height=Math.max(120,Math.round(bd.height-28)); }
+function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRect();   /* 40 = the board's border + padding, both sides */
+  pv.width=Math.max(120,Math.round(bd.width-40)); pv.height=Math.max(120,Math.round(bd.height-40)); }
 
 let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvPlate=false, pvZbuf=null, pvGuide=null;
 let pvGhost=null;   // loose holes, drawn as the shape they would remove
@@ -1083,8 +1207,23 @@ function boxTris(x0,x1,y0,y1,z0,z1,out){
    studs are still to be covered. A pierced region keeps its gap - the crane's legs are one outline
    with the space between them held as a hole. Each cell carries the region's own DEPTH and BASE
    in plates, straight out of the Studio model: Frame 1, Grass 2, the body parts 4, the Wing 7. */
+/* THE BACKDROP IS SKIPPED; EVERYTHING ELSE IS THE FIGURE. Drawing the backdrop puts a wall across
+   the whole view with the figure hidden behind it, so it has always been dropped — but the test used
+   to be `base > 0`, which read the built-in CRANE data's own convention (its two blue "Frame" regions
+   sit at base 0, every figure region at base 1). A Studio .model does not follow that convention:
+   every region there is saved at data-z0 = 0, so the test dropped the ENTIRE imported frame and the
+   3D View showed bricks floating with nothing behind them. The test now names what it is actually
+   looking for — a region called "Frame", which is how the built-in marks its negative space, or one
+   spanning essentially the whole design, which is what a backdrop is. */
+function isBackdrop(g, B){
+  if((g.name||"").toLowerCase()==="frame") return true;
+  let ax=1e9, ay=1e9, bx=-1e9, by=-1e9;
+  g.poly.forEach(q=>{ ax=Math.min(ax,q[0]); ay=Math.min(ay,q[1]); bx=Math.max(bx,q[0]); by=Math.max(by,q[1]); });
+  const w=B.c-B.a, h=B.d-B.b;
+  return w>0 && h>0 && (bx-ax)>=w*0.9 && (by-ay)>=h*0.9;
+}
 function frameToGuideTris(){
-  const H=modelH, out=[];
+  const H=modelH, out=[], B=bounds();
   const inPoly=(px,py,poly)=>{ let inside=false;
     for(let i=0,j=poly.length-1;i<poly.length;j=i++){
       const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
@@ -1092,10 +1231,7 @@ function frameToGuideTris(){
     return inside; };
   guide.forEach(g=>{
     if(!g.poly || !g.poly.length) return;
-    /* A region sitting at base 0 IS the plate - the crane's blue backdrop - and drawing it puts a
-       wall across the whole view with the figure hidden behind it. The guide is the FIGURE to be
-       built; the plate it is built on is not something a student has to fill. */
-    if(!(g.base>0)) return;
+    if(isBackdrop(g,B)) return;
     const depth=1, base=0;                 /* thin, like a baseplate - see buildFrameTop */
     let ax=1e9, ay=1e9, bx=-1e9, by=-1e9;
     g.poly.forEach(q=>{ ax=Math.min(ax,q[0]); ay=Math.min(ay,q[1]); bx=Math.max(bx,q[0]); by=Math.max(by,q[1]); });
@@ -1287,12 +1423,58 @@ $("frScale").onchange=e=>{
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
 
+/* ---------- magnify: wheel zoom (toward cursor), buttons, pan (middle-mouse / Space+drag) ----------
+   Every line below is Studio's, with only the names of the plate's own measurements changed. Same
+   1.15 per wheel notch, same 1.3 per button, same 100%-2000% clamp, same snap back to Fit. */
+function canvasPt(e){ const r=cv.getBoundingClientRect(); return [(e.clientX-r.left)*(cv.width/r.width),(e.clientY-r.top)*(cv.height/r.height)]; }
+function clampPan(){   /* keep the view within the plate + WS_MARGIN of cork; if that world is smaller
+                          than the workspace on an axis, centre on that axis instead */
+  worldParams();
+  const bound=(vp,startPx,sizePx)=>{ if(sizePx<=vp){ const c=(vp-sizePx)/2-startPx; return [c,c]; }
+    return [vp-(startPx+sizePx), -startPx]; };
+  /* Studio's own bounds: the page plus WS_MARGIN of cork you can park on and pan to reach */
+  const bx=bound(cv.width,  (MX-WS_MARGIN)*PX, (modelW+2*WS_MARGIN)*PX);
+  const by=bound(cv.height, (MY-WS_MARGIN)*PX, (modelH+2*WS_MARGIN)*PX);
+  view.panX=Math.max(bx[0], Math.min(bx[1], view.panX));
+  view.panY=Math.max(by[0], Math.min(by[1], view.panY)); }
+function updateZoomUI(){ $("zoomPct").textContent=Math.round(view.zoom*100)+"%"; }
+function setZoom(nz, cx, cy){   /* cx,cy = canvas px to keep fixed under the cursor (default: centre) */
+  nz=Math.min(20, Math.max(1, nz)); if(cx==null){ cx=cv.width/2; cy=cv.height/2; }
+  view.panX = cx-(cx-view.panX)*(nz/view.zoom); view.panY = cy-(cy-view.panY)*(nz/view.zoom); view.zoom = nz;
+  if(view.zoom<=1.0001){ view.zoom=1; view.panX=0; view.panY=0; }
+  clampPan(); draw(); updateZoomUI(); }
+cv.addEventListener("wheel",(e)=>{ if(view3D) return; e.preventDefault(); const p=canvasPt(e);
+  setZoom(view.zoom*(e.deltaY<0?1.15:1/1.15), p[0], p[1]); }, {passive:false});
+$("zoomIn").onclick =()=>setZoom(view.zoom*1.3);
+$("zoomOut").onclick=()=>setZoom(view.zoom/1.3);
+$("zoomFit").onclick=()=>{ view.zoom=1; view.panX=0; view.panY=0; draw(); updateZoomUI(); };
+let spaceHeld=false, panDrag=null, suppressClick=false;
+window.addEventListener("keydown",(e)=>{ if(e.code!=="Space") return; const t=e.target, tag=t&&t.tagName&&t.tagName.toLowerCase();
+  if(tag==="input"||tag==="textarea"||tag==="select"||(t&&t.isContentEditable)) return;
+  spaceHeld=true; if(view.zoom>1&&!panDrag) cv.style.cursor="grab"; e.preventDefault(); });
+window.addEventListener("keyup",(e)=>{ if(e.code==="Space"){ spaceHeld=false; if(!panDrag) cv.style.cursor="default"; } });
+cv.addEventListener("mousedown",(e)=>{ if(view3D) return;
+  if(e.button===1 || (spaceHeld && e.button===0)){   /* pan: middle-mouse, or hold Space + left-drag */
+    const p=canvasPt(e); panDrag={sx:p[0],sy:p[1],px:view.panX,py:view.panY,btn:e.button};
+    cv.style.cursor="grabbing"; e.preventDefault(); } });
+window.addEventListener("mousemove",(e)=>{ if(!panDrag) return;
+  const p=canvasPt(e); view.panX=panDrag.px+(p[0]-panDrag.sx); view.panY=panDrag.py+(p[1]-panDrag.sy);
+  clampPan(); draw(); });
+window.addEventListener("mouseup",()=>{ if(!panDrag) return;
+  /* Swallow the click a pan ENDS on - but only when the pan used the LEFT button, because that is the
+     only one that goes on to fire a click. A middle-button pan fires auxclick and no click at all, so
+     a flag set there would have sat armed and eaten the next brick the builder tried to place. And the
+     guard cannot depend on whether the pointer MOVED: holding Space and clicking is a pan gesture that
+     placed a brick, cursor showing a grab hand. Studio suppresses the click after any pan; so does this. */
+  suppressClick = panDrag.btn===0;
+  panDrag=null; cv.style.cursor=spaceHeld?"grab":"default"; });
+
 function cell(e){
-  /* The design is centred on the plate, so the pointer is measured from the DESIGN's origin,
-     not the canvas corner. The scale factor guards the case where CSS displays the canvas at
-     a size other than its backing width - a click would otherwise land a stud or two out. */
-  const r=cv.getBoundingClientRect(), s=r.width?cv.width/r.width:1;
-  const x=(e.clientX-r.left)*s/PX - padX, y=(e.clientY-r.top)*s/PX - padY;
+  /* The plate is centred in the workspace, so the pointer is unwound through the magnify transform
+     alone - pan, then the plate's own offset. There is no design padding to undo any more: a design
+     sits at its own coordinates on the plate, as it does in Studio. */
+  const p=canvasPt(e);
+  const x=(p[0]-view.panX)/PX - MX, y=(p[1]-view.panY)/PX - MY;
   return {col:Math.floor(x/STUD), row:Math.floor(y/vUnit())};
 }
 
@@ -1402,6 +1584,7 @@ function hit(c){                 /* the topmost brick under the pointer */
 }
 const plates = n => n+(n===1?" plate":" plates");
 cv.addEventListener("mousemove",e=>{
+  if(panDrag) return;                                      /* panning, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
   const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip}); draw();
@@ -1409,6 +1592,7 @@ cv.addEventListener("mousemove",e=>{
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
   if(view3D) return;                                       /* looking, not building */
+  if(suppressClick){ suppressClick=false; return; }        /* the click that ends a pan is not a placement */
   const c=cell(e);
   if(tool==="erase"){
     const i=hit(c); if(i<0) return;
@@ -1434,7 +1618,11 @@ function download(name,text,mime){
   a.download=name; a.click();
 }
 $("bSave").onclick=()=>download("crane.block",
-  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,mode:mode,frameScale:frameScale,guide:guide,
+  /* guideRaw, NOT guide: `guide` is the SCALED working copy, and the file also stores frameScale.
+     Saving the scaled copy and restoring the scale beside it means the next touch of the Frame scale
+     control multiplies an already-scaled frame a second time — a design saved at 30% and nudged to
+     40% renders at 12% while the status line reports 40%. */
+  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,mode:mode,frameScale:frameScale,guide:guideRaw,
     /* d is the footprint's DEPTH in studs and base is where the brick sits in plates. Both were
        missing: the format predates the relief rebuild, so a saved design reopened one stud deep
        with every brick on the plate. A file written before this has neither, and the loader
@@ -1454,9 +1642,19 @@ function loadModel(j){
   const objs=j&&j.state&&j.state.objs;
   if(!Array.isArray(objs)) return alert("That is not a Sangala Studio .model file.");
   const g=[];
+  /* CARRY THE WHOLE REGION, not just its outline. Studio stores a region's thickness in `data-z` and
+     its elevation in `data-z0`, both in mm, and a pierced region carries its rings in `holes`. The
+     import used to keep only the name, the fill and the outline, so an imported frame arrived with no
+     depth, no base and no piercing: the crane's legs came in as one solid trunk and the 3D View had
+     nothing to show. Depth and base are converted to PLATES, which is what a guide region is counted
+     in here (the built-in CRANE data carries depth 4, base 1 - see the constant above). */
   objs.forEach(o=>{ let a=o.attrs||{}; if(Array.isArray(a)) a=Object.fromEntries(a);
     if(Array.isArray(o.poly)&&o.poly.length>2)
-      g.push({name:a["data-name"]||"",fill:a["data-fill"]||"#909aa2",poly:o.poly.map(p=>[p[0],p[1]])}); });
+      g.push({name:a["data-name"]||"", fill:a["data-fill"]||"#909aa2",
+              depth:Math.max(1, Math.round((+a["data-z"]||PLATE)/PLATE)),
+              base:Math.round((+a["data-z0"]||0)/PLATE),
+              poly:o.poly.map(p=>[p[0],p[1]]),
+              holes:(o.holes||[]).map(h=>h.map(p=>[p[0],p[1]]))}); });
   if(!g.length) return alert("No outlines in that model.");
   guideRaw=g; applyFrameScale();
   say("Frame brought in: "+g.length+" outlines.");
@@ -1467,7 +1665,12 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     if(d.sangala!=="block") throw new Error("not a Block Designer or Studio file");
     mode=d.mode==="relief"?"relief":"standing"; $("selMode").value=mode;
     frameScale=+d.frameScale||1; $("frScale").value=Math.round(frameScale*100);
-    guideRaw=d.guide||[]; guide=guideRaw.slice(); buildFrameTop();          /* the frame must be indexed before anything lands on it */
+    /* The file now stores the UNSCALED frame, so scale it on the way in exactly as an import does.
+       applyFrameScale clears the bricks, so it cannot run here - the bricks are loaded below. */
+    guideRaw=d.guide||[];
+    guide=guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0]*frameScale, q[1]*frameScale]),
+                                  holes:(g.holes||[]).map(h=>h.map(q=>[q[0]*frameScale, q[1]*frameScale]))}));
+    buildFrameTop();          /* the frame must be indexed before anything lands on it */
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
       base:b.base}));
@@ -1485,8 +1688,11 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
 $("bAbout").onclick=()=>$("about").classList.add("show");
 $("aClose").onclick=()=>$("about").classList.remove("show");
 
-window.addEventListener("resize",fit);
-swatches(); syncSizeFields(); applyFrameScale();
+/* One redraw per resize, as Studio does it - the listener at the end of the renderer block above
+   already calls draw() and re-glues the 3D overlay. fit() was bound here as well, so every resize
+   event re-based the guide geometry and rebuilt the frame before drawing twice. Nothing about the
+   plate depends on the window, so there is nothing for fit() to recompute. */
+swatches(); syncSizeFields(); updateZoomUI(); applyFrameScale();
 </script>
 </body>
 </html>

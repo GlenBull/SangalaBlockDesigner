@@ -4,3 +4,9 @@
 # source. Re-fetch with:
 #   curl -sL -o LDraw/complete.zip https://library.ldraw.org/library/updates/complete.zip
 LDraw/
+
+# Python bytecode from the tools scripts
+tools/__pycache__/
+
+# A standalone diagnostic copy of the application - superseded by Projects/Blank Workspace.block
+Projects/Blank Workspace (Ver 1.0).html
