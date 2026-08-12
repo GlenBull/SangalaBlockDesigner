@@ -1208,8 +1208,13 @@ function download(name,text,mime){
 }
 $("bSave").onclick=()=>download("crane.block",
   JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,guide:guide,
-    bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,h:b.p.h,shape:b.p.shape,
-                           color:COLORS[b.colorIdx].code,col:b.col,row:b.row,flip:b.flip}))},null,1));
+    /* d is the footprint's DEPTH in studs and base is where the brick sits in plates. Both were
+       missing: the format predates the relief rebuild, so a saved design reopened one stud deep
+       with every brick on the plate. A file written before this has neither, and the loader
+       supplies them. */
+    bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,d:b.p.d||1,h:b.p.h,shape:b.p.shape,
+                           color:COLORS[b.colorIdx].code,col:b.col,row:b.row,base:b.base||0,
+                           flip:b.flip}))},null,1));
 $("bPrint").onclick=()=>{
   const rows=tally();
   download("crane-parts.txt","Part\tDesign\tColor\tLDraw\tQty\n"+
@@ -1233,9 +1238,18 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer or Studio file");
-    guide=d.guide||[];
-    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,h:b.h,shape:b.shape},
-      colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip}));
+    guide=d.guide||[]; buildFrameTop();          /* the frame must be indexed before anything lands on it */
+    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape},
+      colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
+      base:b.base}));
+    /* A file written before this carries no base. Rather than drop every brick on the plate, each
+       one is landed in the order it was placed, on the frame or on what is already there. */
+    bricks.forEach((b,i)=>{ if(typeof b.base!=="number"){
+      const below=bricks.slice(0,i);
+      let base=0; const f=foot(b);
+      for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++) base=Math.max(base, frameTop.get(cellKey(c,r))||0);
+      below.forEach(o=>{ if(overlaps(b,o)) base=Math.max(base, o.base+thick(o.p)); });
+      b.base=base; } });
     fit();}catch(x){alert("Could not read that file: "+x.message);} };
   r.readAsText(f); e.target.value="";};
 
