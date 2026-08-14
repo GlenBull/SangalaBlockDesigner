@@ -7,7 +7,7 @@ REM  start the program without hunting for this folder.
 REM
 REM  Double-click this file once. It points the shortcut at
 REM  SangalaBlockDesigner.exe sitting next to it (the crane icon is built
-REM  in), so it works no matter where you keep the Sangala Block Designer
+REM  in), so it works no matter where you keep the Sangala Blocks
 REM  folder.
 REM
 REM  No admin rights are needed: it only writes to your own Desktop.
@@ -24,7 +24,7 @@ REM  the .ico anyway, and the exe still carries it for anyone who runs the exe d
 set "SANGALA_ICON=%~dp0Crane.ico"
 
 echo.
-echo   Creating a Desktop shortcut for Sangala Block Designer...
+echo   Creating a Desktop shortcut for Sangala Blocks...
 
 if not exist "%SANGALA_TARGET%" (
   echo.
@@ -40,12 +40,11 @@ if not exist "%SANGALA_TARGET%" (
 REM  The paths travel as environment variables, so folder names with
 REM  spaces or apostrophes cannot break the quoting. SpecialFolders
 REM  finds the real Desktop even when OneDrive has redirected it. The
-REM  crane icon is embedded in the exe, so the shortcut takes its icon
-REM  straight from the target.
+REM  picture comes from Crane.ico for the reason given above.
 REM  The icon is labeled "Sangala Blocks" so the name fits under it on the Desktop instead of
 REM  wrapping onto three lines; the full name is in the tooltip. An earlier shortcut made under
 REM  the long name is removed, so running this again leaves one icon rather than two.
-powershell -NoProfile -Command "try { $ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders('Desktop'); $old = Join-Path $desktop 'Sangala Block Designer.lnk'; if (Test-Path $old) { Remove-Item $old -Force }; $path = Join-Path $desktop 'Sangala Blocks.lnk'; $lnk = $ws.CreateShortcut($path); $lnk.TargetPath = $env:SANGALA_TARGET; $lnk.WorkingDirectory = $env:SANGALA_HOME.TrimEnd('\'); $lnk.IconLocation = $env:SANGALA_ICON + ',0'; $lnk.Description = 'Sangala Block Designer - Block Design Tool'; $lnk.Save(); Write-Host ''; Write-Host ('   Shortcut created: ' + $path); exit 0 } catch { Write-Host ''; Write-Host ('   Could not create the shortcut: ' + $_.Exception.Message); exit 1 }"
+powershell -NoProfile -Command "try { $ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders('Desktop'); $old = Join-Path $desktop 'Sangala Block Designer.lnk'; if (Test-Path $old) { Remove-Item $old -Force }; $path = Join-Path $desktop 'Sangala Blocks.lnk'; $lnk = $ws.CreateShortcut($path); $lnk.TargetPath = $env:SANGALA_TARGET; $lnk.WorkingDirectory = $env:SANGALA_HOME.TrimEnd('\'); $lnk.IconLocation = $env:SANGALA_ICON + ',0'; $lnk.Description = 'Sangala Blocks - Block Design Tool'; $lnk.Save(); Write-Host ''; Write-Host ('   Shortcut created: ' + $path); exit 0 } catch { Write-Host ''; Write-Host ('   Could not create the shortcut: ' + $_.Exception.Message); exit 1 }"
 
 if errorlevel 1 (
   echo.

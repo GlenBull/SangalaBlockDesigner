@@ -1,4 +1,4 @@
-// Sangala Block Designer launcher — Sangala Mosaic's launcher, ported whole, because the two
+// Sangala Blocks launcher — Sangala Mosaic's launcher, ported whole, because the two
 // applications are the same shape: a page with no bridge behind it. A real program (not a script),
 // so managed/school Windows treats it like Sangala Studio's SangalaStudio.exe (which runs fine)
 // rather than blocking it the way it blocks .cmd/.bat files. Double-clicking it opens the app page
@@ -26,15 +26,15 @@ namespace SangalaBlockDesignerApp
                     MessageBox.Show(
                         "SangalaBlockDesigner.html was not found next to this launcher.\r\n\r\n" +
                         "Keep SangalaBlockDesigner.exe and SangalaBlockDesigner.html together in the same folder.",
-                        "Sangala Block Designer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        "Sangala Blocks", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
                 Process.Start(new ProcessStartInfo(html) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Could not open Sangala Block Designer:\r\n" + ex.Message,
-                    "Sangala Block Designer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Could not open Sangala Blocks:\r\n" + ex.Message,
+                    "Sangala Blocks", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
