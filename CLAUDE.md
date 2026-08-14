@@ -51,6 +51,20 @@ convention. "Why do you persist in reinventing the wheel?" is the standing corre
 - Nothing is placed automatically. The student picks every part and places it — that is the point of
   the tool, not an implementation detail.
 
+## Where documents go (Glen, 2026-08-14)
+A document about this application is published to Dropbox at
+`AI Sandbox\Design through Making\Sangala Tools\Sangala Blocks Files\Documents\` — Jo cannot
+reach Glen's hard drive, so a file that lives only in this repository has not been delivered.
+(The folder was `Sangala Block Design Files` until 2026-08-14, when Glen renamed it to match the
+application's new name. **Check the folder still exists before writing into it** — `mkdir -p` silently
+recreated the abandoned one behind him while he was renaming it.)
+**Publishing is part of writing the document, not a later step, and it is not something to ask about.**
+Note the `Documents` SUBFOLDER: Glen made it and moved the first two files into it. (Studio's own
+folder still keeps its documents at the top level with an empty `Documents` beside them; do not
+"tidy" that — it is his to change.) A copy stays in this repository's `Documents\`, with superseded
+versions in `Documents\Archive\`, and the two names are kept identical: he renamed
+*Adding LEGO Parts to Sangala Blocks* to **Adding LEGO Blocks** and the repository copy follows.
+
 ## Process
 Glen's global rules in `C:\Users\glenb\.claude\CLAUDE.md` apply here in full: be concise, ask inline
 one question at a time, do exactly what was asked, one change at a time then let it be tested then
