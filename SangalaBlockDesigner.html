@@ -177,6 +177,7 @@
     <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, or a Block Designer design you saved (.block)"><span class="glyph">&#128194;</span><small>Open</small></button>
     <button class="tbtn" id="bSave" title="Save your design (.block)"><span class="glyph">&#128190;</span><small>Save</small></button>
     <button class="tbtn" id="bPrint" title="Print the parts list &mdash; every brick used, with its design number"><span class="glyph">&#128424;&#65039;</span><small>Print</small></button>
+    <button class="tbtn" id="bSnap" title="Snapshot: keep a picture of the build as it stands now, drawn the way LEGO documentation draws it"><span class="glyph">&#128247;</span><small>Snapshot</small></button>
     <button class="tbtn" id="bSettings" title="Setup: what the workspace shows &mdash; click to show or hide"><span class="glyph">&#9881;&#65039;</span><small>Settings</small></button>
   </div>
   <div class="spacer"></div>
@@ -216,9 +217,9 @@
       <h2 class="marker sub" style="margin-bottom:.2rem">Brick Size</h2>
       <div class="two">
         <label class="fld" style="margin-top:0">Columns
-          <input type="number" id="szCols" min="1" max="16" step="1" value="2"></label>
+          <input type="number" id="szCols" min="1" max="16" step="1" value="3"></label>
         <label class="fld" style="margin-top:0">Rows
-          <input type="number" id="szRows" min="1" max="16" step="1" value="1"></label>
+          <input type="number" id="szRows" min="1" max="16" step="1" value="2"></label>
       </div>
       <div class="hint" id="szNote" style="margin-top:.35rem"></div>
     </div>
@@ -251,11 +252,30 @@
       </div>
     </div>
 
+    <!-- PARTS FOLDS AWAY, AND STARTS FOLDED. Glen, 2026-07-28: the parts list is consulted rarely but
+         is tall, so left open it pushes the Snapshots strip - which is looked at constantly - below the
+         fold. The disclosure triangle is Studio's (plane list) and Mosaic's (Tile Colors): the mark is
+         &#9656; shut, &#9662; open. -->
     <div id="partspanel" style="margin-top:.8rem;border-top:1px solid #d8c4a0;padding-top:.6rem">
-      <h2 class="marker" style="margin-top:0">Parts</h2>
-      <div class="hint" style="margin-top:0">A stud is 8&nbsp;mm across and a plate is 3.2&nbsp;mm tall &mdash; 3 plates = 1 brick.</div>
-      <table class="bom" id="bom"><tbody></tbody></table>
-      <div class="hint" id="total"></div>
+      <h2 class="marker" id="partshead" title="Show the parts list"
+          style="margin-top:0;cursor:pointer;user-select:none">
+        <span id="partstog" style="color:#8a7350;font-size:.8rem;margin-right:.3rem">&#9656;</span>Parts<!--
+        the count rides in the heading so a folded list still answers "how big is this build" at a glance
+     --><span id="partscount" style="font-family:inherit;font-size:.82rem;color:#8a7350"></span></h2>
+      <div id="partsbody" style="display:none">
+        <div class="hint" style="margin-top:0">A stud is 8&nbsp;mm across and a plate is 3.2&nbsp;mm tall &mdash; 3 plates = 1 brick.</div>
+        <table class="bom" id="bom"><tbody></tbody></table>
+        <div class="hint" id="total"></div>
+      </div>
+    </div>
+    <!-- THE SNAPSHOT QUEUE. Glen's specification: "A series of snapshots will be saved in a queue.
+         Students will be able to save the completed list of images in a Word file, where written
+         instructions should be added." So the queue is a holding place, not a document: the pictures
+         collect here in the order they were taken, and the student writes the instructions. -->
+    <div id="snappanel" style="margin-top:.8rem;border-top:1px solid #d8c4a0;padding-top:.6rem;display:none">
+      <h2 class="marker" style="margin-top:0">Snapshots</h2>
+      <div class="hint" id="snapNote" style="margin-top:0">Click Snapshot to record a picture of the current build.</div>
+      <div id="snapstrip" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem"></div>
     </div>
     <!-- Studio's zoom cluster, in Studio's place: the bottom of the control panel. -->
     <div id="zoomctl">
@@ -280,6 +300,17 @@
 
 <input type="file" id="fOpen" accept=".block,.model,.json" style="display:none">
 
+<div class="modal" id="snapview">
+  <div class="card" style="max-width:none;width:auto">
+    <h2 id="svTitle" style="margin-bottom:.6rem">Snapshot</h2>
+    <img id="svImg" alt="The snapshot at full size"
+         style="display:block;max-width:78vw;max-height:66vh;background:#fff;border:1px solid #d8c4a0;border-radius:6px">
+    <p style="margin-bottom:0;margin-top:.8rem;display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="ebtn" id="svRemove">Remove This Snapshot</button>
+      <button class="ebtn" id="svClose">Close</button>
+    </p>
+  </div>
+</div>
 <div class="modal" id="about">
   <div class="card">
     <h2>Sangala Blocks</h2>
@@ -401,7 +432,10 @@ function applyFrameScale(){
   fit();
   commit();                        /* clearing every brick is exactly the change a builder undoes */
 }
-let part = {kind:"brick", w:2, id:"3004", n:"1x2"};   // the part the Toolbar has chosen
+/* Opens on the 2 x 3 brick (design 3002) - the size reached for most often, so the common case costs
+   no typing. THIS is the default; the Columns/Rows fields are rewritten from `part` by
+   syncSizeFields() on load, so their value= attributes cannot set it and must simply agree. */
+let part = {kind:"brick", w:3, d:2, id:"3002", n:"2x3"};   // the part the Toolbar has chosen
 let selCol = 3, flip = false;
 let tool = "select", showGuide = true, showGrid = true;
 /* TWO WAYS TO BUILD, and the frame serves both - it is the same silhouette either way.
@@ -841,7 +875,8 @@ Object.keys(KINDS).forEach(k=>{
 });
 const sizeable = k => !!SIZES[k];
 const firstSize = k => Object.keys(SIZES[k]||{})[0];
-let lastR=1, lastC=2;   /* what the fields last held, so a spinner's DIRECTION of travel is known */
+let lastR=2, lastC=3;   /* what the fields last held, so a spinner's DIRECTION of travel is known;
+                           seeded to match the opening part (see `part`, above) */
 function syncSizeFields(){
   const t=String(part.n||"").split("x");
   if(t.length===2){ $("szRows").value=lastR=parseInt(t[0],10)||1;
@@ -936,6 +971,7 @@ function bom(){
       "<td class='q'>"+r.n+"</td></tr>").join("");
   /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
   const park=bricks.filter(parked).length, built=bricks.length-park;
+  $("partscount").textContent = built ? " · "+built+(built===1?" piece":" pieces") : "";
   $("total").textContent = bricks.length
     ? (built ? built+(built===1?" piece":" pieces")+" \u00b7 "+rows.length+" distinct" : "Nothing placed on the plate yet")
       + (park ? " \u00b7 "+park+" parked on the cork" : "")
@@ -1881,6 +1917,121 @@ $("bPrint").onclick=async()=>{
                             docFileName(" parts.txt"), "Parts list", ".txt");
   if(name) say("Parts list saved as "+name+".");
 };
+/* ---------- Snapshot: the build as LEGO documentation draws it ----------------------------------
+   Glen's specification asks for images "comparable in quality to that found in the official LEGO
+   documentation", and that look belongs to the LDraw renderer, not to a drawing of our own. A
+   browser cannot start a renderer, so the bridge does it - and THE DIVISION OF LABOR IS THAT THE
+   PAGE WRITES THE MODEL AND THE BRIDGE ONLY RENDERS IT. Everything about studs, plates and part
+   numbers stays here, where the design lives; the bridge knows nothing but "text in, picture out",
+   which is what keeps the Mac and Chromebook versions of it a transcription rather than a rewrite.
+
+   THE ARITHMETIC IS tools/ldr_export.py's, and the two must not drift: 1 LDU = 0.4 mm, a stud is
+   20 LDU and a plate 8; LDraw's +Y points DOWN, so height above the plate is negative; a part's
+   origin sits at the TOP of its body and at the CENTRE of its footprint. Those last two are the
+   ones that look plausible when they are wrong. */
+const LDU_STUD=20, LDU_PLATE=8;
+const ldNum = n => String(Math.round(n*1000)/1000);
+function toLdr(){
+  const plateRows = Math.round(modelH/vUnit());
+  const out=["0 "+(docName||"Sangala Blocks design"),
+             "0 Name: sangala.ldr",
+             "0 Author: Sangala Blocks",
+             "0 !LDRAW_ORG Unofficial_Model",
+             "0 // built in "+mode+" mode",
+             ""];
+  bricks.forEach(b=>{
+    if(parked(b)) return;                 /* a candidate on the cork is not part of the design */
+    const p=b.p, w=p.w, d=p.d||1, h=p.h||1;
+    const x=(b.col + w/2)*LDU_STUD;
+    let y, z;
+    if(mode==="relief"){ z=(b.row + d/2)*LDU_STUD; y=-((b.base||0) + h)*LDU_PLATE; }
+    else               { z=0;                      y=-(plateRows - b.row)*LDU_PLATE; }
+    /* A flipped part is TURNED, not mirrored: mirroring a slope makes a part that does not exist.
+       Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1). */
+    const a = b.flip ? -1 : 1;
+    out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(x)+" "+ldNum(y)+" "+ldNum(z)+" "+
+             a+" 0 0 0 1 0 0 0 "+a+" "+p.id+".dat");
+  });
+  out.push("0");
+  return out.join("\n")+"\n";
+}
+
+let snaps=[];                              /* the queue, in the order the phases were built */
+let bridgeOK=false;
+function drawSnapStrip(){
+  const strip=$("snapstrip"); strip.innerHTML="";
+  snaps.forEach((s,i)=>{
+    const fig=document.createElement("figure");
+    fig.style.cssText="margin:0;width:84px;text-align:center";
+    const img=document.createElement("img");
+    img.src=s.url; img.alt="Snapshot "+(i+1);
+    img.style.cssText="width:84px;height:84px;object-fit:contain;background:#fff;border:1px solid #d8c4a0;border-radius:4px";
+    img.title="Snapshot "+(i+1)+" - click to see it full size";
+    img.onclick=()=>openSnap(i);   // the thumbnail is the PICTURE, not a delete button (see openSnap)
+    const cap=document.createElement("figcaption");
+    cap.textContent=(i+1); cap.style.cssText="font-size:.75rem;color:#5a4a34";
+    fig.appendChild(img); fig.appendChild(cap); strip.appendChild(fig);
+  });
+  $("snappanel").style.display = snaps.length || bridgeOK ? "" : "none";
+  $("snapNote").textContent = snaps.length
+    ? "Click a snapshot to expand to full view."
+    : "Click Snapshot to record a picture of the current build.";
+}
+/* The expanded view. A snapshot is a rendering the student waited for and cannot get back once the
+   object URL is revoked, so REMOVING ONE MUST TAKE A DELIBERATE SECOND ACTION - never a single click
+   on the picture itself. Clicking a thumbnail opens it here at full size; Remove lives inside, next
+   to Close, where it has to be chosen. */
+let snapOpen=-1;
+function openSnap(i){
+  const s=snaps[i]; if(!s) return;
+  snapOpen=i;
+  $("svImg").src=s.url;
+  $("svTitle").textContent="Snapshot "+(i+1)+" of "+snaps.length;
+  $("snapview").classList.add("show");
+}
+function closeSnap(){ $("snapview").classList.remove("show"); $("svImg").removeAttribute("src"); snapOpen=-1; }
+$("svClose").onclick=closeSnap;
+$("snapview").onclick=e=>{ if(e.target===$("snapview")) closeSnap(); };   // clicking the backdrop closes, like the other modals
+$("svRemove").onclick=()=>{
+  const i=snapOpen; if(i<0||!snaps[i]) return;
+  URL.revokeObjectURL(snaps[i].url); snaps.splice(i,1);
+  closeSnap(); drawSnapStrip();
+  say("Snapshot "+(i+1)+" removed. "+snaps.length+" in the queue.");
+};
+$("bSnap").onclick=async()=>{
+  if(bricks.filter(b=>!parked(b)).length===0){ say("Nothing to photograph yet - place a brick first."); return; }
+  say("Rendering the snapshot...");
+  try{
+    const r=await fetch("/snapshot?angle=30,45&w=1000&h=800",
+                        {method:"POST",headers:{"Content-Type":"text/plain"},body:toLdr()});
+    if(!r.ok){ const j=await r.json().catch(()=>null);
+               say("Snapshot failed: "+((j&&j.error)||("the bridge answered "+r.status))); return; }
+    const blob=await r.blob();
+    snaps.push({blob:blob, url:URL.createObjectURL(blob)});
+    drawSnapStrip();
+    say("Snapshot "+snaps.length+" kept.");
+  }catch(e){ say("Snapshot failed: "+e.message+" - is Sangala Blocks running from its own icon?"); }
+};
+/* The button is only offered when the bridge is behind the page. Opened as a file instead, the page
+   still designs and saves; it simply cannot start a renderer, and says so rather than failing. */
+(async()=>{
+  try{
+    const r=await fetch("/status",{cache:"no-store"});
+    const j=await r.json();
+    bridgeOK = j && j.sangala==="blocks";
+    if(bridgeOK && !(j.ldview && j.ldraw)){
+      bridgeOK=false;
+      $("bSnap").title="Snapshot needs LDView and the LDraw parts folder beside the program.";
+    }
+  }catch(e){ bridgeOK=false; }
+  if(!bridgeOK){
+    $("bSnap").disabled=true; $("bSnap").style.opacity=".45";
+    if(!$("bSnap").title.startsWith("Snapshot needs"))
+      $("bSnap").title="Snapshot needs Sangala Blocks to be started from its own icon.";
+  }
+  drawSnapStrip();
+})();
+
 $("bOpen").onclick=()=>$("fOpen").click();
 
 function loadModel(j){
@@ -1959,6 +2110,16 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; setDocName(f.na
     }catch(x){alert("Could not read that file: "+x.message);} };
   r.readAsText(f); e.target.value="";};
 
+/* Parts folds away; it starts folded (see the panel markup). A VIEW control only - folding changes
+   nothing about the design, and the list is still built underneath, so opening it is instant. */
+let partsOpen=false;
+function drawPartsFold(){
+  $("partsbody").style.display = partsOpen ? "" : "none";
+  $("partstog").innerHTML = partsOpen ? "&#9662;" : "&#9656;";
+  $("partshead").title = partsOpen ? "Hide the parts list" : "Show the parts list";
+}
+$("partshead").onclick=()=>{ partsOpen=!partsOpen; drawPartsFold(); };
+drawPartsFold();
 $("bAbout").onclick=()=>$("about").classList.add("show");
 $("aClose").onclick=()=>$("about").classList.remove("show");
 
