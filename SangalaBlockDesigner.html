@@ -1735,33 +1735,19 @@ function carries(b){             /* is anything resting ON this one? */
   }
   return bricks.some(o=>o!==b && overlaps(o,b) && o.base===b.base+thick(b.p));
 }
-/* STANDING: a part FALLS to what holds it up. The click chooses the columns; gravity chooses the
-   row, so a brick can never be left floating - which is the whole difference between stacking a
-   figure and painting one. The ground is the bottom of the plate. */
-function landRow(nb){
-  const f=foot(nb);
-  let support=Math.round(modelH/vUnit());
-  bricks.forEach(o=>{ if(parked(o)) return;   /* a candidate on the cork holds nothing up */
-    const g=foot(o);
-    if(g.x1>f.x0 && f.x1>g.x0) support=Math.min(support, g.y0); });
-  return support - rowsOf(nb.p);
-}
-function onFrame(nb){             /* is the silhouette behind any of this part's cells? */
-  const f=foot(nb);
-  for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++) if(frameHas.has(cellKey(c,r))) return true;
-  return false;
-}
+/* landRow() and onFrame() were here: a part fell to whatever held it up, unless the frame was
+   behind it. Both are gone with the gravity they served (see settle, below) - a helper left behind
+   describes a rule the application no longer has, which is the most expensive kind of comment. */
 function settle(nb){             /* put the part where the mode says it comes to rest */
   if(parked(nb)){ nb.base=0; return nb; }   /* on the cork: no gravity, no frame - it stays put */
-  /* WITH NO FRAME, NOTHING FALLS. A brick laid against the frame stays where it is put, because the
-     silhouette is what holds it there; anywhere else it falls to what is under it, so a figure
-     cannot be painted in mid-air. That leaves one case with no answer: designing freeform, with no
-     frame imported at all. Everything then fell to the bottom of the plate, which is not a rule so
-     much as the absence of one - Glen, 2026-08-15: "it is just not possible to design freeform
-     without a frame." So an empty frame means free placement, exactly as a frame everywhere would:
-     the builder is the only thing holding a brick up, and that is their business. Import a frame
-     and gravity returns for every cell the silhouette does not cover. */
-  if(mode==="standing"){ if(frameHas.size && !onFrame(nb)) nb.row=landRow(nb); nb.base=0; }
+  /* NOTHING FALLS. A brick stays where it is put, on the frame or off it, with a frame imported or
+     none (Glen, 2026-08-15: "a brick on the plate should not fall; in other words, no gravity ...
+     whether it is on the frame or not").
+     What was here fell to whatever was underneath, on the reasoning that a builder cannot stack a
+     figure in mid-air. But this is a PLAN of a model, not the model: a designer works out the
+     courses in whatever order suits them, and a brick that jumps to the floor the moment it is
+     placed takes the drawing away from them. The physical rule belongs to the physical build. */
+  if(mode==="standing"){ nb.base=0; }
   else nb.base=restingBase(nb);
   return nb;
 }
@@ -1810,15 +1796,9 @@ window.addEventListener("mouseup",()=>{
   bricks.splice(md.i,1); settle(b); bricks.push(b);
   suppressClick=true;                            /* the click this drag ends on must not place or erase */
   draw(); bom(); commit();
-  /* Read the answer off where it CAME TO REST, not off landRow: the brick is back in the array by
-     now, so landRow would find it in its own columns and report the course below its own top. */
-  const onGround = b.row+rowsOf(b.p) >= Math.round(modelH/vUnit())-0.5;
   say(parked(b) ? b.p.name+" parked on the cork — it is not counted in the parts list."
-                : (mode==="standing"
-                    ? (frameHas.size
-                        ? b.p.name+" moved, resting on "+(onGround ? "the ground" : "the course below")+"."
-                        : b.p.name+" moved.")     /* freeform: it rests where it was put */
-                    : b.p.name+" moved to base "+plates(b.base)+"."));
+                : (mode==="standing" ? b.p.name+" moved."
+                                     : b.p.name+" moved to base "+plates(b.base)+"."));
 });
 
 cv.addEventListener("mousemove",e=>{
@@ -1840,11 +1820,8 @@ cv.addEventListener("click",e=>{
   if(tool!=="place") return;
   const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip});
   bricks.push(nb);
-  say(mode!=="standing"
-      ? nb.p.name+" placed at base "+plates(nb.base)+"."
-      : (frameHas.size
-          ? nb.p.name+" placed, resting on "+(landRow(nb)+rowsOf(nb.p)>=Math.round(modelH/vUnit())-0.5 ? "the ground" : "the course below")+"."
-          : nb.p.name+" placed."));   /* freeform, with no frame: it stays where it was put */
+  say(mode!=="standing" ? nb.p.name+" placed at base "+plates(nb.base)+"."
+                        : nb.p.name+" placed.");   /* it stays where it was put; nothing to report */
   draw(); commit();
 });
 /* ---------- Undo (Ctrl-Z): debounced snapshots of the design, restored on demand ----------
