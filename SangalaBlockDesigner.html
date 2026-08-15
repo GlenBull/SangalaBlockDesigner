@@ -1801,13 +1801,54 @@ window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-
   if(k==="y" || (k==="z" && e.shiftKey)){ e.preventDefault(); redo(); return; }
 });
 
-/* ---------- files ---------- */
-function download(name,text,mime){
+/* ---------- files ----------
+   SAVE IS STUDIO'S, PORTED WHOLE (SangalaStudio.html:1789-1824), because Studio and Mosaic both
+   solved this and this file had its own version. Glen, 2026-08-15: "It didn't give me a choice of
+   location; it just saved to some undisclosed location. Again, this has been solved for studio and
+   mosaic, but was not ported to blocks."
+   What was here was an <a download>: no dialog, no chosen folder, no name, and no way to know
+   whether the bytes arrived. */
+let docName="";
+function setDocName(n){ docName = n ? String(n).replace(/\.[A-Za-z0-9]+$/,"").trim() : ""; }
+function docFileName(ext){ return (docName || "sangala-blocks") + ext; }
+/* Read the file back and confirm the bytes landed. Choosing a name in the Save dialog CREATES the
+   file immediately, at zero bytes; the contents only arrive when close() completes. If anything
+   interrupts the write in between, the result is a real, findable, EMPTY file - and the application
+   announces "Saved" regardless, because close() resolving is taken as proof. It is not. Glen lost an
+   evening's work to exactly that in Studio on 2026-07-27: a 0-byte "Crane 8.model" that Explorer
+   could still find in its index after the file itself had gone. Returns a complaint, or "" if good. */
+async function writeShortfall(handle, expected){
+  try{
+    const back = await handle.getFile();
+    if(back.size >= expected) return "";
+    return "SAVE DID NOT COMPLETE - " + handle.name + " holds " + back.size + " of " + expected
+         + " bytes. Nothing here is lost: your design is still open. Try Save again, and to somewhere local if that folder is on a network or a synced drive.";
+  }catch(e){ return ""; }        // cannot read it back: say nothing rather than cry wolf
+}
+// native Save As (choose folder + name) with plain-download fallback; returns saved name or null
+async function saveBlob(blob,suggestedName,desc,ext){
+  if(window.showSaveFilePicker){
+    // A type of "application/octet-stream" makes the dialog offer every extension that MIME owns, so
+    // the filter reads "*.block;*.com;*.exe;*.bin" - a save dialog inviting you to write an executable.
+    // A type of our own owns nothing but our extension, so only that is offered.
+    const mime="application/x-sangala"+ext.replace(/\./g,"-");
+    let h; try{ h=await window.showSaveFilePicker({suggestedName:suggestedName,types:[{description:desc,accept:{[mime]:[ext]}}]}); }
+    catch(e){ if(e&&e.name==="AbortError")return null; say("Could not open Save dialog: "+e.message); return null; }
+    try{ const ws=await h.createWritable(); await ws.write(blob); await ws.close();
+      const bad=await writeShortfall(h, blob.size); if(bad){ say(bad); return null; }
+      setDocName(h.name);           // saving under a new name adopts it for next time
+      return h.name; }
+    catch(e){ say("Save failed: "+e.message); return null; }
+  }
+  const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=suggestedName; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000); return suggestedName;
+}
+function download(name,text,mime){   // kept for anything that is genuinely a download rather than a save
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([text],{type:mime||"application/json"}));
   a.download=name; a.click();
 }
-$("bSave").onclick=()=>download("crane.block",
+function designJSON(){ return (
   /* guideRaw, NOT guide: `guide` is the SCALED working copy, and the file also stores frameScale.
      Saving the scaled copy and restoring the scale beside it means the next touch of the Frame scale
      control multiplies an already-scaled frame a second time — a design saved at 30% and nudged to
@@ -1823,12 +1864,22 @@ $("bSave").onclick=()=>download("crane.block",
        supplies them. */
     bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,d:b.p.d||1,h:b.p.h,shape:b.p.shape,
                            color:COLORS[b.colorIdx].code,col:b.col,row:b.row,base:b.base||0,
-                           flip:b.flip}))},null,1));
-$("bPrint").onclick=()=>{
-  const rows=tally();
-  download("crane-parts.txt","Part\tDesign\tColor\tLDraw\tQty\n"+
+                           flip:b.flip}))},null,1)); }
+$("bSave").onclick=async()=>{
+  const name=await saveBlob(new Blob([designJSON()],{type:"application/json"}),
+                            docFileName(".block"), "Sangala Blocks design", ".block");
+  if(name) say("Saved as "+name+".");
+};
+$("bPrint").onclick=async()=>{
+  /* The parts list is a file the student keeps, so it chooses its place like the design does. The
+     total counts the DESIGN, not candidates parked on the cork - the same rule the panel follows. */
+  const rows=tally(), built=bricks.filter(b=>!parked(b)).length;
+  const text="Part\tDesign\tColor\tLDraw\tQty\n"+
     rows.map(r=>[r.p.name,r.p.id,r.col.name,r.col.code,r.n].join("\t")).join("\n")+
-    "\n\nTotal pieces\t"+bricks.length+"\nDistinct parts\t"+rows.length+"\n","text/plain");
+    "\n\nTotal pieces\t"+built+"\nDistinct parts\t"+rows.length+"\n";
+  const name=await saveBlob(new Blob([text],{type:"text/plain"}),
+                            docFileName(" parts.txt"), "Parts list", ".txt");
+  if(name) say("Parts list saved as "+name+".");
 };
 $("bOpen").onclick=()=>$("fOpen").click();
 
@@ -1876,7 +1927,7 @@ function loadModel(j){
   hist=[]; redoStack=[]; commit();
   say("Frame brought in: "+g.length+" outlines, at full size.");
 }
-$("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+$("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; setDocName(f.name); const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer or Studio file");
