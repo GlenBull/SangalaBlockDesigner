@@ -1,13 +1,14 @@
 @echo off
 REM ==========================================================================
-REM  Build SangalaBlockDesigner.exe -- the desktop launcher for Sangala Block
-REM  Designer. It is a real program (like Sangala Studio's exe), so it is NOT
-REM  blocked the way school/managed Windows blocks .cmd scripts. Double-clicking
-REM  it opens SangalaBlockDesigner.html (kept next to it) in the browser. The
-REM  crane icon is embedded, so the exe and any Desktop shortcut to it show the
-REM  crane. Compiled in-box with the .NET compiler already in Windows -- no admin.
+REM  Build SangalaBlockDesigner.exe -- the local bridge for Sangala Blocks.
+REM  It serves SangalaBlockDesigner.html on a loopback port and runs LDView to
+REM  render a snapshot, which a browser cannot do for itself. Same shape as
+REM  Sangala Studio's SangalaServer.cs, and like it a real program, so managed
+REM  school Windows does not block it the way it blocks .cmd and .bat files.
+REM  The crane icon is embedded, so the exe and any Desktop shortcut show it.
+REM  Compiled with the .NET compiler already in Windows -- no admin, no install.
 REM
-REM  Needs, together in this folder:  SangalaBlockDesignerLauncher.cs  and  Crane.ico
+REM  Needs, together in this folder:  SangalaBlocksServer.cs  and  Crane.ico
 REM  After building, keep SangalaBlockDesigner.exe next to SangalaBlockDesigner.html.
 REM ==========================================================================
 setlocal
@@ -25,7 +26,7 @@ echo Building %OUT% ...
   /reference:System.dll ^
   /reference:System.Drawing.dll ^
   /reference:System.Windows.Forms.dll ^
-  "SangalaBlockDesignerLauncher.cs"
+  "SangalaBlocksServer.cs"
 
 if errorlevel 1 (
   echo.
