@@ -302,7 +302,12 @@
      so everything this application writes is reached from the one place. -->
 <div id="saveMenu" class="popmenu" style="display:none">
   <button id="saveDesign" title="Save the whole design so you can keep building later">Design <small>.block</small></button>
-  <button id="saveSnaps" title="Save the snapshots as a Word document">Snapshots <small>.docx</small></button>
+  <!-- ONE item, and the FORMAT IS CHOSEN IN THE SAVE DIALOG, from its own "Save as type" list -
+       Word's arrangement, and Glen's correction on 2026-08-15 after a second menu entry appeared:
+       "There's a drop-down menu that can be used to offer different formats during a save." Two
+       items reading "Snapshots" differing only in a small grey extension is a menu that has to be
+       read twice. -->
+  <button id="saveSnaps" title="Save the snapshots as a document - Word, PDF or OpenDocument, chosen in the Save dialog">Snapshots <small>.docx / .pdf / .odt</small></button>
 </div>
 <div id="partmenu" class="menu" style="position:fixed;z-index:31;display:none">
   <button data-kind="brick">&#129521; Brick</button>
@@ -1893,14 +1898,24 @@ async function writeShortfall(handle, expected){
    "Test" held the name for good - which is how a design opened as "Crane (Relief 8)" came to export a
    document headed "Test" (Glen, 2026-08-15: "shouldn't we honor the user's selection of project name
    rather than making up a different name?"). The project is named by opening one or saving one. */
-async function saveBlob(blob,suggestedName,desc,ext,adopt){
+/* WHERE A CHOICE OF FORMAT BELONGS: the Save dialog's own "Save as type" list, not a second item on
+   the menu (Glen, 2026-08-15). `formats` is [{ext, desc, build}] in the order the dialog should
+   offer them; the dialog reports which was chosen by the extension on the name it comes back with,
+   and only then is that format built - so writing a .docx never also assembles an .odt. */
+async function saveChoice(baseName,formats,adopt){
+  const first=formats[0];
   if(window.showSaveFilePicker){
     // A type of "application/octet-stream" makes the dialog offer every extension that MIME owns, so
     // the filter reads "*.block;*.com;*.exe;*.bin" - a save dialog inviting you to write an executable.
     // A type of our own owns nothing but our extension, so only that is offered.
-    const mime="application/x-sangala"+ext.replace(/\./g,"-");
-    let h; try{ h=await window.showSaveFilePicker({suggestedName:suggestedName,types:[{description:desc,accept:{[mime]:[ext]}}]}); }
+    const types=formats.map(f=>({description:f.desc,
+                                 accept:{["application/x-sangala"+f.ext.replace(/\./g,"-")]:[f.ext]}}));
+    let h; try{ h=await window.showSaveFilePicker({suggestedName:baseName+first.ext,types:types}); }
     catch(e){ if(e&&e.name==="AbortError")return null; say("Could not open Save dialog: "+e.message); return null; }
+    const m=/(\.[A-Za-z0-9]+)$/.exec(h.name||"");
+    const chosen=formats.find(f=>m && f.ext.toLowerCase()===m[1].toLowerCase()) || first;
+    let blob; try{ blob=await chosen.build(); }
+    catch(e){ say("Could not build the document: "+e.message); return null; }
     try{ const ws=await h.createWritable(); await ws.write(blob); await ws.close();
       const bad=await writeShortfall(h, blob.size); if(bad){ say(bad); return null; }
       /* A save NAMES an unnamed project; it does not RENAME one that already has a name. Typing
@@ -1909,8 +1924,16 @@ async function saveBlob(blob,suggestedName,desc,ext,adopt){
       return h.name; }
     catch(e){ say("Save failed: "+e.message); return null; }
   }
-  const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=suggestedName; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000); return suggestedName;
+  /* No picker (an older browser): there is no dialog to choose in, so the first format is written
+     as a plain download - the same one the menu names first. */
+  const blob=await first.build(), name=baseName+first.ext;
+  const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000); return name;
+}
+/* The single-format save every other caller uses, in terms of the one above. */
+async function saveBlob(blob,suggestedName,desc,ext,adopt){
+  return saveChoice(suggestedName.replace(/\.[A-Za-z0-9]+$/,""),
+                    [{ext:ext,desc:desc,build:async()=>blob}], adopt);
 }
 function download(name,text,mime){   // kept for anything that is genuinely a download rather than a save
   const a=document.createElement("a");
@@ -2102,7 +2125,7 @@ const CRC_T=(()=>{ const t=new Uint32Array(256);
 function crc32(u8){ let c=0xFFFFFFFF;
   for(let i=0;i<u8.length;i++) c = CRC_T[(c^u8[i])&0xFF] ^ (c>>>8);
   return (c^0xFFFFFFFF)>>>0; }
-function zipStore(entries){          /* [{name, bytes}] -> Blob. Local headers, central directory, EOCD. */
+function zipStore(entries,mime){     /* [{name, bytes}] -> Blob. Local headers, central directory, EOCD. */
   const enc=new TextEncoder(), parts=[], central=[]; let off=0;
   const d=new Date();
   const tm=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF;
@@ -2130,7 +2153,7 @@ function zipStore(entries){          /* [{name, bytes}] -> Blob. Local headers, 
   eo.setUint32(0,0x06054b50,true); eo.setUint16(4,0,true); eo.setUint16(6,0,true);
   eo.setUint16(8,entries.length,true); eo.setUint16(10,entries.length,true);
   eo.setUint32(12,cdSize,true); eo.setUint32(16,off,true); eo.setUint16(20,0,true);
-  return new Blob([...parts,...central,new Uint8Array(eo.buffer)],{type:DOCX_MIME});
+  return new Blob([...parts,...central,new Uint8Array(eo.buffer)],{type:mime||DOCX_MIME});
 }
 const xesc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 /* Times New Roman 11 pt, Letter, 1 in margins, page number bottom center - the house standard, so a
@@ -2217,14 +2240,220 @@ async function snapsToDocx(){
                    {name:"word/_rels/document.xml.rels",bytes:T(drels)},
                    ...media]);
 }
+/* ---------- The same document, in the open format ----------------------------------------------
+   Glen, 2026-08-15: "My students use Word. But for classes that do not use Word, I need to include
+   an open-source document format." That is OpenDocument Text - the ISO standard LibreOffice writes
+   natively, which Word also opens, so neither class is shut out of the other's file.
+
+   It is the same shape of work as the .docx above: a zip of XML with the pictures beside it, so the
+   writer already here does the packing. Two things differ and both are ODF rules rather than
+   choices. The `mimetype` entry MUST come first in the archive and MUST be stored uncompressed, so
+   a reader can identify the file from its first bytes - zipStore only ever stores, so putting it
+   first is the whole of it. And every part must be declared in META-INF/manifest.xml, pictures
+   included; a picture missing from the manifest simply does not appear.
+
+   The measurements are the .docx's, converted: ODF states lengths physically (inches) where
+   WordprocessingML counts EMUs, and the image is fitted inside the same box so four steps fall on
+   a page and no render is ever distorted. */
+const ODT_MIME="application/vnd.oasis.opendocument.text";
+const odtPara=(text,style)=> '<text:p text:style-name="'+style+'">'+(text?xesc(text):"")+'</text:p>';
+async function snapsToOdt(){
+  const enc=new TextEncoder(), XML='<?xml version="1.0" encoding="UTF-8"?>';
+  const dims=await Promise.all(snaps.map(s=>new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>res({w:im.naturalWidth||1000,h:im.naturalHeight||800});
+    im.onerror=()=>res({w:1000,h:800});
+    im.src=s.url; })));
+  const bytes=await Promise.all(snaps.map(s=>s.blob.arrayBuffer().then(b=>new Uint8Array(b))));
+  const ext=s=>(s.blob.type==="image/jpeg"?"jpg":"png");
+  const title=(docName||"Sangala Blocks design").replace(/\.[^.]+$/,"");
+
+  const NS='xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+    +' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"'
+    +' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+    +' xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+    +' xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
+    +' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"'
+    +' xmlns:xlink="http://www.w3.org/1999/xlink"';
+  /* Times New Roman 11 pt, and the spacing the .docx uses: 5 pt under a body line, 3 pt under the
+     "Step N" lead-in so it sits tight to its picture, 12 pt under the empty line left to write in. */
+  const face='<style:text-properties style:font-name="Times New Roman" fo:font-family="Times New Roman" fo:font-size="11pt"/>';
+  const pstyle=(name,after,extra)=>'<style:style style:name="'+name+'" style:family="paragraph" style:parent-style-name="Standard">'
+    +'<style:paragraph-properties fo:margin-top="0in" fo:margin-bottom="'+after+'"/>'
+    +'<style:text-properties style:font-name="Times New Roman" fo:font-family="Times New Roman" fo:font-size="11pt"'+(extra||"")+'/></style:style>';
+
+  let body=odtPara('Images exported from Sangala Blocks "'+title+'".',"POpen");
+  const pics=[], manifest=[];
+  snaps.forEach((s,i)=>{
+    const n=i+1, file="Pictures/step"+n+"."+ext(s);
+    const scale=Math.min(DOC_IMG_W_IN/dims[i].w, DOC_IMG_H_IN/dims[i].h);
+    const wIn=(dims[i].w*scale).toFixed(3), hIn=(dims[i].h*scale).toFixed(3);
+    pics.push({name:file,bytes:bytes[i]});
+    manifest.push('<manifest:file-entry manifest:full-path="'+file+'" manifest:media-type="image/'+(ext(s)==="jpg"?"jpeg":"png")+'"/>');
+    body += odtPara("Step "+n,"PStep")
+         +  '<text:p text:style-name="PImg"><draw:frame draw:style-name="fr1" draw:name="Step '+n+'"'
+         +  ' text:anchor-type="as-char" svg:width="'+wIn+'in" svg:height="'+hIn+'in" draw:z-index="0">'
+         +  '<draw:image xlink:href="'+file+'" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>'
+         +  '</draw:frame></text:p>'
+         +  odtPara("","PWrite");
+  });
+
+  const content=XML+'<office:document-content '+NS+' office:version="1.2"><office:automatic-styles>'
+    +pstyle("POpen","0.14in")+pstyle("PStep","0.04in",' fo:font-weight="bold"')
+    +'<style:style style:name="PImg" style:family="paragraph" style:parent-style-name="Standard">'
+    +'<style:paragraph-properties fo:text-align="center" fo:margin-top="0in" fo:margin-bottom="0.04in"/>'+face+'</style:style>'
+    +pstyle("PWrite","0.17in")
+    +'<style:style style:name="fr1" style:family="graphic">'
+    +'<style:graphic-properties text:anchor-type="as-char" style:vertical-pos="middle" style:vertical-rel="text"'
+    +' fo:border="none" style:wrap="none"/></style:style>'
+    +'</office:automatic-styles><office:body><office:text>'+body+'</office:text></office:body></office:document-content>';
+
+  /* Letter, 1 in margins, and the page number bottom center - the house standard, carried across
+     from the .docx so the two files are the same document in two formats. */
+  const styles=XML+'<office:document-styles '+NS+' office:version="1.2">'
+    +'<office:styles><style:style style:name="Standard" style:family="paragraph">'+face+'</style:style>'
+    +'<style:style style:name="Footer" style:family="paragraph" style:parent-style-name="Standard">'
+    +'<style:paragraph-properties fo:text-align="center"/>'+face+'</style:style></office:styles>'
+    +'<office:automatic-styles><style:page-layout style:name="pm1">'
+    +'<style:page-layout-properties fo:page-width="8.5in" fo:page-height="11in" style:print-orientation="portrait"'
+    +' fo:margin-top="1in" fo:margin-bottom="1in" fo:margin-left="1in" fo:margin-right="1in"/>'
+    +'<style:footer-style><style:header-footer-properties fo:min-height="0.2in" fo:margin-top="0.2in"/></style:footer-style>'
+    +'</style:page-layout></office:automatic-styles>'
+    +'<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1">'
+    +'<style:footer><text:p text:style-name="Footer">'
+    +'<text:page-number text:select-page="current">1</text:page-number></text:p></style:footer>'
+    +'</style:master-page></office:master-styles></office:document-styles>';
+
+  const man=XML+'<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">'
+    +'<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="'+ODT_MIME+'"/>'
+    +'<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+    +'<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>'
+    +manifest.join("")+'</manifest:manifest>';
+
+  const T=s=>enc.encode(s);
+  /* mimetype FIRST, and uncompressed - the ODF rule that lets a reader identify the file by its
+     first bytes. Everything this writer produces is stored, so first is all that has to be true. */
+  return zipStore([{name:"mimetype",bytes:T(ODT_MIME)},
+                   {name:"META-INF/manifest.xml",bytes:T(man)},
+                   {name:"content.xml",bytes:T(content)},
+                   {name:"styles.xml",bytes:T(styles)},
+                   ...pics], ODT_MIME);
+}
+/* ---------- The same document as a PDF -----------------------------------------------------------
+   Glen, 2026-08-15: PDF is more widely used than either of the others, colleagues edit it routinely,
+   and many tools open one and pull the pictures out into a folder. That last use decides how the
+   images go in: LOSSLESSLY, as Flate-compressed RGB, so a picture extracted from the document is the
+   render LDView produced rather than a JPEG copy of it. (JPEG is the fallback if the browser has no
+   CompressionStream - a lossy picture beats no document.) Transparency is dropped and the render is
+   composited on white, because a page is white and an /SMask would double the work for no visible
+   difference.
+
+   WHAT MAKES THIS LONGER THAN THE .docx AND .odt: those formats FLOW. We hand Word a run of
+   paragraphs and pictures and it decides where the pages break. A PDF has no flow at all - every
+   line and picture is placed at an absolute point on a numbered page - so the pagination that Word
+   does for us is done here, by measuring each step's block and starting a page when one no longer
+   fits. Text needs no font file: Times-Roman and Times-Bold are two of the fourteen a reader must
+   already have. */
+const PDF_MIME="application/pdf";
+const PDF_W=612, PDF_H=792, PDF_M=72;                 /* Letter and 1 in margins, as the others use */
+/* The room left under each picture. It is 11 pt rather than a rounder, roomier number because that
+   is what puts FOUR steps on a page, which is the density the .docx was verified at - the three
+   formats are meant to be one document, so a class reading the PDF and a class reading the Word
+   file are looking at the same pages. */
+const PDF_GAP=11;
+function pdfEsc(s){ return String(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)")
+                                    .replace(/[^\x20-\x7e]/g,"?"); }
+async function pdfImage(blob){
+  const im=await createImageBitmap(blob);
+  const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
+  const g=c.getContext("2d");
+  g.fillStyle="#ffffff"; g.fillRect(0,0,c.width,c.height); g.drawImage(im,0,0);
+  if(window.CompressionStream){
+    const px=g.getImageData(0,0,c.width,c.height).data;
+    const rgb=new Uint8Array(c.width*c.height*3);
+    for(let i=0,j=0;i<px.length;i+=4){ rgb[j++]=px[i]; rgb[j++]=px[i+1]; rgb[j++]=px[i+2]; }
+    const st=new Blob([rgb]).stream().pipeThrough(new CompressionStream("deflate"));
+    return {w:c.width,h:c.height,filter:"/FlateDecode",
+            data:new Uint8Array(await new Response(st).arrayBuffer())};
+  }
+  const jb=await new Promise(r=>c.toBlob(r,"image/jpeg",0.92));
+  return {w:c.width,h:c.height,filter:"/DCTDecode",data:new Uint8Array(await jb.arrayBuffer())};
+}
+async function snapsToPdf(){
+  const enc=new TextEncoder();
+  const imgs=[]; for(const s of snaps) imgs.push(await pdfImage(s.blob));
+  const title=(docName||"Sangala Blocks design").replace(/\.[^.]+$/,"");
+  const boxW=DOC_IMG_W_IN*72, boxH=DOC_IMG_H_IN*72;
+
+  /* ---- lay the steps out, page by page ---- */
+  const pages=[]; let ops="", used=[], y=PDF_H-PDF_M;
+  const newPage=()=>{ pages.push({ops:ops,used:used}); ops=""; used=[]; y=PDF_H-PDF_M; };
+  const text=(font,size,x,yy,s)=>{ ops+="BT /"+font+" "+size+" Tf 1 0 0 1 "+x.toFixed(2)+" "
+                                       +yy.toFixed(2)+" Tm ("+pdfEsc(s)+") Tj ET\n"; };
+  y-=11; text("F1",11,PDF_M,y,'Images exported from Sangala Blocks "'+title+'".'); y-=14;
+  imgs.forEach((im,i)=>{
+    const scale=Math.min(boxW/im.w, boxH/im.h), iw=im.w*scale, ih=im.h*scale;
+    const block=15+ih+PDF_GAP;              /* the label, its gap, the picture, and room to write */
+    if(y-block < PDF_M) newPage();
+    y-=11; text("F2",11,PDF_M,y,"Step "+(i+1)); y-=4;
+    const x=PDF_M+((PDF_W-2*PDF_M)-iw)/2;
+    ops+="q "+iw.toFixed(2)+" 0 0 "+ih.toFixed(2)+" "+x.toFixed(2)+" "+(y-ih).toFixed(2)
+        +" cm /Im"+(i+1)+" Do Q\n";
+    used.push(i+1);
+    y-=ih+PDF_GAP;
+  });
+  newPage();
+
+  /* ---- objects: 1 catalog, 2 pages, 3-4 fonts, then one per image, then page + content pairs ---- */
+  const N_FIX=4, imgFirst=N_FIX+1, pageFirst=imgFirst+imgs.length;
+  const kids=[]; for(let p=0;p<pages.length;p++) kids.push((pageFirst+p*2)+" 0 R");
+  const xobj=used=>used.map(n=>"/Im"+n+" "+(imgFirst+n-1)+" 0 R").join(" ");
+
+  const chunks=[], offs=[]; let off=0;
+  const put=u8=>{ chunks.push(u8); off+=u8.length; };
+  const putS=s=>put(enc.encode(s));
+  const obj=(n,body,stream)=>{
+    offs[n]=off; putS(n+" 0 obj\n"+body+"\n");
+    if(stream){ putS("stream\n"); put(stream); putS("\nendstream\n"); }
+    putS("endobj\n");
+  };
+  put(new Uint8Array([0x25,0x50,0x44,0x46,0x2d,0x31,0x2e,0x34,0x0a,0x25,0xe2,0xe3,0xcf,0xd3,0x0a]));
+  obj(1,"<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2,"<< /Type /Pages /Kids ["+kids.join(" ")+"] /Count "+pages.length+" >>");
+  obj(3,"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>");
+  obj(4,"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding /WinAnsiEncoding >>");
+  imgs.forEach((im,i)=>obj(imgFirst+i,
+    "<< /Type /XObject /Subtype /Image /Width "+im.w+" /Height "+im.h
+    +" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter "+im.filter
+    +" /Length "+im.data.length+" >>", im.data));
+  pages.forEach((pg,p)=>{
+    const pn=pageFirst+p*2, cn=pn+1;
+    /* the page number, bottom center - Times digits run about half the point size wide, which is
+       close enough to center three characters */
+    const label=String(p+1), wid=label.length*11*0.5;
+    const body=pg.ops+"BT /F1 11 Tf 1 0 0 1 "+((PDF_W-wid)/2).toFixed(2)+" 36 Tm ("+label+") Tj ET\n";
+    const bytes=enc.encode(body);
+    obj(pn,"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+PDF_W+" "+PDF_H+"]"
+        +" /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << "+xobj(pg.used)+" >> >>"
+        +" /Contents "+cn+" 0 R >>");
+    obj(cn,"<< /Length "+bytes.length+" >>",bytes);
+  });
+  const last=pageFirst+pages.length*2-1, xref=off;
+  putS("xref\n0 "+(last+1)+"\n0000000000 65535 f \n");
+  for(let n=1;n<=last;n++) putS(String(offs[n]).padStart(10,"0")+" 00000 n \n");
+  putS("trailer\n<< /Size "+(last+1)+" /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF\n");
+  return new Blob(chunks,{type:PDF_MIME});
+}
 $("saveSnaps").onclick=async()=>{
   if($("saveSnaps").disabled) return;
   closeSaveMenu();
   if(!snaps.length){ say("No snapshots yet - click Snapshot to record one."); return; }
-  say("Building the Word document...");
+  say("Choose where to save, and which format...");
   try{
-    const blob=await snapsToDocx();
-    const name=await saveBlob(blob, docFileName(" snapshots.docx"), "Word document", ".docx");
+    const name=await saveChoice(docFileName(" snapshots"),
+      [{ext:".docx", desc:"Word document",     build:snapsToDocx},
+       {ext:".pdf",  desc:"PDF document",      build:snapsToPdf},
+       {ext:".odt",  desc:"OpenDocument text", build:snapsToOdt}]);
     /* The confirmation names the PROJECT, not the file, and it is repeated beside the thumbnails.
        In the status line alone it sat far above the snapshots it was about - buried, and separated
        from the objects it referred to (Glen, 2026-07-24). */
