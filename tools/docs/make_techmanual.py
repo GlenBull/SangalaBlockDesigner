@@ -107,13 +107,18 @@ d.body("Geometry follows LEGO rather than a drawing grid. A stud is 8 mm and a p
 d.body("What a row means depends on the way of building, and confusing the two is the mistake that looks "
        "plausible until an image is rendered:", before_list=True)
 d.item("Standing. ", "The design is seen from the side. A column is across in studs and a row is a "
-                     "vertical course counted in plates. A placed part falls to whatever holds it up, so "
-                     "nothing floats.")
+                     "vertical course counted in plates.")
 d.item("Relief. ", "The design is seen face on. A column is across and a row is depth, both in studs, and "
                    "a part's base records how many plates it stands proud of the backdrop.")
 d.body("A brick that overlaps the plate nowhere is parked: drawn and saved, but excluded from the parts "
        "list, the 3D view and every export. That state is derived from where the brick sits rather than "
        "stored as a flag, so it stays true through a save, a reload and a change of page size.")
+d.body("NOTHING FALLS. A placed part stays where it was put, whether or not a frame lies behind it. An "
+       "earlier version settled each part onto whatever was under it, on the reasoning that a builder "
+       "cannot stack a figure in mid-air; what that missed is that this is a plan of a model rather than "
+       "the model, and a designer works out the courses in whatever order suits them. The physical rule "
+       "belongs to the physical build. In a relief a part still takes its base from what is already "
+       "behind it, which is not a fall but how a relief is assembled.")
 
 # ---------------------------------------------------------------- 8
 d.heading("8. The Parts Catalog")
@@ -128,6 +133,13 @@ d.body("Three facts about the library shape that code. A part's first line is it
        "at the top of its body.")
 d.body("A size that no real part has is reported as such. A parts list that claims a part which cannot be "
        "bought is worse than no parts list.")
+d.body("A .parts library extends that catalog at run time. tools/parts_library.py turns a submitted list "
+       "of numbers into one, deriving every field but color and quantity from LDraw; the page merges it "
+       "into the menu, adding sizes it did not have and whole kinds it did not know. Two consequences "
+       "follow. A library may name a part the page's own tables never held, so tools/bundle_parts.py "
+       "reads every library in the repository as well as the page — a part that can be placed but was not "
+       "shipped renders as nothing at all, with no error. And a design records the libraries it was built "
+       "from, so opening it elsewhere reports what is missing rather than quietly offering less.")
 
 # ---------------------------------------------------------------- 9
 d.heading("9. The Local Bridge")
@@ -206,6 +218,13 @@ d.item("PDF. ", "There is no text flow. Word and LibreOffice decide where pages 
 d.body("All three fit a picture inside a box rather than to the page width alone, which caps both "
        "dimensions and never distorts a proportion, and all three place four steps on a page so that the "
        "three formats are one document rather than three layouts.")
+d.body("The parts list is written here too, in two forms: plain text to read, and a BrickLink Wanted List "
+       "as XML to order from. The one thing in that file which cannot be derived is the color. BrickLink "
+       "numbers colors its own way and the numbers do not agree with LDraw — red is 4 to LDraw and 5 to "
+       "BrickLink — and no rule converts between them, so each is recorded in the palette beside the LDraw "
+       "code, read from BrickLink's own guide. A color with no BrickLink number is left out of the export "
+       "and reported. Item numbers need no such table, since BrickLink catalogs basic parts by the design "
+       "number the list already carries.")
 
 # ---------------------------------------------------------------- 13
 d.heading("13. Verifying Changes")

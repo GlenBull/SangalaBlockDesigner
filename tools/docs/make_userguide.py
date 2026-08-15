@@ -24,21 +24,22 @@ d.body("Nothing is placed automatically. Choosing the parts is the work the tool
 d.heading("1. The Screen")
 d.body("The window has four regions, and they carry the same names in all three Sangala applications:",
        before_list=True)
-d.item("Menu Bar. ", "Across the top: Open, Save, Print and Snapshot, with Settings beside them, and "
-                     "3D View and About at the right.")
+d.item("Menu Bar. ", "Across the top: Open, Save and Snapshot, with Settings beside them, and 3D View "
+                     "and About at the right.")
 d.item("Toolbar. ", "Down the left, headed Tools: Select, Part, Erase and Flip.")
 d.item("Workspace. ", "The middle, where the design is built. The plate sits on a cork surface.")
-d.item("Control Panel. ", "Down the right: the color palette, the brick size, the parts list and the "
-                          "snapshots, with the zoom control at the foot.")
+d.item("Control Panel. ", "Down the right: the color palette, the brick size, the parts list, the "
+                          "library and the snapshots, with the zoom control at the foot.")
 d.body("A line above the palette reports what to do next, and the name of the open project appears above "
        "it once a design has been opened or saved.")
 
 # ---------------------------------------------------------------- 2
 d.heading("2. Starting a Design")
-d.body("Open accepts two kinds of file. A Sangala Studio design, ending in .model, is brought in as a "
+d.body("Open accepts three kinds of file. A Sangala Studio design, ending in .model, is brought in as a "
        "frame to build against; the shapes of the Studio design become an outline and nothing else. A "
        "Sangala Blocks design, ending in .block, reopens work already begun, with every brick where it "
-       "was left.")
+       "was left. A parts library, ending in .parts, adds the parts it holds to those the application "
+       "offers, and is described in Section 13.")
 d.body("A design may also be started with no frame at all, by placing bricks on the empty plate.")
 
 # ---------------------------------------------------------------- 3
@@ -56,8 +57,7 @@ d.body("Two controls govern it, both in Settings. Show Frame draws it or hides i
 d.heading("4. Standing Figures and Reliefs")
 d.body("Settings offers two ways of building, and the choice decides what a row means.", before_list=True)
 d.item("Standing Figure. ", "The figure is seen from the side and stacked in courses, studs upward, the "
-                            "way a model is built on a table. A part falls to whatever holds it up, so a "
-                            "brick can never be left floating.")
+                            "way a model is built on a table. A row is a course, counted in plates.")
 d.item("Relief. ", "The parts lie on the plate with their studs toward the viewer, a plate of depth at a "
                    "time, the way a relief is built up from a backdrop. Each part carries a base, which is "
                    "how far it stands proud.")
@@ -83,15 +83,18 @@ d.body("Every size offered corresponds to a part that exists. The design number 
 
 # ---------------------------------------------------------------- 7
 d.heading("7. Color")
-d.body("The palette at the top of the control panel sets the color of the next brick placed. Each color "
-       "carries the official LDraw color code alongside its name — White is 15, Light Bluish Gray is 71 — "
-       "so the color travels with the design number when parts are ordered or when the design is rendered.")
+d.body("The palette at the top of the control panel sets the color of the next brick placed. Each of the "
+       "ten colors carries the official LDraw color code alongside its name — White is 15, Light Bluish "
+       "Gray is 71 — so the color travels with the design number when the design is rendered. Each also "
+       "carries BrickLink's own number for the same color, which is a different number and is what an "
+       "order needs.")
 
 # ---------------------------------------------------------------- 8
 d.heading("8. Placing Bricks")
-d.body("With a part and a color chosen, clicking the workspace places a brick. In a standing figure the "
-       "click chooses the columns and gravity chooses the row. In a relief the click places the part where "
-       "it is put, and its base is taken from whatever it comes to rest on.")
+d.body("With a part and a color chosen, clicking the workspace places a brick, and the brick stays where "
+       "it is put. Nothing falls: a design is a plan of a model rather than the model, so the courses are "
+       "worked out in whatever order suits the designer. In a relief the click places the part where it "
+       "is put in the same way, and its base is taken from whatever is already behind it.")
 d.body("The Select tool moves a brick that is already placed; the Erase tool removes one. Ctrl-Z undoes "
        "the last change and Ctrl-Y restores it, so a misplaced brick costs nothing.")
 
@@ -120,12 +123,30 @@ d.body("3D View shows the design as layers standing off the plate, and the view 
 d.heading("12. The Parts List")
 d.body("The Parts section of the control panel lists every brick in the design — the part, its design "
        "number, its color and the quantity — with the total piece count in its heading. The heading folds "
-       "the list away, since the count is consulted constantly and the list itself only occasionally.")
-d.body("Print writes that list to a text file. It is a file to keep or to send, and it is what another "
-       "person needs in order to obtain the same bricks. Bricks parked on the cork are not counted.")
+       "the list away, since the count is consulted constantly and the list itself only occasionally. "
+       "Bricks parked on the cork are not counted.")
+d.body("Save writes that list to a file, in either of two forms chosen in the Save dialog:", before_list=True)
+d.item("A List to Read (.txt). ", "The parts, their design numbers, their colors and the quantities, as "
+                                  "plain text to keep or to send.")
+d.item("An Order to Place (.xml). ", "A BrickLink Wanted List. It is uploaded whole, once, and BrickLink "
+                                     "then finds sellers who can fill it — so a design of dozens of parts "
+                                     "becomes an order or two, and no number is typed by hand. BrickLink "
+                                     "is owned by LEGO.")
 
 # ---------------------------------------------------------------- 13
-d.heading("13. Snapshots")
+d.heading("13. A Parts Library")
+d.body("A library is the bricks a builder owns or can get at, written as a plain list of design numbers "
+       "and turned into a .parts file. Opening one adds what it holds to the parts the application offers, "
+       "so a design can be planned from bricks that are actually to hand.")
+d.body("A library adds to the menu and never replaces it: nothing already offered disappears, and more "
+       "than one library may be held at a time. A kind of part the menu did not have — a tile, say — "
+       "arrives with its own button on the Part tool.")
+d.body("The Library section of the control panel lists what has been loaded: each part with its design "
+       "number, its color and, where the list gave one, the quantity. That section answers what there is; "
+       "the Parts section above it answers what has been used.")
+
+# ---------------------------------------------------------------- 14
+d.heading("14. Snapshots")
 d.body("Snapshot records a picture of the build as it stands. The pictures collect in the Snapshots "
        "section of the control panel, in the order they were taken, and clicking one opens it full size, "
        "where it can be removed if it is not wanted.")
@@ -134,8 +155,8 @@ d.body("The pictures are drawn by an LDraw renderer rather than captured from th
        "modeled, and no background behind the assembly. Taking a snapshot at the end of each phase of a "
        "build produces the sequence a second builder needs to follow.")
 
-# ---------------------------------------------------------------- 14
-d.heading("14. Saving the Snapshots as a Document")
+# ---------------------------------------------------------------- 15
+d.heading("15. Saving the Snapshots as a Document")
 d.body("The Save menu offers the collected snapshots as a document, and the format is chosen in the Save "
        "dialog itself, from its Save as type list:", before_list=True)
 d.item("Word Document. ", "A .docx file, opened by Microsoft Word.")
@@ -147,8 +168,8 @@ d.body("Each document holds one line naming the project, then each picture in tu
        "nothing about what they are for. Written up as numbered steps they become building instructions; "
        "they are equally a record of a design, a page for a display, or figures for a report.")
 
-# ---------------------------------------------------------------- 15
-d.heading("15. Saving and Reopening a Design")
+# ---------------------------------------------------------------- 16
+d.heading("16. Saving and Reopening a Design")
 d.body("Save writes the whole design as a .block file — every brick with its part, color and position, "
        "the frame it was built against, the page, and the way of building. Reopening it restores the work "
        "exactly. The Save dialog asks where the file should go, and the application reads the file back "
@@ -156,11 +177,12 @@ d.body("Save writes the whole design as a .block file — every brick with its p
 d.body("Everything the application writes is reached from the one Save menu. A project keeps the name it "
        "was opened with: saving a parts list or a set of snapshots does not rename the design.")
 
-# ---------------------------------------------------------------- 16
-d.heading("16. Quick Reference")
+# ---------------------------------------------------------------- 17
+d.heading("17. Quick Reference")
 d.table("Table 1. Where Each Task Is Done",
         ["To do this", "Go here"],
         [["Build against a Studio design", "Open, and choose a .model file"],
+         ["Add the bricks you own", "Open, and choose a .parts file"],
          ["Resize the outline to the figure", "Settings, Frame scale"],
          ["Stack in courses, or build a relief", "Settings, Build"],
          ["Change the plate or sheet", "Settings, Page size"],
@@ -172,7 +194,9 @@ d.table("Table 1. Where Each Task Is Done",
          ["Try a brick without using it", "Place it on the cork beside the plate"],
          ["See the design in three dimensions", "3D View"],
          ["Read the piece count", "Control panel, Parts"],
-         ["Write the parts list to a file", "Print"],
+         ["See what a loaded library holds", "Control panel, Library"],
+         ["Write the parts list to a file", "Save, Parts List"],
+         ["Order the parts", "Save, Parts List, and choose the BrickLink type"],
          ["Record the build so far", "Snapshot"],
          ["Write the snapshots into a document", "Save, Snapshots"],
          ["Keep the design to continue later", "Save, Design"]],
