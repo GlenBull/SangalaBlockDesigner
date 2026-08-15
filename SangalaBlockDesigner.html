@@ -1753,7 +1753,15 @@ function onFrame(nb){             /* is the silhouette behind any of this part's
 }
 function settle(nb){             /* put the part where the mode says it comes to rest */
   if(parked(nb)){ nb.base=0; return nb; }   /* on the cork: no gravity, no frame - it stays put */
-  if(mode==="standing"){ if(!onFrame(nb)) nb.row=landRow(nb); nb.base=0; }
+  /* WITH NO FRAME, NOTHING FALLS. A brick laid against the frame stays where it is put, because the
+     silhouette is what holds it there; anywhere else it falls to what is under it, so a figure
+     cannot be painted in mid-air. That leaves one case with no answer: designing freeform, with no
+     frame imported at all. Everything then fell to the bottom of the plate, which is not a rule so
+     much as the absence of one - Glen, 2026-08-15: "it is just not possible to design freeform
+     without a frame." So an empty frame means free placement, exactly as a frame everywhere would:
+     the builder is the only thing holding a brick up, and that is their business. Import a frame
+     and gravity returns for every cell the silhouette does not cover. */
+  if(mode==="standing"){ if(frameHas.size && !onFrame(nb)) nb.row=landRow(nb); nb.base=0; }
   else nb.base=restingBase(nb);
   return nb;
 }
@@ -1807,7 +1815,9 @@ window.addEventListener("mouseup",()=>{
   const onGround = b.row+rowsOf(b.p) >= Math.round(modelH/vUnit())-0.5;
   say(parked(b) ? b.p.name+" parked on the cork — it is not counted in the parts list."
                 : (mode==="standing"
-                    ? b.p.name+" moved, resting on "+(onGround ? "the ground" : "the course below")+"."
+                    ? (frameHas.size
+                        ? b.p.name+" moved, resting on "+(onGround ? "the ground" : "the course below")+"."
+                        : b.p.name+" moved.")     /* freeform: it rests where it was put */
                     : b.p.name+" moved to base "+plates(b.base)+"."));
 });
 
@@ -1830,9 +1840,11 @@ cv.addEventListener("click",e=>{
   if(tool!=="place") return;
   const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip});
   bricks.push(nb);
-  say(mode==="standing"
-      ? nb.p.name+" placed, resting on "+(landRow(nb)+rowsOf(nb.p)>=Math.round(modelH/vUnit())-0.5 ? "the ground" : "the course below")+"."
-      : nb.p.name+" placed at base "+plates(nb.base)+".");
+  say(mode!=="standing"
+      ? nb.p.name+" placed at base "+plates(nb.base)+"."
+      : (frameHas.size
+          ? nb.p.name+" placed, resting on "+(landRow(nb)+rowsOf(nb.p)>=Math.round(modelH/vUnit())-0.5 ? "the ground" : "the course below")+"."
+          : nb.p.name+" placed."));   /* freeform, with no frame: it stays where it was put */
   draw(); commit();
 });
 /* ---------- Undo (Ctrl-Z): debounced snapshots of the design, restored on demand ----------
