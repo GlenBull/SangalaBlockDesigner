@@ -205,9 +205,16 @@
 
   <!-- (4) RIGHT CONTROL PANEL -->
   <div id="build" class="panel">
+    <!-- Mosaic's project line, in Mosaic's place: the FIRST thing in the control panel, with the
+         running status directly beneath it (SangalaMosaic.html:180-184). It used to sit BELOW the
+         Color heading and swatches, a whole section down, where it read as buried mid-panel - and a
+         line that names the project belongs at the head of the panel, not in the middle of it
+         (Glen, 2026-07-24). Moving it up also matches Mosaic, which the comment here always claimed. -->
+    <div id="projName" class="projline" style="display:none"></div>
+    <div class="hint" id="status">Pick a part from the Toolbar, then click the frame to place it.</div>
+
     <h2 class="marker">Color</h2>
     <div class="swrow" id="swatches"></div>
-    <div class="hint" id="status">Pick a part from the Toolbar, then click the frame to place it.</div>
 
     <!-- BRICK SIZE, in Studio's words and beside the part rather than buried in Settings, which
          is Glen's complaint about where Studio keeps it. A short list cannot hold the part a
@@ -252,7 +259,7 @@
       </div>
     </div>
 
-    <!-- PARTS FOLDS AWAY, AND STARTS FOLDED. Glen, 2026-07-28: the parts list is consulted rarely but
+    <!-- PARTS FOLDS AWAY, AND STARTS FOLDED. Glen, 2026-08-15: the parts list is consulted rarely but
          is tall, so left open it pushes the Snapshots strip - which is looked at constantly - below the
          fold. The disclosure triangle is Studio's (plane list) and Mosaic's (Tile Colors): the mark is
          &#9656; shut, &#9662; open. -->
@@ -288,6 +295,15 @@
 </div>
 
 <!-- left toolbar flyout: Studio's #partmenu pattern -->
+<!-- SAVE OFFERS A CHOICE; IT IS NOT A SECOND BUTTON SOMEWHERE ELSE. Glen, 2026-08-15, on a
+     Save to Word button added down in the Snapshots panel: "I have a concern about scattering
+     multiple save buttons throughout the interface." Studio's Save opens a menu (Save as SVG /
+     Save project) and Mosaic's opens one (Project / Image / Tile List); this is the same menu,
+     so everything this application writes is reached from the one place. -->
+<div id="saveMenu" class="popmenu" style="display:none">
+  <button id="saveDesign" title="Save the whole design so you can keep building later">Design <small>.block</small></button>
+  <button id="saveSnaps" title="Save the snapshots as a Word document">Snapshots <small>.docx</small></button>
+</div>
 <div id="partmenu" class="menu" style="position:fixed;z-index:31;display:none">
   <button data-kind="brick">&#129521; Brick</button>
   <button data-kind="plate">&#9644; Plate</button>
@@ -1845,7 +1861,16 @@ window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-
    What was here was an <a download>: no dialog, no chosen folder, no name, and no way to know
    whether the bytes arrived. */
 let docName="";
-function setDocName(n){ docName = n ? String(n).replace(/\.[A-Za-z0-9]+$/,"").trim() : ""; }
+/* Naming the project SHOWS it, exactly as Mosaic does (SangalaMosaic.html:627-630): the panel line
+   reads "Project: <name>" and the window title carries it too, so what a save will be called can be
+   read off the page instead of discovered in a dialog. */
+function setDocName(n){
+  docName = n ? String(n).replace(/\.[A-Za-z0-9]+$/,"").trim() : "";
+  const el=$("projName");
+  if(el){ el.textContent = docName ? "Project: "+docName : "";
+          el.style.display = docName ? "" : "none"; }
+  document.title = docName ? docName+" — Sangala Blocks" : "Sangala Blocks";
+}
 function docFileName(ext){ return (docName || "sangala-blocks") + ext; }
 /* Read the file back and confirm the bytes landed. Choosing a name in the Save dialog CREATES the
    file immediately, at zero bytes; the contents only arrive when close() completes. If anything
@@ -1861,8 +1886,14 @@ async function writeShortfall(handle, expected){
          + " bytes. Nothing here is lost: your design is still open. Try Save again, and to somewhere local if that folder is on a network or a synced drive.";
   }catch(e){ return ""; }        // cannot read it back: say nothing rather than cry wolf
 }
-// native Save As (choose folder + name) with plain-download fallback; returns saved name or null
-async function saveBlob(blob,suggestedName,desc,ext){
+/* native Save As (choose folder + name) with plain-download fallback; returns saved name or null.
+   `adopt` says whether this save renames the PROJECT, and only saving the design does. Every save
+   used to adopt, so a derived file quietly took the project over: saving the parts list renamed the
+   project "Crane parts", saving the snapshots renamed it "Crane snapshots", and a file once saved as
+   "Test" held the name for good - which is how a design opened as "Crane (Relief 8)" came to export a
+   document headed "Test" (Glen, 2026-08-15: "shouldn't we honor the user's selection of project name
+   rather than making up a different name?"). The project is named by opening one or saving one. */
+async function saveBlob(blob,suggestedName,desc,ext,adopt){
   if(window.showSaveFilePicker){
     // A type of "application/octet-stream" makes the dialog offer every extension that MIME owns, so
     // the filter reads "*.block;*.com;*.exe;*.bin" - a save dialog inviting you to write an executable.
@@ -1872,7 +1903,9 @@ async function saveBlob(blob,suggestedName,desc,ext){
     catch(e){ if(e&&e.name==="AbortError")return null; say("Could not open Save dialog: "+e.message); return null; }
     try{ const ws=await h.createWritable(); await ws.write(blob); await ws.close();
       const bad=await writeShortfall(h, blob.size); if(bad){ say(bad); return null; }
-      setDocName(h.name);           // saving under a new name adopts it for next time
+      /* A save NAMES an unnamed project; it does not RENAME one that already has a name. Typing
+         "Test" into the dialog names that file, not the crane you imported. */
+      if(adopt && !docName) setDocName(h.name);
       return h.name; }
     catch(e){ say("Save failed: "+e.message); return null; }
   }
@@ -1893,7 +1926,13 @@ function designJSON(){ return (
      baseplate, not on a Letter page it overflows" */
   /* placeX/placeY, for the same reason pageSize is here: the design's position on the plate is not
      in its polygons, so without it a saved design reopens in the corner. */
-  JSON.stringify({sangala:"block",version:1,stud:STUD,plate:PLATE,mode:mode,pageSize:pageKind,frameScale:frameScale,placeX:placeX,placeY:placeY,guide:guideRaw,
+  /* project: THE NAME THE DESIGN CAME IN WITH. A Studio design imported as a frame brought its name
+     with it, but the name lived only in a variable - so the first save under any other file name
+     destroyed it, and reopening recovered only the file name. A design begun as "Crane (Relief 8)"
+     and saved once as "Test.block" was called Test from then on, in every later export. The name now
+     travels in the file, so the project keeps the name it was imported under whatever a given file
+     happens to be called (Glen, 2026-08-15). */
+  JSON.stringify({sangala:"block",version:1,project:docName,stud:STUD,plate:PLATE,mode:mode,pageSize:pageKind,frameScale:frameScale,placeX:placeX,placeY:placeY,guide:guideRaw,
     /* d is the footprint's DEPTH in studs and base is where the brick sits in plates. Both were
        missing: the format predates the relief rebuild, so a saved design reopened one stud deep
        with every brick on the plate. A file written before this has neither, and the loader
@@ -1901,9 +1940,26 @@ function designJSON(){ return (
     bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,d:b.p.d||1,h:b.p.h,shape:b.p.shape,
                            color:COLORS[b.colorIdx].code,col:b.col,row:b.row,base:b.base||0,
                            flip:b.flip}))},null,1)); }
-$("bSave").onclick=async()=>{
+/* Save opens the menu; the menu items do the saving. Cloned from Mosaic's saveMenu, including the
+   disable-what-cannot-be-saved rule: Instructions is dead until a snapshot exists. */
+function closeSaveMenu(){ $("saveMenu").style.display="none"; }
+$("bSave").onclick=(e)=>{
+  e.stopPropagation();
+  if($("saveMenu").style.display==="block"){ closeSaveMenu(); return; }
+  const r=$("bSave").getBoundingClientRect();
+  $("saveMenu").style.left=Math.round(r.left)+"px";
+  $("saveMenu").style.top=Math.round(r.bottom+5)+"px";
+  $("saveSnaps").disabled=!snaps.length;         /* nothing photographed, nothing to export */
+  $("saveMenu").style.display="block";
+};
+document.addEventListener("click",(e)=>{
+  if($("saveMenu").style.display==="block" && !$("saveMenu").contains(e.target)
+     && !$("bSave").contains(e.target)) closeSaveMenu();
+});
+$("saveDesign").onclick=async()=>{
+  closeSaveMenu();
   const name=await saveBlob(new Blob([designJSON()],{type:"application/json"}),
-                            docFileName(".block"), "Sangala Blocks design", ".block");
+                            docFileName(".block"), "Sangala Blocks design", ".block", true);
   if(name) say("Saved as "+name+".");
 };
 $("bPrint").onclick=async()=>{
@@ -2012,6 +2068,170 @@ $("bSnap").onclick=async()=>{
     say("Snapshot "+snaps.length+" kept.");
   }catch(e){ say("Snapshot failed: "+e.message+" - is Sangala Blocks running from its own icon?"); }
 };
+
+/* ---------- The queue becomes a Word document the student writes into --------------------------
+   Glen's specification: "A series of snapshots will be saved in a queue. Students will be able to
+   save the completed list of images in a Word file, where written instructions should be added."
+
+   IT EXPORTS PICTURES AND SAYS NOTHING ABOUT WHAT THEY ARE FOR. Glen, 2026-08-15, on a first
+   version that called the file Instructions and opened by telling the reader to write one
+   instruction per step: "you're making assumptions about how this feature will be used. You should
+   let the user decide." Writing them up as build steps is one use; a record of a design, a page for
+   a display, a set of figures for a report are others. So the document names its source and stops:
+   the pictures, the empty lines between them, and no instruction about what to do with either.
+
+   A .docx is a ZIP of XML, and a single-file page has no library to build one with - so the ZIP is
+   written here, by hand. Entries are STORED (method 0, no compression), which is legal and which
+   costs nothing worth having: the renders are PNG and already compressed. The one part that must be
+   right is the CRC of each entry; Word rejects the file outright if it disagrees.
+
+   THE BRIDGE IS NOT INVOLVED. It renders, and knows nothing else - see the Snapshot note above -
+   so the Mac and Chromebook versions of it need no change to gain this. */
+const DOCX_MIME="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+/* A STEP PICTURE IS ABOUT A FIFTH OF THE PAGE, and the HEIGHT is what enforces it. Glen, 2026-08-15,
+   on the first real booklet: "the images take an entire page; students will have to resize every
+   image." Fitting to the 5.5 in WIDTH alone did that - the renders are portrait, so a tall picture
+   grew to 7.3 in and swallowed the page. Fitting inside a BOX caps both directions: the text column
+   is 9 in tall, so 1.8 in is a fifth of it, and about five steps now land on a page with room to
+   write under each. Whichever edge binds first decides the scale; the aspect ratio is never
+   distorted. */
+const EMU_IN=914400, DOC_IMG_W_IN=5.5, DOC_IMG_H_IN=1.8;
+const CRC_T=(()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; }
+  return t; })();
+function crc32(u8){ let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) c = CRC_T[(c^u8[i])&0xFF] ^ (c>>>8);
+  return (c^0xFFFFFFFF)>>>0; }
+function zipStore(entries){          /* [{name, bytes}] -> Blob. Local headers, central directory, EOCD. */
+  const enc=new TextEncoder(), parts=[], central=[]; let off=0;
+  const d=new Date();
+  const tm=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF;
+  const dy=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;
+  entries.forEach(e=>{
+    const nm=enc.encode(e.name), crc=crc32(e.bytes), sz=e.bytes.length;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0,true);
+    lh.setUint16(8,0,true); lh.setUint16(10,tm,true); lh.setUint16(12,dy,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,sz,true); lh.setUint32(22,sz,true);
+    lh.setUint16(26,nm.length,true); lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer), nm, e.bytes);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true);
+    ch.setUint16(8,0,true); ch.setUint16(10,0,true); ch.setUint16(12,tm,true); ch.setUint16(14,dy,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,sz,true); ch.setUint32(24,sz,true);
+    ch.setUint16(28,nm.length,true); ch.setUint16(30,0,true); ch.setUint16(32,0,true);
+    ch.setUint16(34,0,true); ch.setUint16(36,0,true); ch.setUint32(38,0,true);
+    ch.setUint32(42,off,true);       /* offset of THIS entry's local header, before it is advanced */
+    central.push(new Uint8Array(ch.buffer), nm);
+    off += 30+nm.length+sz;
+  });
+  let cdSize=0; central.forEach(b=>cdSize+=b.length);
+  const eo=new DataView(new ArrayBuffer(22));
+  eo.setUint32(0,0x06054b50,true); eo.setUint16(4,0,true); eo.setUint16(6,0,true);
+  eo.setUint16(8,entries.length,true); eo.setUint16(10,entries.length,true);
+  eo.setUint32(12,cdSize,true); eo.setUint32(16,off,true); eo.setUint16(20,0,true);
+  return new Blob([...parts,...central,new Uint8Array(eo.buffer)],{type:DOCX_MIME});
+}
+const xesc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+/* Times New Roman 11 pt, Letter, 1 in margins, page number bottom center - the house standard, so a
+   student's booklet does not have to be reformatted to sit beside everything else. */
+function docxPara(text,{bold=false,center=false,size=22,after=100}={}){
+  return '<w:p><w:pPr>'+(center?'<w:jc w:val="center"/>':'')
+    +'<w:spacing w:before="0" w:after="'+after+'"/></w:pPr>'
+    +(text ? '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+             +(bold?'<w:b/>':'')+'<w:sz w:val="'+size+'"/><w:szCs w:val="'+size+'"/></w:rPr>'
+             +'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r>' : '')
+    +'</w:p>';
+}
+function docxImage(n,rid,cx,cy){
+  return '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="60"/></w:pPr>'
+    +'<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'
+    +'<wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="'+n+'" name="Step '+n+'"/>'
+    +'<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    +'<pic:pic><pic:nvPicPr><pic:cNvPr id="'+n+'" name="step'+n+'"/><pic:cNvPicPr/></pic:nvPicPr>'
+    +'<pic:blipFill><a:blip r:embed="'+rid+'"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+    +'<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm>'
+    +'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>'
+    +'</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+}
+async function snapsToDocx(){
+  const enc=new TextEncoder(), XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  /* Natural pixel size decides the printed HEIGHT: the width is fixed, so a render of any aspect
+     ratio keeps its proportions instead of being squashed to a guess. */
+  const dims=await Promise.all(snaps.map(s=>new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>res({w:im.naturalWidth||1000,h:im.naturalHeight||800});
+    im.onerror=()=>res({w:1000,h:800});
+    im.src=s.url; })));
+  const bytes=await Promise.all(snaps.map(s=>s.blob.arrayBuffer().then(b=>new Uint8Array(b))));
+  const ext=s=>(s.blob.type==="image/jpeg"?"jpg":"png");
+  const title=(docName||"Sangala Blocks design").replace(/\.[^.]+$/,"");
+  /* One opening line, naming the source and the project. There was a bold title above it carrying
+     the same name; Glen, 2026-08-15: "we can remove the duplicate name." */
+  let body=docxPara('Images exported from Sangala Blocks "'+title+'".',{after:200});
+  const rels=[], types=[], media=[];
+  snaps.forEach((s,i)=>{
+    const n=i+1, rid="rId"+n;
+    const scale=Math.min(EMU_IN*DOC_IMG_W_IN/dims[i].w, EMU_IN*DOC_IMG_H_IN/dims[i].h);
+    const cx=Math.round(dims[i].w*scale), cy=Math.round(dims[i].h*scale);
+    media.push({name:"word/media/step"+n+"."+ext(s), bytes:bytes[i]});
+    rels.push('<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/step'+n+'.'+ext(s)+'"/>');
+    body += docxPara("Step "+n,{bold:true,after:60}) + docxImage(n,rid,cx,cy) + docxPara("",{after:240});
+  });
+  const fid="rId"+(snaps.length+1);
+  rels.push('<Relationship Id="'+fid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>');
+  const doc=XML+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    +' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    +' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+    +' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    +' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>'+body
+    +'<w:sectPr><w:footerReference w:type="default" r:id="'+fid+'"/>'
+    +'<w:pgSz w:w="12240" w:h="15840"/>'
+    +'<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>'
+    +'</w:sectPr></w:body></w:document>';
+  const ftr=XML+'<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    +'<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+    +'<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+    +'<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+    +'<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r>'
+    +'<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
+  const ct=XML+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    +'<Default Extension="xml" ContentType="application/xml"/>'
+    +'<Default Extension="png" ContentType="image/png"/>'
+    +'<Default Extension="jpg" ContentType="image/jpeg"/>'
+    +'<Override PartName="/word/document.xml" ContentType="'+DOCX_MIME+'.main+xml"/>'
+    +'<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+    +'</Types>';
+  const root=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    +'</Relationships>';
+  const drels=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +rels.join("")+'</Relationships>';
+  const T=s=>enc.encode(s);
+  /* [Content_Types].xml must be the FIRST entry - some readers, Word included, look for it there. */
+  return zipStore([{name:"[Content_Types].xml",bytes:T(ct)},
+                   {name:"_rels/.rels",bytes:T(root)},
+                   {name:"word/document.xml",bytes:T(doc)},
+                   {name:"word/footer1.xml",bytes:T(ftr)},
+                   {name:"word/_rels/document.xml.rels",bytes:T(drels)},
+                   ...media]);
+}
+$("saveSnaps").onclick=async()=>{
+  if($("saveSnaps").disabled) return;
+  closeSaveMenu();
+  if(!snaps.length){ say("No snapshots yet - click Snapshot to record one."); return; }
+  say("Building the Word document...");
+  try{
+    const blob=await snapsToDocx();
+    const name=await saveBlob(blob, docFileName(" snapshots.docx"), "Word document", ".docx");
+    /* The confirmation names the PROJECT, not the file, and it is repeated beside the thumbnails.
+       In the status line alone it sat far above the snapshots it was about - buried, and separated
+       from the objects it referred to (Glen, 2026-07-24). */
+    if(name){ const msg='Images exported from Sangala Blocks "'+(docName||"Untitled")+'" project.';
+      say(msg); $("snapNote").textContent=msg; }
+  }catch(e){ say("Could not build the document: "+e.message); }
+};
 /* The button is only offered when the bridge is behind the page. Opened as a file instead, the page
    still designs and saves; it simply cannot start a renderer, and says so rather than failing. */
 (async()=>{
@@ -2076,12 +2296,20 @@ function loadModel(j){
   /* A FRESH HISTORY AT THE LOADED STATE, as Studio starts one at SangalaStudio.html:1743 - undo
      walks back to the design as imported and stops there, never into whatever preceded it. */
   hist=[]; redoStack=[]; commit();
-  say("Frame brought in: "+g.length+" outlines, at full size.");
+  /* Say the NAME it came in under, not just the count: that name is now the project's, and it is
+     what every later save will offer. Silently adopting it left no way to tell what the project
+     was called until a save dialog appeared with an unexpected name in it. */
+  say('Frame brought in from "'+(docName||"an unnamed design")+'": '+g.length
+      +" outlines, at full size. Saves will be offered under that name.");
 }
 $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; setDocName(f.name); const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer or Studio file");
+    /* The project's OWN name wins over the file's. A design imported from Studio as "Crane
+       (Relief 8)" and saved as "Test.block" is still the crane. A file written before the name was
+       stored has no `project`, and its file name is the best that is known of it. */
+    if(d.project) setDocName(d.project);
     mode=d.mode==="relief"?"relief":"standing"; $("selMode").value=mode;
     if(d.pageSize){ $("pagesize").value=d.pageSize; setPageSize(d.pageSize); }   /* the author's page, restored */
     frameScale=+d.frameScale||1; $("frScale").value=Math.round(frameScale*100);
