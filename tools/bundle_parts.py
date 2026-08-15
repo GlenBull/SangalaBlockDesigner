@@ -13,6 +13,7 @@ THE PART NUMBERS ARE READ OUT OF THE PAGE, never listed here. A number typed int
 that stops matching the day a part is added to the menu, and the failure is silent: the brick simply
 does not appear in the render.
 """
+import json
 import os
 import re
 import subprocess
@@ -37,6 +38,33 @@ EXTRAS = ["LDConfig.ldr", "CAlicense.txt", "CAreadme.txt", "Readme.txt"]
 # measured identical, and 9.6 MB is a small price for a render that cannot silently drift.
 # `--verify` is what proved it and is the gate if this is ever narrowed again.
 SHIP_ALL_PRIMITIVES = True
+
+
+def library_ids():
+    """Numbers named by any .parts library in the repository.
+
+    THE MENU IS NO LONGER THE WHOLE ANSWER. A library adds parts the page's own tables never held -
+    the starter set's tile is the first - and a part that is placed but not bundled renders as
+    nothing at all, without an error. So every library that travels with the application is read
+    here too, and its parts ship with it.
+    """
+    ids = set()
+    for folder in ("Projects", "Parts"):
+        d = os.path.join(REPO, folder)
+        if not os.path.isdir(d):
+            continue
+        for n in sorted(os.listdir(d)):
+            if not n.lower().endswith(".parts"):
+                continue
+            try:
+                lib = json.load(open(os.path.join(d, n), encoding="utf-8"))
+            except Exception as e:
+                print("could not read %s: %s" % (n, e))
+                continue
+            for p in lib.get("parts", []):
+                if p.get("id"):
+                    ids.add(str(p["id"]))
+    return ids
 
 
 def part_ids():
@@ -141,7 +169,9 @@ def main(argv):
         i = argv.index("--verify")
         root = argv[i + 1] if len(argv) > i + 1 else ROOT
         return verify(root)
-    ids = part_ids()
+    menu = part_ids()
+    lib = library_ids()
+    ids = sorted(set(menu) | lib)
     files, missing = closure(ids)
     # only the PARTS come from the closure; every primitive ships (see SHIP_ALL_PRIMITIVES above)
     parts = sorted(p for p in files.values()
@@ -155,7 +185,9 @@ def main(argv):
         if os.path.exists(p):
             paths.append(p)
     size = sum(os.path.getsize(p) for p in paths)
-    print("part numbers in the page: %d" % len(ids))
+    print("part numbers in the page: %d" % len(menu))
+    print("added by .parts libraries: %d  (%s)"
+          % (len(lib - set(menu)), ", ".join(sorted(lib - set(menu))) or "none"))
     print("parts needed to draw them: %d  (the library holds 24,591)" % len(parts))
     print("primitives, all of them:   %d" % len(prims))
     print("plus library files:        %s" % ", ".join(EXTRAS))
