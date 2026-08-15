@@ -1672,8 +1672,55 @@ function hit(c){                 /* the topmost brick under the pointer */
   return best;
 }
 const plates = n => n+(n===1?" plate":" plates");
+
+/* ---------- move a placed brick: pick it up with Select and drag it ----------
+   The other half of parking on the cork (Glen, 2026-08-14): "I could quickly try two or three
+   bricks for fit by dragging them in and out of the workspace." Until now nothing moved once
+   placed - mousedown handled panning alone, while the Select tool's status line has been promising
+   "Select / move" all along.
+   Dropped INSIDE the plate a brick settles exactly as a newly placed one does, and dropped outside
+   it parks. That falls out of `parked` being derived from position rather than stored: the drop
+   just calls settle() and the right thing happens.
+   The brick is lifted OUT of the array before settling, or it would find itself in its own columns
+   and come to rest on top of itself - it would never move down again. */
+let moveDrag=null;
+cv.addEventListener("mousedown",(e)=>{
+  if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
+  if(tool!=="select") return;
+  const c=cell(e), i=hit(c);
+  if(i<0) return;
+  if(carries(bricks[i])){ say("That brick is holding another one up — move the one above it first."); return; }
+  const b=bricks[i];
+  moveDrag={i:i, dcol:c.col-b.col, drow:c.row-b.row, from:{col:b.col,row:b.row,base:b.base}, moved:false};
+  cv.style.cursor="grabbing";
+  e.preventDefault();
+});
+window.addEventListener("mousemove",(e)=>{
+  if(!moveDrag) return;
+  const c=cell(e), b=bricks[moveDrag.i];
+  const col=c.col-moveDrag.dcol, row=c.row-moveDrag.drow;
+  if(col===b.col && row===b.row) return;
+  b.col=col; b.row=row; moveDrag.moved=true; draw();
+});
+window.addEventListener("mouseup",()=>{
+  if(!moveDrag) return;
+  const md=moveDrag; moveDrag=null; cv.style.cursor="default";
+  const b=bricks[md.i];
+  if(!md.moved){ return; }                       /* a press that never moved is a selection, not a move */
+  bricks.splice(md.i,1); settle(b); bricks.push(b);
+  suppressClick=true;                            /* the click this drag ends on must not place or erase */
+  draw(); bom(); commit();
+  /* Read the answer off where it CAME TO REST, not off landRow: the brick is back in the array by
+     now, so landRow would find it in its own columns and report the course below its own top. */
+  const onGround = b.row+rowsOf(b.p) >= Math.round(modelH/vUnit())-0.5;
+  say(parked(b) ? b.p.name+" parked on the cork — it is not counted in the parts list."
+                : (mode==="standing"
+                    ? b.p.name+" moved, resting on "+(onGround ? "the ground" : "the course below")+"."
+                    : b.p.name+" moved to base "+plates(b.base)+"."));
+});
+
 cv.addEventListener("mousemove",e=>{
-  if(panDrag) return;                                      /* panning, not building */
+  if(panDrag || moveDrag) return;                          /* panning or moving, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
   const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip}); draw();
