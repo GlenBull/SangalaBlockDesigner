@@ -176,7 +176,6 @@
   <div class="tools">
     <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, a design you saved (.block), or a parts library (.parts)"><span class="glyph">&#128194;</span><small>Open</small></button>
     <button class="tbtn" id="bSave" title="Save your design (.block)"><span class="glyph">&#128190;</span><small>Save</small></button>
-    <button class="tbtn" id="bPrint" title="The parts list &mdash; every brick used, with its design number. Save it as a list to read (.txt) or as a BrickLink Wanted List to order from (.xml), chosen in the Save dialog"><span class="glyph">&#128424;&#65039;</span><small>Print</small></button>
     <button class="tbtn" id="bSnap" title="Snapshot: keep a picture of the build as it stands now, drawn the way LEGO documentation draws it"><span class="glyph">&#128247;</span><small>Snapshot</small></button>
     <button class="tbtn" id="bSettings" title="Setup: what the workspace shows &mdash; click to show or hide"><span class="glyph">&#9881;&#65039;</span><small>Settings</small></button>
   </div>
@@ -275,6 +274,20 @@
         <div class="hint" id="total"></div>
       </div>
     </div>
+    <!-- WHAT THE LOADED LIBRARY HOLDS. Glen, having opened the starter set: "how can I see what is
+         in the library?" - and he could not: the only sign of it was a line in the status bar and a
+         new button on the Part flyout. The Parts section above is the DESIGN's bill of materials;
+         this is the collection it is being built from. Same disclosure control, same marks. -->
+    <div id="libpanel" style="margin-top:.8rem;border-top:1px solid #d8c4a0;padding-top:.6rem;display:none">
+      <h2 class="marker" id="libhead" title="Hide the library"
+          style="margin-top:0;cursor:pointer;user-select:none">
+        <span id="libtog" style="color:#8a7350;font-size:.8rem;margin-right:.3rem">&#9662;</span>Library<!--
+     --><span id="libcount" style="font-family:inherit;font-size:.82rem;color:#8a7350"></span></h2>
+      <div id="libbody">
+        <div class="hint" id="libnote" style="margin-top:0"></div>
+        <table class="bom" id="libtable"><tbody></tbody></table>
+      </div>
+    </div>
     <!-- THE SNAPSHOT QUEUE. Glen's specification: "A series of snapshots will be saved in a queue.
          Students will be able to save the completed list of images in a Word file, where written
          instructions should be added." So the queue is a holding place, not a document: the pictures
@@ -308,6 +321,11 @@
        items reading "Snapshots" differing only in a small grey extension is a menu that has to be
        read twice. -->
   <button id="saveSnaps" title="Save the snapshots as a document - Word, PDF or OpenDocument, chosen in the Save dialog">Snapshots <small>.docx / .pdf / .odt</small></button>
+  <!-- THE PARTS LIST BELONGS HERE, not on a button of its own. It was on a Print button that does
+       not print - it writes a file - which made it a second Save (Glen, 2026-08-15: "Why Print?
+       Should this be under the Save menu?"). Mosaic had already settled it: its menu is Project /
+       Image / Tile List, with the bill of materials as a Save item. This is the same three. -->
+  <button id="savePartsList" title="Save the parts list - a list to read (.txt) or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .xml</small></button>
 </div>
 <div id="partmenu" class="menu" style="position:fixed;z-index:31;display:none">
   <button data-kind="brick">&#129521; Brick</button>
@@ -1994,6 +2012,7 @@ $("bSave").onclick=(e)=>{
   $("saveMenu").style.left=Math.round(r.left)+"px";
   $("saveMenu").style.top=Math.round(r.bottom+5)+"px";
   $("saveSnaps").disabled=!snaps.length;         /* nothing photographed, nothing to export */
+  $("savePartsList").disabled=!bricks.filter(b=>!parked(b)).length;   /* an empty plate lists nothing */
   $("saveMenu").style.display="block";
 };
 document.addEventListener("click",(e)=>{
@@ -2038,9 +2057,11 @@ function partsListXml(){
   }).join("");
   return {xml:"<INVENTORY>\n"+items+"</INVENTORY>\n", skipped:skipped};
 }
-$("bPrint").onclick=async()=>{
+$("savePartsList").onclick=async()=>{
   /* The parts list is a file the student keeps, so it chooses its place like the design does. The
      total counts the DESIGN, not candidates parked on the cork - the same rule the panel follows. */
+  if($("savePartsList").disabled) return;
+  closeSaveMenu();
   if(!bricks.filter(b=>!parked(b)).length){ say("There is nothing on the plate to list yet."); return; }
   let note="";
   const name=await saveChoice(docFileName(" parts"),
@@ -2606,6 +2627,36 @@ function loadModel(j){
 const KIND_MARK = {brick:"🧱", plate:"▬", slope:"◺", invslope:"◹",
                    round:"⬤", cone:"🔺", wedge:"◣", tile:"▭"};
 let libraries = [];                      /* the names of the libraries loaded, for the .block file */
+let libParts = [];                       /* what those libraries hold, for the Library section */
+let libOpen = true;                      /* opened when a library is loaded: the point is to be seen */
+/* The library's own contents, which is a different question from the design's bill of materials:
+   Parts above answers "what have I used", this answers "what have I got". Where a part carries a
+   quantity the list is an inventory of bricks in hand; where it does not, it is simply the set of
+   shapes the application now offers. */
+function drawLibrary(){
+  const rows = libParts;
+  document.querySelector("#libtable tbody").innerHTML =
+    (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
+    rows.map(p=>{
+      const c = COLORS.find(x=>x.code===p.colorCode);
+      return "<tr><td>"+(p.name||p.id)+"<br><span class='dn'>Design "+p.id+"</span></td>"
+        +"<td>"+(c ? "<span class='chip' style='background:"+c.hex+"'></span>" : "")
+        +(p.color||"&mdash;")+"</td>"
+        +"<td class='q'>"+(typeof p.qty==="number" ? p.qty : "&mdash;")+"</td></tr>";
+    }).join("");
+  const pieces = rows.reduce((n,p)=>n+(p.qty||0), 0);
+  $("libcount").textContent = rows.length
+    ? " · "+rows.length+(rows.length===1?" part":" parts")+(pieces? ", "+pieces+" pieces":"") : "";
+  $("libnote").textContent = libraries.length
+    ? (libraries.length===1 ? libraries[0] : libraries.join(", "))
+      + (pieces ? "" : " · no quantities given, so this is the set of shapes offered rather than an inventory")
+    : "";
+  $("libpanel").style.display = rows.length ? "" : "none";
+  $("libbody").style.display = libOpen ? "" : "none";
+  $("libtog").innerHTML = libOpen ? "&#9662;" : "&#9656;";
+  $("libhead").title = libOpen ? "Hide the library" : "Show the library";
+}
+$("libhead").onclick=()=>{ libOpen=!libOpen; drawLibrary(); };
 function addKindButton(kind, label){
   const menu = $("partmenu");
   if(menu.querySelector('button[data-kind="'+kind+'"]')) return;
@@ -2637,6 +2688,13 @@ function loadParts(lib, fileName){
   });
   const name = lib.name || (fileName||"").replace(/\.[^.]+$/,"") || "a library";
   if(libraries.indexOf(name) < 0) libraries.push(name);
+  /* EVERYTHING THE LIBRARY HOLDS IS LISTED, including the parts the menu already offered. A student
+     who owns 24 red 1 x 2 bricks needs to see them whether or not this application already knew the
+     shape; "14 already offered" is a fact about the MENU, not about the collection. */
+  (lib.parts||[]).forEach(p=>{ if(!libParts.some(q=>q.id===p.id && q.colorCode===p.colorCode))
+                                 libParts.push(p); });
+  libOpen = true;
+  drawLibrary();
   const pieces = (lib.parts||[]).reduce((n,p)=>n+(p.qty||0), 0);
   say('Library "'+name+'" loaded: '+added.length+" part"+(added.length===1?"":"s")+" added to the menu"
       + (already.length ? ", "+already.length+" already offered" : "")
