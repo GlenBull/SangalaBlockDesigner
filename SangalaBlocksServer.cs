@@ -36,9 +36,11 @@ namespace SangalaBlocksApp
         const int PORT_LO = 8830, PORT_HI = 8850;
 
         // ---------------------------------------------------------------- LDView
-        // Where the renderer might be. The first entry is where it will LIVE once the kit ships it
-        // beside the program; the Dropbox copy is the one on Glen's machine today, so the feature
-        // can be tested before anything is bundled.
+        // The renderer travels WITH the program, in an LDView folder beside it. It used to be found
+        // in a folder on Glen's own machine as well, which is how a feature comes to work for its
+        // author and nobody else; that fallback is gone, so a copy of this application either
+        // carries what it needs or says plainly that it does not. An installed LDView is still
+        // accepted, for anyone who already has one.
         static string FindLDView()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -46,25 +48,23 @@ namespace SangalaBlocksApp
             {
                 Path.Combine(baseDir, "LDView", "LDView64.exe"),
                 Path.Combine(baseDir, "LDView", "LDView.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LDView", "LDView64.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                             @"UVa Lab School Dropbox\AI Sandbox\Design through Making\_Drafts\Working\LDView\LDView64.exe")
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LDView", "LDView64.exe")
             };
             foreach (var c in candidates) if (File.Exists(c)) return c;
             return null;
         }
 
-        // The parts library. Only 146 files of it are ever touched by the parts this application
-        // offers (measured 2026-08-15, 136 KB), so the kit ships that subset rather than the 518 MB
-        // library; the repository copy is the fallback while the subset is being cut.
+        // The parts library, in LDraw\ldraw beside the program. Only the parts this application can
+        // actually place are shipped - 150 files and 224 KB, against the full library's 518 MB - and
+        // tools/bundle_parts.py is what works out that closure and tracks it. Anyone who has
+        // unzipped the whole library over the same folder simply has more than is needed.
         static string FindLDrawDir()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             string[] candidates =
             {
-                Path.Combine(baseDir, "ldraw"),
                 Path.Combine(baseDir, "LDraw", "ldraw"),
-                @"D:\Code Projects\Block Tools\LDraw\ldraw"
+                Path.Combine(baseDir, "ldraw")
             };
             // TEST FOR THE PARTS, NOT FOR THE FOLDER. Windows ignores case, so "ldraw" beside the
             // program matched the repository's own `LDraw` folder - which CONTAINS the library
