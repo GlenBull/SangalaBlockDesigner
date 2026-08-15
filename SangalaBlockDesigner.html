@@ -922,7 +922,8 @@ function swatches(){
 }
 function tally(){
   const m=new Map();
-  bricks.forEach(b=>{const c=COLORS[b.colorIdx],k=b.p.id+"|"+c.code;
+  bricks.forEach(b=>{ if(parked(b)) return;   /* parked on the cork: a candidate, not a part */
+    const c=COLORS[b.colorIdx],k=b.p.id+"|"+c.code;
     if(!m.has(k))m.set(k,{p:b.p,col:c,n:0}); m.get(k).n++;});
   return [...m.values()].sort((x,y)=>x.p.name.localeCompare(y.p.name)||x.col.name.localeCompare(y.col.name));
 }
@@ -933,8 +934,11 @@ function bom(){
     rows.map(r=>"<tr><td>"+r.p.name+"<br><span class='dn'>Design "+r.p.id+"</span></td>"+
       "<td><span class='chip' style='background:"+r.col.hex+"'></span>"+r.col.name+"</td>"+
       "<td class='q'>"+r.n+"</td></tr>").join("");
+  /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
+  const park=bricks.filter(parked).length, built=bricks.length-park;
   $("total").textContent = bricks.length
-    ? bricks.length+(bricks.length===1?" piece":" pieces")+" \u00b7 "+rows.length+" distinct"
+    ? (built ? built+(built===1?" piece":" pieces")+" \u00b7 "+rows.length+" distinct" : "Nothing placed on the plate yet")
+      + (park ? " \u00b7 "+park+" parked on the cork" : "")
     : "Nothing placed yet.";
 }
 
@@ -1334,6 +1338,7 @@ function bricksToTris(){
     }
   };
   bricks.forEach(b=>{
+    if(parked(b)) return;        /* candidates on the cork are not part of the model, so not in 3D or the STL */
     const p=b.p, d=p.d||1, t=thick(p), mine=[], vu=vUnit(), rws=rowsOf(p);
     const x0=b.col*STUD, x1=(b.col+p.w)*STUD;
     const z1=H-b.row*vu, z0=H-(b.row+rws)*vu;
@@ -1606,6 +1611,20 @@ function buildFrameTop(){
 
 const thick = p => p.h||1;
 const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+rowsOf(b.p)});
+/* PARKED: a brick put down on the cork OUTSIDE the plate. Glen, 2026-08-14: "It would be helpful to
+   be able to place bricks on the corkboard outside the workspace... I could quickly try two or
+   three bricks for fit." Studio settled what that means and this follows it - its canvas is "a
+   useful staging area: components can be parked there while the main composition is assembled",
+   and objects outside the page are saved with the file but never printed or cut. So a parked brick
+   is drawn and saved, and is left out of the parts list, the 3D view and any export: it is a
+   candidate, not part of the design.
+   Derived from WHERE IT SITS rather than stored as a flag, so it stays true through save, reload
+   and a change of page size, and so dragging one in will settle it with no bookkeeping. A brick
+   overlapping the plate at all counts as ON it - a half-parked brick would be neither. */
+function parked(b){
+  const f=foot(b), cols=Math.round(modelW/STUD), rows=Math.round(modelH/vUnit());
+  return f.x1<=0 || f.x0>=cols || f.y1<=0 || f.y0>=rows;
+}
 function overlaps(a,b){ const A=foot(a), B=foot(b);
   return A.x0<B.x1 && B.x0<A.x1 && A.y0<B.y1 && B.y0<A.y1; }
 function restingBase(nb){        /* the base it would take: the top of whatever it comes to rest on */
@@ -1613,7 +1632,7 @@ function restingBase(nb){        /* the base it would take: the top of whatever 
   const f=foot(nb);
   for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++)      /* the frame, cell by cell */
     base=Math.max(base, frameTop.get(cellKey(c,r))||0);
-  bricks.forEach(b=>{ if(overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
+  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
   return base;
 }
 function carries(b){             /* is anything resting ON this one? */
@@ -1630,7 +1649,8 @@ function carries(b){             /* is anything resting ON this one? */
 function landRow(nb){
   const f=foot(nb);
   let support=Math.round(modelH/vUnit());
-  bricks.forEach(o=>{ const g=foot(o);
+  bricks.forEach(o=>{ if(parked(o)) return;   /* a candidate on the cork holds nothing up */
+    const g=foot(o);
     if(g.x1>f.x0 && f.x1>g.x0) support=Math.min(support, g.y0); });
   return support - rowsOf(nb.p);
 }
@@ -1640,6 +1660,7 @@ function onFrame(nb){             /* is the silhouette behind any of this part's
   return false;
 }
 function settle(nb){             /* put the part where the mode says it comes to rest */
+  if(parked(nb)){ nb.base=0; return nb; }   /* on the cork: no gravity, no frame - it stays put */
   if(mode==="standing"){ if(!onFrame(nb)) nb.row=landRow(nb); nb.base=0; }
   else nb.base=restingBase(nb);
   return nb;
