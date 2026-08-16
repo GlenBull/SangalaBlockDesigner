@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.013 -->
+<!-- SANGALA_VERSION: 2026-08-16.016 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2381,17 +2381,47 @@ function toLdr(){
     const p=b.p, w=p.w, d=p.d||1, h=p.h||1;
     /* placed by the middle of its BODY, not of its footprint - see `overCols` */
     const oL=overLeft(p,b.flip), oR=overRight(p,b.flip);
-    const x=((b.col - oL) + (w + oL + oR)/2)*LDU_STUD;
-    let y, z;
-    if(mode==="relief"){ z=(b.row + d/2)*LDU_STUD; y=-((b.base||0) + h)*LDU_PLATE; }
-    else               { z=0;                      y=-(plateRows - b.row)*LDU_PLATE; }
+    const bx=((b.col - oL) + (w + oL + oR)/2)*LDU_STUD;   /* where the cell's centre is */
+    let y, bz;
+    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD; y=-((b.base||0) + h)*LDU_PLATE; }
+    else               { bz=0;                      y=-(plateRows - b.row)*LDU_PLATE; }
     /* A flipped part is TURNED, not mirrored: mirroring a slope makes a part that does not exist.
        Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1).
        THE SAME TURN THE 3D VIEW APPLIES GOES IN HERE, from the one function that decides it - the
        snapshot is the same design seen by another renderer, and a part turned in one and not the
        other is the defect Glen found in the crest. A quarter turn is (0,0,1 / 0,1,0 / -1,0,0). */
-    const yaw = (partYaw(p, ldrMesh[p.id] && ldrMesh[p.id].box) + (b.flip ? 180 : 0)) * Math.PI/180;
+    const box = ldrMesh[p.id] && ldrMesh[p.id].box;
+    const yaw = (partYaw(p, box) + (b.flip ? 180 : 0)) * Math.PI/180;
     const c = Math.round(Math.cos(yaw)), s = Math.round(Math.sin(yaw));
+    /* A PART'S ORIGIN IS NOT THE MIDDLE OF ITS FOOTPRINT, and for every 45-degree slope it is half
+       a stud away from it: 3040, 3665, 3039 and 3660 all measure z from -30 to +10, because LDraw
+       bases a slope on ONE of its studs rather than on the middle of the two it spans. Bricks,
+       plates and the cone are centred, which is why this stayed hidden. Writing the band's centre as
+       the origin therefore slid every slope half a stud - and the turn flips the sign, so a flipped
+       one slid the other way. Glen's bill is flipped, so its stud came down beside the plate's
+       socket instead of in it, "hanging out in space... nothing to prevent the red brick from
+       falling to the floor" (2026-08-16); his two crest slopes carry opposite flips and were pushed
+       a full stud apart around the cone. The 3D view never showed any of it because ldrTris centres
+       the part's REAL mesh in the cell and never trusts the origin - so the two renderers disagreed,
+       which is the one thing this export exists to prevent.
+       So: turn the geometry's own centre by the same yaw, and place the origin where that lands the
+       part centred on its cell. With no bridge there is no mesh to measure and it falls back to the
+       old assumption, which is right for everything that is centred. */
+    /* AND IT MUST NOT MATTER WHETHER THE 3D VIEW HAS BEEN OPENED. `ldrMesh` is filled by ldrLoad,
+       which only ldrTris calls, so a snapshot taken on a freshly reloaded page has no boxes at all
+       and the correction above silently did nothing - Glen reloaded to .014, reopened the design,
+       and got the identical picture. The measured constant stands in: every 45-degree slope in the
+       library sits half a stud off its origin along the ramp (3040, 3665, 3039, 3660 all run z from
+       -30 to +10), and every other shipped part measured so far is centred. MEASURED on all four of
+       those slopes and on every part the Crane and Starter Set libraries name; NOT on all 150 files
+       in the shipped library, so do not read this as covering them. A part whose origin sits
+       somewhere else again would be placed by this fallback wrongly until the 3D view is opened,
+       at which point its real box takes over - which is the safer way round, since the fallback is
+       exact for every part the application can currently place. */
+    const slopeish = p.shape==="slope" || p.shape==="invslope";
+    const gx = box ? (box[0]+box[3])/2 : 0;
+    const gz = box ? (box[2]+box[5])/2 : (slopeish ? -LDU_STUD/2 : 0);
+    const x = bx - (gx*c + gz*s), z = bz - (-gx*s + gz*c);
     out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(x)+" "+ldNum(y)+" "+ldNum(z)+" "+
              c+" 0 "+s+" 0 1 0 "+(-s || 0)+" 0 "+c+" "+p.id+".dat");
   });
