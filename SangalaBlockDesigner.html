@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.005 -->
+<!-- SANGALA_VERSION: 2026-08-16.006 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -715,7 +715,12 @@ function shape(p,col,row,fl){
      slope is a wedge, a cone is a trapezoid, and a round brick is a plain rectangle - a cylinder
      seen side-on. In relief the same parts show their PLAN, which is where the circle belongs. */
   if(mode==="standing"){
-    if(p.shape==="slope"){
+    /* A SLOPE ONLY SHOWS ITS RAMP IF THE RAMP FACES YOU. With 2 columns it lies across the profile
+       and you see the wedge; laid on ONE column its ramp runs back into the figure and what the
+       profile truthfully shows is a rectangle. Drawing the wedge either way was the older fault -
+       it made a one-column slope look turned when it was not, and the 3D view then disagreed. */
+    const across = p.w === 2;
+    if(p.shape==="slope" && across){
       /* the ramp stops a plate short of nothing, as the real part does - a wedge run out to a
          point is the one place this profile disagreed with the part beside it */
       /* UNFLIPPED IS TALL AT THE RIGHT, which is what the part itself does and what the Flip
@@ -724,7 +729,7 @@ function shape(p,col,row,fl){
       const lip=mx(PLATE);
       if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y+lip); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
       else  { ctx.moveTo(x,y+lip); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
-    } else if(p.shape==="invslope"){
+    } else if(p.shape==="invslope" && across){
       const lip=mx(PLATE);
       if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+lip); ctx.lineTo(x,y+h); }
       else  { ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+lip); }
@@ -844,7 +849,9 @@ function drawBrick(b,ghost){
        look at from the side. Drawn before nothing else covers them - they belong to this part. */
     const sw=mx(4.8), sh=Math.max(1.4, mx(1.7));
     for(let cx=0;cx<p.w;cx++){
-      if(p.shape==="slope" && (fl ? cx===p.w-1 : cx===0)) continue;   /* the fallen end has none */
+      /* only a slope lying ramp-across loses a stud here; laid on one column its stud is on the
+         high half of a ramp running backwards, which the profile sees end-on */
+      if(p.shape==="slope" && p.w===2 && (fl ? cx===p.w-1 : cx===0)) continue;
       const px2=x+mx(STUD)*(cx+.5);
       ctx.beginPath();
       if(ctx.roundRect) ctx.roundRect(px2-sw/2, y-sh, sw, sh*2, Math.min(sh,sw/2));
@@ -1546,7 +1553,13 @@ function ldrArrived(){
    square, so comparing footprints says nothing, and Glen's crest is built from two of them - they
    came out facing into the screen in both the 3D view and the snapshot. */
 function partYaw(p, box){
-  if(p.shape === "slope" || p.shape === "invslope") return 90;
+  /* A 45-degree slope's ramp is ALWAYS its 2-stud side, so the answer is simply whether the page
+     has given the part 2 columns to stand on. Two columns: the ramp lies across the profile and the
+     part turns. One column (or four, for a 2 x 4 laid the long way): the ramp runs back into the
+     figure and the part must NOT turn, or it overhangs the footprint it was placed on - which is
+     what happened to the crest, where two one-column slopes grew across the cone's stud and hid it.
+     A 2 x 2 answers 2 either way round, and turning is right for it. */
+  if(p.shape === "slope" || p.shape === "invslope") return p.w === 2 ? 90 : 0;
   if(!box) return 0;
   const wLD = Math.round((box[3]-box[0])/20), dLD = Math.round((box[5]-box[2])/20);
   return (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
