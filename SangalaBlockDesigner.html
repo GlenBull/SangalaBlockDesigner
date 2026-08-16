@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.001 -->
+<!-- SANGALA_VERSION: 2026-08-16.002 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1419,6 +1419,140 @@ function frameToGuideTris(){
   return out;
 }
 
+/* ---------- THE PART'S REAL GEOMETRY ----------
+   The shapes further down were written by hand - a box, a wedge, a tapered cylinder - and each is a
+   guess at a part the library already describes exactly. The guesses were wrong in ways only a
+   photograph settles: an inverted slope whose ramp ran across the width instead of along the length,
+   a cone drawn as a taper with a dimple in it. So the 3D view is drawn from the LDraw part files
+   themselves - the same files LDView renders the snapshot from, so the screen and the booklet show
+   one shape. The hand-written shapes stay as what to draw while a part is still on its way, and on a
+   machine with no bridge to ask.
+
+   The bridge hands over a part and everything it refers to in one reply, already substituted to the
+   48-segment curves. What is left here is the reader: a part file is a list of lines, each one either
+   a polygon or another file placed by a 3x4 matrix, so flattening it is walking that tree.
+
+   TWO CONVENTIONS DECIDE EVERYTHING, and both are easy to get backwards:
+     - LDraw measures in LDU, 20 to a stud, and ITS Y AXIS POINTS DOWN. A part's origin sits on the
+       TOP of its body with the studs standing at negative Y - which is why the height below is
+       placed from the origin and only the footprint is placed from the bounding box.
+     - Faces are wound counter-clockwise seen from OUTSIDE. A placement that mirrors - a matrix with
+       a negative determinant - turns that winding inside out, and so does an INVERTNEXT. Both
+       mappings onto the page mirror as well, Y-down becoming z-up, so the winding turns once more
+       there. The renderer culls backfaces, so an error here shows the inside of the brick. */
+const LDU = 0.4;                       /* mm per LDraw unit: 20 of them to an 8 mm stud */
+const ldrMesh = Object.create(null);   /* part number -> {tris, box} in LDU; null while it loads, false when there is no such part */
+let ldrWaiting = 0;
+const ldrKey = n => (n || "").trim().replace(/\\/g, "/").toLowerCase();
+
+const ldrMul = (M, S) => {             /* M applied AFTER S, both as 9 rotation terms then 3 of translation */
+  const r = new Array(12);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) r[i*3+j] = M[i*3]*S[j] + M[i*3+1]*S[3+j] + M[i*3+2]*S[6+j];
+    r[9+i] = M[i*3]*S[9] + M[i*3+1]*S[10] + M[i*3+2]*S[11] + M[9+i];
+  }
+  return r;
+};
+const ldrDet = M => M[0]*(M[4]*M[8]-M[5]*M[7]) - M[1]*(M[3]*M[8]-M[5]*M[6]) + M[2]*(M[3]*M[7]-M[4]*M[6]);
+const ldrAt = (M, p) => [M[0]*p[0]+M[1]*p[1]+M[2]*p[2]+M[9],
+                         M[3]*p[0]+M[4]*p[1]+M[5]*p[2]+M[10],
+                         M[6]*p[0]+M[7]*p[1]+M[8]*p[2]+M[11]];
+
+function ldrRead(files, name, M, flip, out, depth){
+  const text = files[ldrKey(name)];
+  if(text === undefined || depth > 24 || out.length > 60000) return;
+  let cw = false, invertNext = false;
+  const lines = text.split("\n");
+  for(let li = 0; li < lines.length; li++){
+    const t = lines[li].trim().split(/\s+/);
+    if(t.length < 2) continue;
+    const pt = i => ldrAt(M, [+t[i], +t[i+1], +t[i+2]]);
+    const face = v => { out.push(flip !== cw ? [v[2], v[1], v[0]] : v); };
+    if(t[0] === "0"){
+      if(t[1] === "BFC") for(let i = 2; i < t.length; i++){
+        if(t[i] === "INVERTNEXT") invertNext = true;
+        else if(t[i] === "CW") cw = true;
+        else if(t[i] === "CCW") cw = false;
+      }
+    } else if(t[0] === "1" && t.length >= 15){
+      const v = t.slice(2, 14).map(Number);
+      const S = [v[3],v[4],v[5], v[6],v[7],v[8], v[9],v[10],v[11], v[0],v[1],v[2]];
+      /* a mirrored placement and an INVERTNEXT each turn the winding; two of them turn it back */
+      ldrRead(files, t.slice(14).join(" "), ldrMul(M, S), (flip !== (ldrDet(S) < 0)) !== invertNext, out, depth + 1);
+      invertNext = false;
+    } else if(t[0] === "3" && t.length >= 11){
+      face([pt(2), pt(5), pt(8)]);
+    } else if(t[0] === "4" && t.length >= 14){
+      face([pt(2), pt(5), pt(8)]); face([pt(2), pt(8), pt(11)]);
+    }
+    /* line types 2 and 5 are edges, which this renderer does not draw */
+  }
+}
+
+function ldrFlatten(files, name){
+  const tris = [];
+  ldrRead(files, name, [1,0,0, 0,1,0, 0,0,1, 0,0,0], false, tris, 0);
+  if(!tris.length) return false;
+  const box = [1e9,1e9,1e9,-1e9,-1e9,-1e9];
+  tris.forEach(t => t.forEach(p => { for(let i = 0; i < 3; i++){
+    if(p[i] < box[i]) box[i] = p[i]; if(p[i] > box[3+i]) box[3+i] = p[i]; } }));
+  return {tris, box};
+}
+
+/* Ask once per part number, and never twice. A machine with no bridge answers nothing, which is not
+   an error: the hand-written shape stands in and the application goes on working. */
+function ldrLoad(id){
+  if(id in ldrMesh) return ldrMesh[id];
+  ldrMesh[id] = null; ldrWaiting++;
+  fetch("/part?f=" + encodeURIComponent(id))
+    .then(r => r.ok ? r.json() : null)
+    .then(j => { ldrMesh[id] = j ? ldrFlatten(j.files, j.name) : false; })
+    .catch(() => { ldrMesh[id] = false; })
+    .then(() => { if(--ldrWaiting === 0) ldrArrived(); });
+  return null;
+}
+function ldrArrived(){
+  if(view3D){ pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); renderPreview(); }
+}
+
+/* Put the part where the page has placed it. The footprint is centred on the cell the brick sits on
+   and the HEIGHT is measured from the part's origin, which is the top of its body. */
+function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
+  const m = ldrLoad(p.id);
+  if(!m) return null;
+  const st = mode === "standing";
+  /* The library's own axes need not agree with the w x d the page lays a part out on: LDraw's 2 x 1
+     slope is two studs along ITS x, where the page counts two rows of depth. Rather than keep a
+     table of which parts turn, compare the footprint the geometry actually has. */
+  const wLD = Math.round((m.box[3]-m.box[0])/20), dLD = Math.round((m.box[5]-m.box[2])/20);
+  let yaw = (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
+  if(b.flip) yaw += 180;                       /* which end of a slope keeps its full height */
+  const c = Math.round(Math.cos(yaw*Math.PI/180)), s = Math.round(Math.sin(yaw*Math.PI/180));
+  /* yaw about the part's own vertical, then its axes onto the page's: standing runs the part's
+     height up the screen, relief lays it into the screen with the footprint standing up */
+  const A = st ? [c*LDU, 0, s*LDU,  s*LDU, 0, -c*LDU,  0, -LDU, 0]
+               : [c*LDU, 0, s*LDU,  0, LDU, 0,  s*LDU, 0, -c*LDU];
+  const put = q => [A[0]*q[0]+A[1]*q[1]+A[2]*q[2], A[3]*q[0]+A[4]*q[1]+A[5]*q[2], A[6]*q[0]+A[7]*q[1]+A[8]*q[2]];
+  let bx0=1e9,by0=1e9,bz0=1e9,bx1=-1e9,by1=-1e9,bz1=-1e9;
+  for(let i = 0; i < 8; i++){
+    const q = put([m.box[i&1?3:0], m.box[i&2?4:1], m.box[i&4?5:2]]);
+    bx0=Math.min(bx0,q[0]); bx1=Math.max(bx1,q[0]);
+    by0=Math.min(by0,q[1]); by1=Math.max(by1,q[1]);
+    bz0=Math.min(bz0,q[2]); bz1=Math.max(bz1,q[2]);
+  }
+  const tx = (x0+x1)/2 - (bx0+bx1)/2;
+  const ty = st ? (y0+y1)/2 - (by0+by1)/2 : y0;        /* relief: the body's top face is the far one */
+  const tz = st ? z1 : (z0+z1)/2 - (bz0+bz1)/2;        /* standing: the body's top face is at z1 */
+  /* Y-down becoming z-up mirrors the part, so the winding turns with it */
+  const turn = ldrDet(A) < 0;
+  const out = [];
+  for(let i = 0; i < m.tris.length; i++){
+    const t = m.tris[i], v = [0,1,2].map(k => { const q = put(t[k]); return [q[0]+tx, q[1]+ty, q[2]+tz]; });
+    out.push(turn ? [v[2], v[1], v[0]] : v);
+  }
+  return out;
+}
+
 function bricksToTris(){
   const H = modelH, parts=[], cols=[], tris=[];
   /* A STUD STANDS PROUD, so its walls must be wound OUTWARD and its cap must sit on the FREE
@@ -1456,8 +1590,11 @@ function bricksToTris(){
     const y0 = y1 - deepOf(p);
     if(mode==="standing"){
       /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
-         the corner at its fallen end, along the LENGTH, which is what you see from the side. */
-      if(p.shape==="slope" || p.shape==="invslope"){
+         the corner at its fallen end, along the LENGTH, which is what you see from the side.
+         All of it stands in for the library's own geometry, and is drawn only until that arrives. */
+      const real = ldrTris(b,p,x0,x1,y0,y1,z0,z1);
+      if(real){ real.forEach(t2=>mine.push(t2)); }        /* studs and all: the part entire */
+      else if(p.shape==="slope" || p.shape==="invslope"){
         const xHi = b.flip ? x1 : x0, xLo = b.flip ? x0 : x1;
         const inv = p.shape==="invslope";
         const zKeep = inv ? z0 : z1;                   /* an inverted slope keeps its underside */
@@ -1492,7 +1629,7 @@ function bricksToTris(){
       } else {
         boxTris(x0,x1,y0,y1,z0,z1,mine);
       }
-      if(studded(p)){
+      if(!real && studded(p)){
         for(let cx=0;cx<p.w;cx++){
           if(p.shape==="slope" && (b.flip ? cx===0 : cx===p.w-1)) continue;
           for(let dy=0; dy<d; dy++)
@@ -1516,7 +1653,9 @@ function bricksToTris(){
          wedge     - the trapezoid it already has in plan, given thickness
        Everything else is still a box, which is what a brick and a plate are. */
     const quad=(a,b2,c2,d2,o)=>{ o.push([a,b2,c2]); o.push([a,c2,d2]); };
-    if(p.shape==="slope" || p.shape==="invslope"){
+    const real=ldrTris(b,p,x0,x1,y0,y1,z0,z1);           /* lying down, from the same library geometry */
+    if(real){ real.forEach(t2=>mine.push(t2)); }
+    else if(p.shape==="slope" || p.shape==="invslope"){
       /* the ramp runs along the depth (rows); flip swaps which end keeps its full height */
       const zHi = b.flip ? z0 : z1, zLo = b.flip ? z1 : z0;   /* hi end keeps the full face */
       const inv = p.shape==="invslope";
@@ -1549,7 +1688,7 @@ function bricksToTris(){
     } else {
       boxTris(x0,x1,y0,y1,z0,z1,mine);
     }
-    if(studded(p)){
+    if(!real && studded(p)){
       for(let ry=0;ry<d;ry++){
         if(p.shape==="slope" && (b.flip ? ry===0 : ry===d-1)) continue;
         for(let cx=0;cx<p.w;cx++)

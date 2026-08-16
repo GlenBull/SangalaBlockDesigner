@@ -13,6 +13,7 @@
 // ported. Compiled in-box with csc (see Build SangalaBlocks.cmd).
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -290,6 +291,7 @@ namespace SangalaBlocksApp
                 if (method == "GET" && (path == "/" || path == "/index.html")) ServeHtml(ns);
                 else if (path == "/status") Respond(ns, "application/json", Status());
                 else if (method == "POST" && path == "/snapshot") DoSnapshot(ns, body, query);
+                else if (method == "GET" && path == "/part") ServePart(ns, query);
                 else Respond(ns, "text/plain", "not found", "404 Not Found");
             }
         }
@@ -335,6 +337,118 @@ namespace SangalaBlocksApp
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: " + html.Length +
                 "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
             ns.Write(head, 0, head.Length); ns.Write(html, 0, html.Length);
+        }
+
+        // ---------------------------------------------------------------- the parts themselves
+        // THE BRIDGE STILL MAKES NO GEOMETRY. The 3D view is drawn from the library's own part
+        // files - the same files LDView reads, so what is on screen and what is in the snapshot are
+        // one shape - and a browser cannot read a folder. So this hands over a part and everything
+        // that part refers to, as text, in a single reply. It resolves names and nothing else.
+        //
+        // One rule travels with the text: WHERE p\48\<name> EXISTS IT IS SENT IN THE PLAIN NAME'S
+        // PLACE. That is LDView's own high-resolution substitution, and it is what makes a circle
+        // read as a circle rather than as the sixteen-sided figure the plain primitives describe.
+        // Deciding it here keeps the page's reader simple: it draws what it is given.
+        static void ServePart(NetworkStream ns, string query)
+        {
+            string want = null;
+            foreach (var pair in query.Split('&'))
+            {
+                int eq = pair.IndexOf('=');
+                if (eq > 0 && pair.Substring(0, eq) == "f") want = Uri.UnescapeDataString(pair.Substring(eq + 1));
+            }
+            string ldrawDir = FindLDrawDir();
+            if (want == null || ldrawDir == null) { Respond(ns, "text/plain", "no parts folder", "404 Not Found"); return; }
+            if (!want.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)) want += ".dat";
+            if (!SafeName(want)) { Respond(ns, "text/plain", "bad part name", "400 Bad Request"); return; }
+
+            // Walk the references breadth-first. The count is bounded because a runaway walk on a
+            // malformed file would hold the connection open; no real part comes near the limit.
+            var files = new Dictionary<string, string>(StringComparer.Ordinal);
+            var queue = new Queue<string>();
+            queue.Enqueue(want);
+            while (queue.Count > 0 && files.Count < 800)
+            {
+                string name = queue.Dequeue();
+                string key = PartKey(name);
+                if (files.ContainsKey(key)) continue;
+                string file = FindPartFile(ldrawDir, name);
+                if (file == null) { files[key] = ""; continue; }   // sent empty, so the page can say what is missing
+                string text = File.ReadAllText(file);
+                files[key] = text;
+                foreach (var ln in text.Split('\n'))
+                {
+                    var t = ln.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (t.Length >= 15 && t[0] == "1")
+                    {
+                        string sub = string.Join(" ", t, 14, t.Length - 14);
+                        if (SafeName(sub)) queue.Enqueue(sub);
+                    }
+                }
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("{\"name\":").Append(JsonStr(PartKey(want))).Append(",\"files\":{");
+            bool first = true;
+            foreach (var kv in files)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append(JsonStr(kv.Key)).Append(':').Append(JsonStr(kv.Value));
+            }
+            sb.Append("}}");
+            Respond(ns, "application/json", sb.ToString());
+        }
+
+        // The name as the page will look it up: one spelling, whatever slash the file was written
+        // with and whatever case the reference used.
+        static string PartKey(string name)
+        {
+            return (name ?? "").Trim().Replace('\\', '/').ToLowerInvariant();
+        }
+
+        // A part name arrives over a socket, so it is checked before it becomes a path. Only the
+        // characters LDraw itself uses, no drive letter, no leading slash, and no way upwards.
+        static bool SafeName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name.Length > 80) return false;
+            if (name.IndexOf("..") >= 0 || name.IndexOf(':') >= 0) return false;
+            if (name[0] == '\\' || name[0] == '/') return false;
+            foreach (char c in name)
+                if (!(char.IsLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == '\\' || c == '/')) return false;
+            return true;
+        }
+
+        static string FindPartFile(string ldrawDir, string name)
+        {
+            string n = name.Replace('/', '\\');
+            if (!n.StartsWith("48\\", StringComparison.OrdinalIgnoreCase))
+            {
+                string hi = Path.Combine(ldrawDir, "p", "48", n);      // the 48-segment curve, where there is one
+                if (File.Exists(hi)) return hi;
+            }
+            string[] dirs = { "parts", "p", Path.Combine("parts", "s"), Path.Combine("p", "48") };
+            foreach (var d in dirs)
+            {
+                string p = Path.Combine(ldrawDir, d, n);
+                if (File.Exists(p)) return p;
+            }
+            return null;
+        }
+
+        static string JsonStr(string s)
+        {
+            var sb = new StringBuilder("\"");
+            foreach (char c in s ?? "")
+            {
+                if (c == '"' || c == '\\') { sb.Append('\\').Append(c); }
+                else if (c == '\n') sb.Append("\\n");
+                else if (c == '\r') sb.Append("\\r");
+                else if (c == '\t') sb.Append("\\t");
+                else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
+            return sb.Append('"').ToString();
         }
 
         static void Respond(NetworkStream ns, string ctype, string bodyText, string status = "200 OK")
