@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.007 -->
+<!-- SANGALA_VERSION: 2026-08-16.008 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -391,8 +391,15 @@ const KINDS = {
              sizes:[{w:1,id:"3024",n:"1x1"},{w:2,id:"3023",n:"1x2"},{w:4,id:"3710",n:"1x4"},{w:6,id:"3666",n:"1x6"}]},
   slope:    {label:"Slope",          shape:"slope",    h:3,
              sizes:[{w:1,id:"3040",n:"2x1"},{w:2,id:"3039",n:"2x2"},{w:4,id:"3037",n:"2x4"}]},
+  /* AN INVERTED SLOPE CARRIES ITS FOOTPRINT EXPLICITLY, because what it RESTS ON is not what it
+     covers: its underside is cut away, so it attaches to one stud along the ramp and the rest of
+     the body hangs over the next. Measured on the parts - 3665 has a body 2 studs long and rests
+     on 1 x 1; 3660 is 2 x 2 and rests on 2 x 1 - and it is what the photograph of the crest shows,
+     three pieces sitting on a 1 x 3 plate with the two slopes reaching out past its ends (Glen,
+     2026-08-16: "one stud wide on the bottom and two studs wide on the top"). `n` stays the name
+     LEGO gives the part, which is what it is ordered under. */
   invslope: {label:"Inverted Slope", shape:"invslope", h:3,
-             sizes:[{w:1,id:"3665",n:"2x1"},{w:2,id:"3660",n:"2x2"}]},
+             sizes:[{w:1,d:1,id:"3665",n:"2x1"},{w:1,d:2,id:"3660",n:"2x2"}]},
   /* The three Studio also offers. Numbers read from the library, not remembered - and the wedge
      plate is why that matters: LDraw files it under a different word, "Wing", so searching the
      catalogue for a wedge plate returns nothing at all. */
@@ -707,8 +714,18 @@ function drawGuide(){
    the wedge plate, because a piece that narrows in plan cannot be a rectangle however it slopes.
    Its 3 plates of thickness go AWAY from the viewer and are carried by the layer, not by height
    on the screen - which is what the old wall elevation had them as. */
+/* WHAT A PART RESTS ON IS NOT WHAT IT COVERS. An inverted slope's underside is cut away, so it
+   attaches to ONE stud along its ramp and the rest of the body hangs over the neighbour - which is
+   how the crest sits three pieces on a 1 x 3 plate and still reaches wider than the plate. The
+   overhang is at the THIN end, so `flip` says which side it falls on. Every place that draws or
+   places a part asks these, so the workspace, the 3D view and the exported model cannot disagree. */
+const overCols  = p => p.shape==="invslope" ? 1 : 0;         /* studs of body beyond the footprint */
+const overLeft  = (p,fl) => fl ? 0 : overCols(p);            /* unflipped: the thin end is the left */
+const overRight = (p,fl) => fl ? overCols(p) : 0;
+
 function shape(p,col,row,fl){
-  const x=mx(col*STUD), y=mx(row*vUnit()), w=mx(p.w*STUD), h=mx(rowsOf(p)*vUnit());
+  const oL=overLeft(p,fl), oR=overRight(p,fl);
+  const x=mx((col-oL)*STUD), y=mx(row*vUnit()), w=mx((p.w+oL+oR)*STUD), h=mx(rowsOf(p)*vUnit());
   ctx.beginPath();
   /* STANDING is a SIDE view, so a part shows its elevation, not its plan (Glen: "the slope and
      cone are shown correctly in the 3D view but incorrectly in the 2D view"). From the side a
@@ -820,7 +837,9 @@ function drawBrick(b,ghost){
      the top, which was invented in this application alone and is why nothing here resembled the
      program the student arrives from. */
   const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, dp=rowsOf(p);
-  const x=mx(b.col*STUD), y=mx(b.row*vUnit()), w=mx(p.w*STUD), h=mx(dp*vUnit());
+  /* the BODY, which for an inverted slope reaches past the stud it rests on */
+  const oL=overLeft(p,fl), oR=overRight(p,fl), bcols=p.w+oL+oR;
+  const x=mx((b.col-oL)*STUD), y=mx(b.row*vUnit()), w=mx(bcols*STUD), h=mx(dp*vUnit());
   /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR - see tones() above. A fixed brown
      ring works on Studio's unfilled white shapes and disappears on a filled black one, which is
      how a black brick came out as a blob with nothing legible on it. */
@@ -849,8 +868,8 @@ function drawBrick(b,ghost){
     /* STANDING: the studs stand PROUD OF THE TOP, because that is where they are on a brick you
        look at from the side. Drawn before nothing else covers them - they belong to this part. */
     const sw=mx(4.8), sh=Math.max(1.4, mx(1.7));
-    for(let cx=0;cx<p.w;cx++){
-      if(p.shape==="slope" && (fl ? cx===p.w-1 : cx===0)) continue;   /* the fallen end has none */
+    for(let cx=0;cx<bcols;cx++){                    /* studs sit on the BODY, overhang included */
+      if(p.shape==="slope" && (fl ? cx===bcols-1 : cx===0)) continue;   /* the fallen end has none */
       const px2=x+mx(STUD)*(cx+.5);
       ctx.beginPath();
       if(ctx.roundRect) ctx.roundRect(px2-sw/2, y-sh, sw, sh*2, Math.min(sh,sw/2));
@@ -959,18 +978,22 @@ document.addEventListener("click",(e)=>{
    conventions together were putting the ramp into the depth. Reversing the key for the sloped kinds
    puts it where the profile needs it, and the design number - the thing a part is ordered by - is
    untouched. */
-const RAMPED = {slope:1, invslope:1};
+const RAMPED = {slope:1};                /* an inverted slope states its footprint instead */
+const CATNAME = {};                      /* design number -> the name LEGO gives the part */
 Object.keys(KINDS).forEach(k=>{
   if(SIZES[k]) return;
-  SIZES[k]={};
-  (KINDS[k].sizes||[]).forEach(sz=>{ const m=String(sz.n).match(/(\d+)\s*x\s*(\d+)/);
-    if(m) SIZES[k][RAMPED[k] ? m[2]+"x"+m[1] : m[1]+"x"+m[2]]=sz.id; });
+  SIZES[k]={}; CATNAME[k]={};
+  (KINDS[k].sizes||[]).forEach(sz=>{
+    if(sz.d){ SIZES[k][sz.d+"x"+sz.w]=sz.id; CATNAME[k][sz.id]=sz.n; return; }   /* footprint given outright */
+    const m=String(sz.n).match(/(\d+)\s*x\s*(\d+)/);
+    if(m){ SIZES[k][RAMPED[k] ? m[2]+"x"+m[1] : m[1]+"x"+m[2]]=sz.id; CATNAME[k][sz.id]=sz.n; } });
 });
 const sizeable = k => !!SIZES[k];
 /* THE FIELDS SAY HOW IT LIES; THE NOTE SAYS WHAT IT IS. A slope lies ramp-across, so its fields
    read 1 row by 2 columns - but LEGO calls that part a 2 x 1 and it is ordered under that name, so
    the note names it the catalogue's way round. */
-const catName = (k, n) => RAMPED[k] ? String(n).split("x").reverse().join(" x ") : String(n).replace("x"," x ");
+const catName = (k, n, id) => (CATNAME[k] && CATNAME[k][id]) ? String(CATNAME[k][id]).replace("x"," x ")
+  : RAMPED[k] ? String(n).split("x").reverse().join(" x ") : String(n).replace("x"," x ");
 const firstSize = k => Object.keys(SIZES[k]||{})[0];
 let lastR=2, lastC=3;   /* what the fields last held, so a spinner's DIRECTION of travel is known;
                            seeded to match the opening part (see `part`, above) */
@@ -980,7 +1003,7 @@ function syncSizeFields(){
                     $("szCols").value=lastC=parseInt(t[1],10)||1; }
   $("szCols").disabled=$("szRows").disabled=!sizeable(part.kind);
   $("szNote").textContent = sizeable(part.kind)
-    ? KINDS[part.kind].label+" "+catName(part.kind, part.n)+"  ·  design "+part.id
+    ? KINDS[part.kind].label+" "+catName(part.kind, part.n, part.id)+"  ·  design "+part.id
     : KINDS[part.kind].label+" comes in the sizes on the part menu.";
 }
 function applySize(snap){
@@ -1040,7 +1063,7 @@ function applySize(snap){
   if(String(rows)!==$("szRows").value) $("szRows").value=rows;
   if(String(cols)!==$("szCols").value) $("szCols").value=cols;
   lastR=rows; lastC=cols;
-  $("szNote").textContent=KINDS[k].label+" "+catName(k, R+"x"+C)+"  ·  design "+id;
+  $("szNote").textContent=KINDS[k].label+" "+catName(k, R+"x"+C, id)+"  ·  design "+id;
   setTool("place");
   say("Click the frame to place a "+KINDS[k].label+" "+R+" x "+C+" (design "+id+").");
   draw();
@@ -1565,7 +1588,10 @@ function partYaw(p, box){
      figure and the part must NOT turn, or it overhangs the footprint it was placed on - which is
      what happened to the crest, where two one-column slopes grew across the cone's stud and hid it.
      A 2 x 2 answers 2 either way round, and turning is right for it. */
-  if(p.shape === "slope" || p.shape === "invslope") return p.w === 2 ? 90 : 0;
+  /* an inverted slope always lies ramp-across: its footprint is the ONE stud it rests on, and the
+     body reaching past that stud is the overhang, not a second column of footprint */
+  if(p.shape === "invslope") return 90;
+  if(p.shape === "slope") return p.w === 2 ? 90 : 0;
   if(!box) return 0;
   const wLD = Math.round((box[3]-box[0])/20), dLD = Math.round((box[5]-box[2])/20);
   return (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
@@ -1577,6 +1603,9 @@ function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
   const m = ldrLoad(p.id);
   if(!m) return null;
   const st = mode === "standing";
+  /* widen the band to the BODY before centring the mesh in it: an inverted slope's geometry reaches
+     a stud past the footprint it rests on, and centring it on the footprint would squeeze it */
+  x0 -= overLeft(p, b.flip)*STUD; x1 += overRight(p, b.flip)*STUD;
   let yaw = partYaw(p, m.box);
   if(b.flip) yaw += 180;                       /* which end of a slope keeps its full height */
   const c = Math.round(Math.cos(yaw*Math.PI/180)), s = Math.round(Math.sin(yaw*Math.PI/180));
@@ -2315,7 +2344,9 @@ function toLdr(){
   bricks.forEach(b=>{
     if(parked(b)) return;                 /* a candidate on the cork is not part of the design */
     const p=b.p, w=p.w, d=p.d||1, h=p.h||1;
-    const x=(b.col + w/2)*LDU_STUD;
+    /* placed by the middle of its BODY, not of its footprint - see `overCols` */
+    const oL=overLeft(p,b.flip), oR=overRight(p,b.flip);
+    const x=((b.col - oL) + (w + oL + oR)/2)*LDU_STUD;
     let y, z;
     if(mode==="relief"){ z=(b.row + d/2)*LDU_STUD; y=-((b.base||0) + h)*LDU_PLATE; }
     else               { z=0;                      y=-(plateRows - b.row)*LDU_PLATE; }
