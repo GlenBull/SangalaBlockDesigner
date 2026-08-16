@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.002 -->
+<!-- SANGALA_VERSION: 2026-08-16.003 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -716,11 +716,18 @@ function shape(p,col,row,fl){
      seen side-on. In relief the same parts show their PLAN, which is where the circle belongs. */
   if(mode==="standing"){
     if(p.shape==="slope"){
-      if(fl){ ctx.moveTo(x,y+h); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); }
-      else  { ctx.moveTo(x,y);   ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
+      /* the ramp stops a plate short of nothing, as the real part does - a wedge run out to a
+         point is the one place this profile disagreed with the part beside it */
+      /* UNFLIPPED IS TALL AT THE RIGHT, which is what the part itself does and what the Flip
+         button already says ("slopes now face left"). The glyph used to be drawn the other way
+         round and so faced opposite its own 3D view. */
+      const lip=mx(PLATE);
+      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y+lip); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
+      else  { ctx.moveTo(x,y+lip); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
     } else if(p.shape==="invslope"){
-      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x,y+h); }
-      else  { ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); }
+      const lip=mx(PLATE);
+      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+lip); ctx.lineTo(x,y+h); }
+      else  { ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+lip); }
     } else if(p.shape==="cone"){
       const t=w*CONE_TIP;                              /* the same half the 3D view tapers to */
       ctx.moveTo(x,y+h); ctx.lineTo(x+(w-t)/2,y); ctx.lineTo(x+(w+t)/2,y); ctx.lineTo(x+w,y+h);
@@ -837,7 +844,7 @@ function drawBrick(b,ghost){
        look at from the side. Drawn before nothing else covers them - they belong to this part. */
     const sw=mx(4.8), sh=Math.max(1.4, mx(1.7));
     for(let cx=0;cx<p.w;cx++){
-      if(p.shape==="slope" && (fl ? cx===0 : cx===p.w-1)) continue;   /* the fallen end has none */
+      if(p.shape==="slope" && (fl ? cx===p.w-1 : cx===0)) continue;   /* the fallen end has none */
       const px2=x+mx(STUD)*(cx+.5);
       ctx.beginPath();
       if(ctx.roundRect) ctx.roundRect(px2-sw/2, y-sh, sw, sh*2, Math.min(sh,sw/2));
@@ -938,13 +945,26 @@ document.addEventListener("click",(e)=>{
 /* Every kind gets a size table. Brick and plate come from the library - 22 and 34 sizes - and
    the rest have only the few that exist, read off their own entries above, so one interface
    covers all seven and a size that does not exist is refused the same way everywhere. */
+/* A SLOPE IS LAID WITH ITS RAMP ACROSS THE SCREEN, and that is not a preference (Glen, 2026-08-16).
+   The standing view IS THE FIGURE IN PROFILE - what you would see looking at the crane from the
+   side - so a ramp laid the other way, falling away from the viewer, shows as a plain rectangle and
+   the whole point of the part is invisible. LEGO names every 45-degree slope with its ramp first
+   ("2 x 1", "2 x 4", the ramp always the 2), and the size table is read rows-first, so those two
+   conventions together were putting the ramp into the depth. Reversing the key for the sloped kinds
+   puts it where the profile needs it, and the design number - the thing a part is ordered by - is
+   untouched. */
+const RAMPED = {slope:1, invslope:1};
 Object.keys(KINDS).forEach(k=>{
   if(SIZES[k]) return;
   SIZES[k]={};
   (KINDS[k].sizes||[]).forEach(sz=>{ const m=String(sz.n).match(/(\d+)\s*x\s*(\d+)/);
-    if(m) SIZES[k][m[1]+"x"+m[2]]=sz.id; });
+    if(m) SIZES[k][RAMPED[k] ? m[2]+"x"+m[1] : m[1]+"x"+m[2]]=sz.id; });
 });
 const sizeable = k => !!SIZES[k];
+/* THE FIELDS SAY HOW IT LIES; THE NOTE SAYS WHAT IT IS. A slope lies ramp-across, so its fields
+   read 1 row by 2 columns - but LEGO calls that part a 2 x 1 and it is ordered under that name, so
+   the note names it the catalogue's way round. */
+const catName = (k, n) => RAMPED[k] ? String(n).split("x").reverse().join(" x ") : String(n).replace("x"," x ");
 const firstSize = k => Object.keys(SIZES[k]||{})[0];
 let lastR=2, lastC=3;   /* what the fields last held, so a spinner's DIRECTION of travel is known;
                            seeded to match the opening part (see `part`, above) */
@@ -954,7 +974,7 @@ function syncSizeFields(){
                     $("szCols").value=lastC=parseInt(t[1],10)||1; }
   $("szCols").disabled=$("szRows").disabled=!sizeable(part.kind);
   $("szNote").textContent = sizeable(part.kind)
-    ? KINDS[part.kind].label+" "+part.n.replace("x"," x ")+"  ·  design "+part.id
+    ? KINDS[part.kind].label+" "+catName(part.kind, part.n)+"  ·  design "+part.id
     : KINDS[part.kind].label+" comes in the sizes on the part menu.";
 }
 function applySize(snap){
@@ -1007,7 +1027,7 @@ function applySize(snap){
   if(String(rows)!==$("szRows").value) $("szRows").value=rows;
   if(String(cols)!==$("szCols").value) $("szCols").value=cols;
   lastR=rows; lastC=cols;
-  $("szNote").textContent=KINDS[k].label+" "+R+" x "+C+"  ·  design "+id;
+  $("szNote").textContent=KINDS[k].label+" "+catName(k, R+"x"+C)+"  ·  design "+id;
   setTool("place");
   say("Click the frame to place a "+KINDS[k].label+" "+R+" x "+C+" (design "+id+").");
   draw();
@@ -1595,7 +1615,7 @@ function bricksToTris(){
       const real = ldrTris(b,p,x0,x1,y0,y1,z0,z1);
       if(real){ real.forEach(t2=>mine.push(t2)); }        /* studs and all: the part entire */
       else if(p.shape==="slope" || p.shape==="invslope"){
-        const xHi = b.flip ? x1 : x0, xLo = b.flip ? x0 : x1;
+        const xHi = b.flip ? x0 : x1, xLo = b.flip ? x1 : x0;   /* unflipped is tall at the right */
         const inv = p.shape==="invslope";
         const zKeep = inv ? z0 : z1;                   /* an inverted slope keeps its underside */
         const zCut  = inv ? z1 : z0;
@@ -1631,7 +1651,7 @@ function bricksToTris(){
       }
       if(!real && studded(p)){
         for(let cx=0;cx<p.w;cx++){
-          if(p.shape==="slope" && (b.flip ? cx===0 : cx===p.w-1)) continue;
+          if(p.shape==="slope" && (b.flip ? cx===p.w-1 : cx===0)) continue;
           for(let dy=0; dy<d; dy++)
             cylZ(x0+STUD*(cx+0.5), y1-STUD*(dy+0.5), z1, z1+1.8, 2.4, mine);
         }
@@ -2933,6 +2953,12 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
       base:b.base}));
+    /* A slope saved before the ramp was laid across the profile has its 2 studs in the depth, where
+       the profile cannot show them. Turn it as it is read, so an older design opens looking the way
+       it was meant to rather than as the rectangle the old placement really described. */
+    bricks.forEach(b=>{ const p=b.p;
+      if((p.shape==="slope"||p.shape==="invslope") && (p.d||1)===2 && p.w!==2){
+        const w=p.w; p.w=p.d; p.d=w; } });
     /* A file written before this carries no base. Rather than drop every brick on the plate, each
        one is landed in the order it was placed, on the frame or on what is already there. */
     bricks.forEach((b,i)=>{ if(typeof b.base!=="number"){
