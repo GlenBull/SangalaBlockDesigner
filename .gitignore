@@ -10,3 +10,9 @@ tools/__pycache__/
 
 # A standalone diagnostic copy of the application - superseded by Projects/Blank Workspace.block
 Projects/Blank Workspace (Ver 1.0).html
+
+# Snapshot and document output written while testing - not source
+Documents/Test File.docx
+Documents/Test snapshots.docx
+Projects/test.ldr
+Projects/test.png
