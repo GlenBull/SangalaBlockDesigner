@@ -27,6 +27,30 @@
    "color": "Yellow",
    "colorCode": 14,
    "qty": 2
+  },
+  {
+   "id": "3623",
+   "name": "Plate 1 x 3",
+   "kind": "plate",
+   "w": 3,
+   "d": 1,
+   "h": 1,
+   "shape": "rect",
+   "color": "Black",
+   "colorCode": 0,
+   "qty": 1
+  },
+  {
+   "id": "3004",
+   "name": "Brick 1 x 2",
+   "kind": "brick",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "rect",
+   "color": "Black",
+   "colorCode": 0,
+   "qty": 1
   }
  ]
 }

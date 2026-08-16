@@ -8,3 +8,8 @@
 # so they stand in one course.
 4589, 1, Yellow            # Cone 1 x 1, center
 3665, 2, Yellow            # Slope Brick 45 2 x 1 Inverted, one each side (one of them flipped)
+
+# The crest stands on a plate, one piece to each of its three studs. That plate is cantilevered
+# one stud out over the beak: the brick beneath it carries only its left two studs.
+3623, 1, Black             # Plate 1 x 3, carrying the crest
+3004, 1, Black             # Brick 1 x 2, the head itself
