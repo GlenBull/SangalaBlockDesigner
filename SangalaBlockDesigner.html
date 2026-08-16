@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.016 -->
+<!-- SANGALA_VERSION: 2026-08-16.017 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -961,8 +961,17 @@ function draw(){
   ctx.save(); ctx.translate(mx(placeX), mx(placeY));
   if(showGrid) drawGrid();
   if(showGuide) drawGuide();
-  /* back to front, so a brick standing proud covers the one it rests on */
-  const order=bricks.slice().sort((a,b)=>(a.base||0)-(b.base||0));
+  /* BACK TO FRONT, so a brick covers the one it rests on - AND WHAT "BACK" MEANS DEPENDS ON THE
+     MODE. A relief stacks TOWARDS the viewer, so `base` is its axis. A standing figure stacks
+     UPWARD, where base is 0 throughout, so sorting by it did nothing at all and the order fell back
+     to the order the parts happened to be placed in. Glen's head shows what that costs: the plate
+     was placed third, so it painted its studs straight over the crest already standing on it, while
+     the one slope placed AFTER it covered its stud correctly - "when a stud is in a socket, it
+     should never show through a brick" (2026-08-16). Rows count downward, so the lowest part has
+     the largest row and is drawn first. Stable, so parts at one level keep their placement order. */
+  const order=bricks.slice().sort(mode==="standing"
+    ? (a,b)=>(b.row||0)-(a.row||0)
+    : (a,b)=>(a.base||0)-(b.base||0));
   order.forEach(b=>drawBrick(b,false));
   if(hover && tool==="place") drawBrick(hover,true);
   ctx.restore();
@@ -2412,12 +2421,13 @@ function toLdr(){
        and the correction above silently did nothing - Glen reloaded to .014, reopened the design,
        and got the identical picture. The measured constant stands in: every 45-degree slope in the
        library sits half a stud off its origin along the ramp (3040, 3665, 3039, 3660 all run z from
-       -30 to +10), and every other shipped part measured so far is centred. MEASURED on all four of
-       those slopes and on every part the Crane and Starter Set libraries name; NOT on all 150 files
-       in the shipped library, so do not read this as covering them. A part whose origin sits
-       somewhere else again would be placed by this fallback wrongly until the 3D view is opened,
-       at which point its real box takes over - which is the safer way round, since the fallback is
-       exact for every part the application can currently place. */
+       -30 to +10), and every other placeable part is centred. CHECKED against all 33 parts the
+       application can place - the built-in size tables plus both shipped libraries - with no
+       disagreement, so the two paths cannot differ for anything a design can contain today. (The
+       LDraw folder here holds the whole 24,591-file library rather than the curated 150, and
+       thousands of THOSE do sit off their origins - stickers and minifig accessories no menu
+       offers. Should one ever become placeable, this fallback would put it wrong until the 3D view
+       was opened and its real box took over.) */
     const slopeish = p.shape==="slope" || p.shape==="invslope";
     const gx = box ? (box[0]+box[3])/2 : 0;
     const gz = box ? (box[2]+box[5])/2 : (slopeish ? -LDU_STUD/2 : 0);
