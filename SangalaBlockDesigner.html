@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.003 -->
+<!-- SANGALA_VERSION: 2026-08-16.004 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1535,17 +1535,30 @@ function ldrArrived(){
   if(view3D){ pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); renderPreview(); }
 }
 
+/* WHICH WAY A PART MUST TURN to lie the way the page has placed it. Two rules, and the order
+   matters:
+     - A SLOPED PART ALWAYS TURNS. Every LDraw 45-degree slope ramps along its OWN z - measured on
+       3040, 3039, 3037, 3665 and 3660, all of them - while the standing view is the figure in
+       PROFILE and needs that ramp ACROSS the screen.
+     - Anything else turns only when its own footprint disagrees with the w x d it is placed on,
+       which is what a wedge plate does.
+   The 2 x 2 inverted slope is why the first rule cannot be folded into the second: its footprint is
+   square, so comparing footprints says nothing, and Glen's crest is built from two of them - they
+   came out facing into the screen in both the 3D view and the snapshot. */
+function partYaw(p, box){
+  if(p.shape === "slope" || p.shape === "invslope") return 90;
+  if(!box) return 0;
+  const wLD = Math.round((box[3]-box[0])/20), dLD = Math.round((box[5]-box[2])/20);
+  return (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
+}
+
 /* Put the part where the page has placed it. The footprint is centred on the cell the brick sits on
    and the HEIGHT is measured from the part's origin, which is the top of its body. */
 function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
   const m = ldrLoad(p.id);
   if(!m) return null;
   const st = mode === "standing";
-  /* The library's own axes need not agree with the w x d the page lays a part out on: LDraw's 2 x 1
-     slope is two studs along ITS x, where the page counts two rows of depth. Rather than keep a
-     table of which parts turn, compare the footprint the geometry actually has. */
-  const wLD = Math.round((m.box[3]-m.box[0])/20), dLD = Math.round((m.box[5]-m.box[2])/20);
-  let yaw = (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
+  let yaw = partYaw(p, m.box);
   if(b.flip) yaw += 180;                       /* which end of a slope keeps its full height */
   const c = Math.round(Math.cos(yaw*Math.PI/180)), s = Math.round(Math.sin(yaw*Math.PI/180));
   /* yaw about the part's own vertical, then its axes onto the page's: standing runs the part's
@@ -2288,10 +2301,14 @@ function toLdr(){
     if(mode==="relief"){ z=(b.row + d/2)*LDU_STUD; y=-((b.base||0) + h)*LDU_PLATE; }
     else               { z=0;                      y=-(plateRows - b.row)*LDU_PLATE; }
     /* A flipped part is TURNED, not mirrored: mirroring a slope makes a part that does not exist.
-       Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1). */
-    const a = b.flip ? -1 : 1;
+       Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1).
+       THE SAME TURN THE 3D VIEW APPLIES GOES IN HERE, from the one function that decides it - the
+       snapshot is the same design seen by another renderer, and a part turned in one and not the
+       other is the defect Glen found in the crest. A quarter turn is (0,0,1 / 0,1,0 / -1,0,0). */
+    const yaw = (partYaw(p, ldrMesh[p.id] && ldrMesh[p.id].box) + (b.flip ? 180 : 0)) * Math.PI/180;
+    const c = Math.round(Math.cos(yaw)), s = Math.round(Math.sin(yaw));
     out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(x)+" "+ldNum(y)+" "+ldNum(z)+" "+
-             a+" 0 0 0 1 0 0 0 "+a+" "+p.id+".dat");
+             c+" 0 "+s+" 0 1 0 "+(-s || 0)+" 0 "+c+" "+p.id+".dat");
   });
   out.push("0");
   return out.join("\n")+"\n";
