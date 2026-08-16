@@ -81,23 +81,33 @@ def has_stud(path, seen=None):
 
 
 def classify(name):
-    """kind and shape, from the part's own description."""
+    """kind and shape, from the part's own description.
+
+    THE SHAPE MUST BE SPOKEN IN THE PAGE'S OWN VOCABULARY, which is rect, slope, invslope, round,
+    cone and wedge - the names its drawing and its 3D build switch on. This wrote box/wedge/round
+    instead, three words borrowed from the specification document, and the page has no idea what they
+    mean: a cone arrived as "round" and was built as a cylinder with a stud on top (Glen, 2026-08-15,
+    looking at one: "I don't know what that is, but it is not a cone"), and a slope would have arrived
+    as a wedge plate. A vocabulary that only one side understands is not a vocabulary.
+    """
     n = name.lower()
     if "inverted" in n and "slope" in n:
-        return "invslope", "wedge"
+        return "invslope", "invslope"
     if "slope" in n:
-        return "slope", "wedge"
+        return "slope", "slope"
     if "cone" in n:
-        return "cone", "round"
+        return "cone", "cone"
     if "round" in n:
         return "round", "round"
     if n.startswith("tile"):
-        return "tile", "box"
-    if n.startswith("plate") or "wing" in n:
-        return "plate", "box"
+        return "tile", "rect"
+    if "wedge" in n or "wing" in n:
+        return "wedge", "wedge"
+    if n.startswith("plate"):
+        return "plate", "rect"
     if n.startswith("brick"):
-        return "brick", "box"
-    return "other", "box"
+        return "brick", "rect"
+    return "other", "rect"
 
 
 def read_list(path):

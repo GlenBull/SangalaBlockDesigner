@@ -10,7 +10,7 @@
    "w": 1,
    "d": 1,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "Red",
    "colorCode": 4,
    "qty": 24
@@ -22,7 +22,7 @@
    "w": 2,
    "d": 1,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "Red",
    "colorCode": 4,
    "qty": 24
@@ -34,7 +34,7 @@
    "w": 3,
    "d": 1,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "White",
    "colorCode": 15,
    "qty": 12
@@ -46,7 +46,7 @@
    "w": 4,
    "d": 1,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "White",
    "colorCode": 15,
    "qty": 12
@@ -58,7 +58,7 @@
    "w": 6,
    "d": 1,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "Black",
    "colorCode": 0,
    "qty": 6
@@ -70,7 +70,7 @@
    "w": 2,
    "d": 2,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "Yellow",
    "colorCode": 14,
    "qty": 16
@@ -82,7 +82,7 @@
    "w": 3,
    "d": 2,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "Yellow",
    "colorCode": 14,
    "qty": 12
@@ -94,7 +94,7 @@
    "w": 4,
    "d": 2,
    "h": 3,
-   "shape": "box",
+   "shape": "rect",
    "color": "Blue",
    "colorCode": 1,
    "qty": 12
@@ -106,7 +106,7 @@
    "w": 2,
    "d": 1,
    "h": 1,
-   "shape": "box",
+   "shape": "rect",
    "geometry": "3023b",
    "color": "Light Bluish Gray",
    "colorCode": 71,
@@ -119,7 +119,7 @@
    "w": 2,
    "d": 2,
    "h": 1,
-   "shape": "box",
+   "shape": "rect",
    "color": "Light Bluish Gray",
    "colorCode": 71,
    "qty": 12
@@ -131,7 +131,7 @@
    "w": 4,
    "d": 2,
    "h": 1,
-   "shape": "box",
+   "shape": "rect",
    "color": "Green",
    "colorCode": 2,
    "qty": 8
@@ -143,7 +143,7 @@
    "w": 1,
    "d": 2,
    "h": 3,
-   "shape": "wedge",
+   "shape": "slope",
    "geometry": "3040b",
    "color": "Red",
    "colorCode": 4,
@@ -156,7 +156,7 @@
    "w": 1,
    "d": 2,
    "h": 3,
-   "shape": "wedge",
+   "shape": "invslope",
    "geometry": "3665a",
    "color": "Red",
    "colorCode": 4,
@@ -169,7 +169,7 @@
    "w": 2,
    "d": 1,
    "h": 1,
-   "shape": "box",
+   "shape": "rect",
    "color": "Black",
    "colorCode": 0,
    "qty": 6

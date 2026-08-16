@@ -112,6 +112,16 @@ namespace SangalaBlocksApp
                     " -ShowEdges=1" +
                     " -ConditionalHighlights=1" +
                     " -SaveActualSize=0" +
+                    // A CIRCLE MUST LOOK LIKE A CIRCLE. LDView's own defaults drew the opening in a
+                    // 1 x 1 cone as a hexagon, and left a visible gap between the cone's collar and
+                    // its body - both plain in a snapshot beside a photograph of the brick (Glen,
+                    // 2026-08-15). The first is the curve quality slider, at its lowest by default
+                    // and turned up here; the second is LDView's seam allowance, which shrinks each
+                    // part to show where parts meet and opens a seam inside a single part as well.
+                    " -AllowPrimitiveSubstitution=1" +
+                    " -CurveQuality=12" +
+                    " -HiResPrimitives=1" +
+                    " -Seams=0" +
                     (string.IsNullOrEmpty(angle) ? "" : " -cg" + angle)
             };
             int exitCode = -1;

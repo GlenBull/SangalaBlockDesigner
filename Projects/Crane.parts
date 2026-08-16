@@ -10,7 +10,7 @@
    "w": 1,
    "d": 1,
    "h": 3,
-   "shape": "round",
+   "shape": "cone",
    "color": "Yellow",
    "colorCode": 14,
    "qty": 1
@@ -22,7 +22,7 @@
    "w": 1,
    "d": 2,
    "h": 3,
-   "shape": "wedge",
+   "shape": "invslope",
    "geometry": "3665a",
    "color": "Yellow",
    "colorCode": 14,
