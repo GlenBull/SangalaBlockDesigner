@@ -1,0 +1,10 @@
+# The LEGO crane, part by part, as it is deconstructed from the model.
+# One part to a line - the design number, then how many the crane uses and its color.
+# The name, the footprint and the height are read from the LDraw library, never typed here.
+#
+# THE HEAD, working down from the top.
+
+# The crest: a cone between two inverted slopes, all three three plates tall,
+# so they stand in one course.
+4589, 1, Yellow            # Cone 1 x 1, center
+3665, 2, Yellow            # Slope Brick 45 2 x 1 Inverted, one each side (one of them flipped)

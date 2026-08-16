@@ -390,9 +390,9 @@ const KINDS = {
   plate:    {label:"Plate",          shape:"rect",     h:1,
              sizes:[{w:1,id:"3024",n:"1x1"},{w:2,id:"3023",n:"1x2"},{w:4,id:"3710",n:"1x4"},{w:6,id:"3666",n:"1x6"}]},
   slope:    {label:"Slope",          shape:"slope",    h:3,
-             sizes:[{w:2,id:"3040",n:"2x1"},{w:2,id:"3039",n:"2x2"},{w:4,id:"3037",n:"2x4"}]},
+             sizes:[{w:1,id:"3040",n:"2x1"},{w:2,id:"3039",n:"2x2"},{w:4,id:"3037",n:"2x4"}]},
   invslope: {label:"Inverted Slope", shape:"invslope", h:3,
-             sizes:[{w:2,id:"3665",n:"2x1"},{w:2,id:"3660",n:"2x2"}]},
+             sizes:[{w:1,id:"3665",n:"2x1"},{w:2,id:"3660",n:"2x2"}]},
   /* The three Studio also offers. Numbers read from the library, not remembered - and the wedge
      plate is why that matters: LDraw files it under a different word, "Wing", so searching the
      catalogue for a wedge plate returns nothing at all. */
@@ -2628,13 +2628,25 @@ function drawLibrary(){
   const rows = libParts;
   document.querySelector("#libtable tbody").innerHTML =
     (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
-    rows.map(p=>{
+    rows.map((p,i)=>{
       const c = COLORS.find(x=>x.code===p.colorCode);
-      return "<tr><td>"+(p.name||p.id)+"<br><span class='dn'>Design "+p.id+"</span></td>"
+      return "<tr draggable='true' data-lib='"+i+"' title='Drag this part onto the workspace to place it'"
+        +" style='cursor:grab'><td>"+(p.name||p.id)+"<br><span class='dn'>Design "+p.id+"</span></td>"
         +"<td>"+(c ? "<span class='chip' style='background:"+c.hex+"'></span>" : "")
         +(p.color||"&mdash;")+"</td>"
         +"<td class='q'>"+(typeof p.qty==="number" ? p.qty : "&mdash;")+"</td></tr>";
     }).join("");
+  /* A LIBRARY ROW IS A DRAG SOURCE. Glen, 2026-08-15: "I need to be able to drag parts out of the
+     library list into the workspace." The row carries only its index; everything about the part -
+     its footprint, its height, its shape, its color - is read from the library entry when it lands,
+     so a part dragged from here is placed at the size the LDraw file measured rather than at
+     whatever the Part menu happens to say about that number. */
+  document.querySelectorAll("#libtable tr[data-lib]").forEach(tr=>{
+    tr.addEventListener("dragstart", e=>{
+      e.dataTransfer.setData("text/plain", "sangala-lib:"+tr.dataset.lib);
+      e.dataTransfer.effectAllowed = "copy";
+    });
+  });
   const pieces = rows.reduce((n,p)=>n+(p.qty||0), 0);
   $("libcount").textContent = rows.length
     ? " · "+rows.length+(rows.length===1?" part":" parts")+(pieces? ", "+pieces+" pieces":"") : "";
@@ -2648,6 +2660,28 @@ function drawLibrary(){
   $("libhead").title = libOpen ? "Hide the library" : "Show the library";
 }
 $("libhead").onclick=()=>{ libOpen=!libOpen; drawLibrary(); };
+/* ...and the workspace is the drop target. The part lands on the cell it was dropped on, in its own
+   color where the palette has that color, and is placed by the same settle() every other placement
+   goes through - so a dragged part obeys whatever the rules are rather than having rules of its own. */
+cv.addEventListener("dragover", e=>{ e.preventDefault(); e.dataTransfer.dropEffect="copy"; });
+cv.addEventListener("drop", e=>{
+  const data = e.dataTransfer.getData("text/plain") || "";
+  if(data.indexOf("sangala-lib:")!==0) return;
+  e.preventDefault();
+  if(view3D){ say("Turn 3D View off to place a part."); return; }
+  const lp = libParts[parseInt(data.slice(12),10)];
+  if(!lp) return;
+  const c = cell(e);
+  const p = {id:lp.id, name:lp.name||lp.id, w:Math.max(1,lp.w|0), d:Math.max(1,lp.d|0),
+             h:Math.max(1,lp.h|0), shape:(lp.shape==="box"?"rect":lp.shape||"rect"),
+             studs:(lp.kind!=="tile")};
+  const ci = COLORS.findIndex(x=>x.code===lp.colorCode);
+  const nb = settle({p:p, colorIdx:(ci<0?selCol:ci), col:c.col, row:c.row, flip:flip});
+  bricks.push(nb);
+  draw(); bom(); commit();
+  say(p.name+" placed from the "+(libraries[0]||"library")+" library."
+      + (ci<0 && lp.color ? " Its color, "+lp.color+", is not in the palette, so it was placed in the current color." : ""));
+});
 function addKindButton(kind, label){
   const menu = $("partmenu");
   if(menu.querySelector('button[data-kind="'+kind+'"]')) return;

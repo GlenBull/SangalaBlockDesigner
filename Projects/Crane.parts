@@ -1,0 +1,32 @@
+{
+ "sangala": "parts",
+ "version": 1,
+ "name": "Crane",
+ "parts": [
+  {
+   "id": "4589",
+   "name": "Cone 1 x 1",
+   "kind": "cone",
+   "w": 1,
+   "d": 1,
+   "h": 3,
+   "shape": "round",
+   "color": "Yellow",
+   "colorCode": 14,
+   "qty": 1
+  },
+  {
+   "id": "3665",
+   "name": "Slope Brick 45 2 x 1 Inverted without Inner Stopper Ring",
+   "kind": "invslope",
+   "w": 1,
+   "d": 2,
+   "h": 3,
+   "shape": "wedge",
+   "geometry": "3665a",
+   "color": "Yellow",
+   "colorCode": 14,
+   "qty": 2
+  }
+ ]
+}
