@@ -13,3 +13,7 @@
 # one stud out over the beak: the brick beneath it carries only its left two studs.
 3623, 1, Black             # Plate 1 x 3, carrying the crest
 3004, 1, Black             # Brick 1 x 2, the head itself
+
+# The bill, beside the head brick and one course lower than the crest. It is the same piece as
+# the crest's slopes the other way up, and the plate's overhanging stud is what holds it on.
+3040, 1, Red               # Slope Brick 45 2 x 1, the ramp falling away to the point

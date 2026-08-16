@@ -20,7 +20,7 @@
    "name": "Slope Brick 45 2 x 1 Inverted without Inner Stopper Ring",
    "kind": "invslope",
    "w": 1,
-   "d": 2,
+   "d": 1,
    "h": 3,
    "shape": "invslope",
    "geometry": "3665a",
@@ -50,6 +50,19 @@
    "shape": "rect",
    "color": "Black",
    "colorCode": 0,
+   "qty": 1
+  },
+  {
+   "id": "3040",
+   "name": "Slope Brick 45 2 x 1",
+   "kind": "slope",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "slope",
+   "geometry": "3040b",
+   "color": "Red",
+   "colorCode": 4,
    "qty": 1
   }
  ]

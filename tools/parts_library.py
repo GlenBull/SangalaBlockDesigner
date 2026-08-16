@@ -13,10 +13,12 @@ own first line, the footprint and height are measured, and the color is matched 
 LDConfig.ldr. A line that cannot be resolved is REPORTED AND LEFT OUT, so a mistyped number shows up
 as a line to correct rather than as a part that does not exist.
 
-TWO MEASUREMENTS NEED CARE. A measured height includes the stud - a brick is 28 LDU, being 24 of
+THREE MEASUREMENTS NEED CARE. A measured height includes the stud - a brick is 28 LDU, being 24 of
 body and 4 of stud - and the application's own size table records the BODY, so the stud is subtracted
-from anything that has one. And a part is stored under the number that was SUBMITTED, because that
-is the number a builder orders by; the redirection matters only for reading the geometry.
+from anything that has one. A measured footprint is the whole bounding box, which for a slope is
+neither the way it lies nor what it rests on - see `footprint`, which is the correction. And a part
+is stored under the number that was SUBMITTED, because that is the number a builder orders by; the
+redirection matters only for reading the geometry.
 
 Where the specification and this script differ, and the difference is deliberate: the document says
 shape is classified from the geometry. It is classified here from the part's own description, which
@@ -110,6 +112,36 @@ def classify(name):
     return "other", "rect"
 
 
+def footprint(shape, w, dd):
+    """The measured bounding box -> what the part RESTS ON, which is what a .parts file states.
+
+    A BOUNDING BOX CANNOT TELL YOU WHAT A PART STANDS ON, and writing it as though it could is what
+    put the crest a stud too deep: dragging a part out of the Library panel builds it straight from
+    the w and d written here, so an inverted slope arrived two studs deep, hung off the back edge of
+    the plate it was standing on, and looked perfect from the front because the error ran straight
+    away from the camera. The Part menu was right all along - it reads the application's own size
+    table, which states these footprints outright. This makes the file say the same thing.
+
+    Two corrections, and both are measured facts about 45-degree slopes rather than conventions:
+      - THE RAMP RUNS ALONG THE PART'S OWN Z, on every one of them (3040, 3039, 3037, 3665, 3660).
+        The standing view is the figure in profile and needs that ramp ACROSS the screen, so the
+        ramped side takes the COLUMNS and the other side becomes the rows. That is a straight swap.
+      - AN INVERTED SLOPE RESTS ON LESS THAN IT COVERS. Its underside is cut away, so it attaches to
+        one stud along the ramp and the rest of the body hangs over the next; the footprint is one
+        column short of the body, and the application adds that column back as the overhang. An
+        ordinary slope rests on all of itself and is not shortened - the two are opposites, which is
+        why no single rule about "how many columns a slope takes" can ever be right.
+
+    Checked against the application's own table, which was measured independently: 3040 -> 2 x 1,
+    3039 -> 2 x 2, 3037 -> 2 x 4, 3665 -> 1 x 1, 3660 -> 1 x 2. All five agree.
+    """
+    if shape in ("slope", "invslope"):
+        w, dd = dd, w
+        if shape == "invslope":
+            w = max(1, w - 1)
+    return w, dd
+
+
 def read_list(path):
     """One part to a line: number[, qty][, color]. Blank lines and # comments are ignored."""
     rows = []
@@ -150,6 +182,7 @@ def build(rows):
             tall -= STUD_LDU
         h = int(round(tall / PLATE_LDU))
         kind, shape = classify(name)
+        w, dd = footprint(shape, w, dd)
         part = {"id": number, "name": " ".join(name.split()), "kind": kind,
                 "w": max(1, w), "d": max(1, dd), "h": max(1, h), "shape": shape}
         if target.lower() != number.lower():
