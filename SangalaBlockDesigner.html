@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.004 -->
+<!-- SANGALA_VERSION: 2026-08-16.005 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2970,12 +2970,12 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
       base:b.base}));
-    /* A slope saved before the ramp was laid across the profile has its 2 studs in the depth, where
-       the profile cannot show them. Turn it as it is read, so an older design opens looking the way
-       it was meant to rather than as the rectangle the old placement really described. */
-    bricks.forEach(b=>{ const p=b.p;
-      if((p.shape==="slope"||p.shape==="invslope") && (p.d||1)===2 && p.w!==2){
-        const w=p.w; p.w=p.d; p.d=w; } });
+    /* A SAVED DESIGN IS OPENED EXACTLY AS IT WAS SAVED. There was a migration here that turned an
+       older slope to lie ramp-across, and it was wrong to write: turning a 1-column slope into a
+       2-column one WIDENS it, so it swallowed the column beside it - in the crest that column held
+       the cone, which then appeared nowhere in the 3D view because it was inside a slope. A file is
+       the builder's, and rearranging it on the way in is not a fix (Glen, 2026-08-16). An older
+       slope opens where it was put, and turning it is his to do. */
     /* A file written before this carries no base. Rather than drop every brick on the plate, each
        one is landed in the order it was placed, on the frame or on what is already there. */
     bricks.forEach((b,i)=>{ if(typeof b.base!=="number"){
