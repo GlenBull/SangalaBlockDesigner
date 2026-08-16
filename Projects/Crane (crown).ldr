@@ -1,0 +1,10 @@
+0 Sangala Blocks design
+0 Name: sangala.ldr
+0 Author: Sangala Blocks
+0 !LDRAW_ORG Unofficial_Model
+0 // built in standing mode
+
+1 14 280 -624 0 -1 0 0 0 1 0 0 0 -1 3660.dat
+1 14 340 -624 0 1 0 0 0 1 0 0 0 1 3660.dat
+1 14 310 -616 0 1 0 0 0 1 0 0 0 1 4589.dat
+0

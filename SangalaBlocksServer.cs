@@ -113,14 +113,18 @@ namespace SangalaBlocksApp
                     " -ConditionalHighlights=1" +
                     " -SaveActualSize=0" +
                     // A CIRCLE MUST LOOK LIKE A CIRCLE. LDView's own defaults drew the opening in a
-                    // 1 x 1 cone as a hexagon, and left a visible gap between the cone's collar and
-                    // its body - both plain in a snapshot beside a photograph of the brick (Glen,
-                    // 2026-08-15). The first is the curve quality slider, at its lowest by default
-                    // and turned up here; the second is LDView's seam allowance, which shrinks each
-                    // part to show where parts meet and opens a seam inside a single part as well.
+                    // 1 x 1 cone as a polygon, and left a visible gap where that rim met the cone
+                    // beneath it - both plain in a snapshot beside a photograph of the brick (Glen,
+                    // 2026-08-15, again 2026-08-16). BOTH COME FROM THE STUDS, not from the cone:
+                    // LDView substitutes its own coarse geometry for every stud, and the rim of an
+                    // open stud is what that opening is. The coarse rim is the polygon, and it does
+                    // not meet the smooth cone it sits on, so the eye looks through the slot
+                    // between them. -UseQualityStuds=1 ends both at once. Curve quality alone does
+                    // NOT: it smooths the cone and leaves the stud coarse, which widens the gap.
                     " -AllowPrimitiveSubstitution=1" +
                     " -CurveQuality=12" +
                     " -HiResPrimitives=1" +
+                    " -UseQualityStuds=1" +
                     " -Seams=0" +
                     (string.IsNullOrEmpty(angle) ? "" : " -cg" + angle)
             };
