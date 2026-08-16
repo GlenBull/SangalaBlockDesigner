@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.008 -->
+<!-- SANGALA_VERSION: 2026-08-16.013 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -360,6 +360,7 @@
        ordered by, so a finished design is also its own parts list.</p>
     <p>The icon representing Sangala Blocks in its logo and the desktop launcher is a
        crowned crane built from bricks.</p>
+    <p id="aVer" style="color:#5a4a34;font-size:.9rem"></p>
     <p style="text-align:right;margin-bottom:0"><button class="ebtn" id="aClose">Close</button></p>
   </div>
 </div>
@@ -739,18 +740,40 @@ function shape(p,col,row,fl){
        applySize now refuses it, so the only pieces that can disagree with their own 3D view are
        ones saved before today. */
     if(p.shape==="slope"){
-      /* the ramp stops a plate short of nothing, as the real part does - a wedge run out to a
-         point is the one place this profile disagreed with the part beside it */
       /* UNFLIPPED IS TALL AT THE RIGHT, which is what the part itself does and what the Flip
          button already says ("slopes now face left"). The glyph used to be drawn the other way
          round and so faced opposite its own 3D view. */
-      const lip=mx(PLATE);
-      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y+lip); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
-      else  { ctx.moveTo(x,y+lip); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
+      /* THE TWO SLOPES ARE ONE SHAPE, REFLECTED VERTICALLY. Glen, 2026-08-16, and it is the whole
+         specification: "the red brick is the mirror image of the yellow one. It is one stud on the
+         top and two studs on the bottom... If you flip the yellow brick vertically, you will have
+         the shape of the red brick." So:
+           slope     - ONE stud of flat top, then the fall across ONE stud, on a base of two;
+           invslope  - the same polygon reflected in y: two studs of flat top, the rise across one,
+                       standing on one.
+         THE FALL IS ONE STUD, and that is a fact about the part rather than about the drawing -
+         every 45-degree slope is catalogued 2 x N because its ramp spans two studs, one flat and
+         one fallen. What is left at the fallen end (h - run, a shade over a plate for a brick) is
+         the lip, and it needs no constant of its own: the geometry produces it.
+         I got here the long way and the pattern is worth naming. First I ran the ramp corner to
+         corner, then I argued about how far that one ramp should fall, then I derived a 6.4 mm fall
+         from the height when the answer was a whole stud. Three attempts, all of them reasoning
+         from the drawing instead of from the part, against a man holding the part. `mx` is px per
+         mm on BOTH axes, so 45 degrees in millimetres is 45 on screen; clamped to w for a part too
+         short to finish its fall within its own length. */
+      const run=Math.min(w, mx(STUD));
+      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w-run,y); ctx.lineTo(x+w,y+run);
+              ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
+      else  { ctx.moveTo(x,y+run); ctx.lineTo(x+run,y); ctx.lineTo(x+w,y);
+              ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
     } else if(p.shape==="invslope"){
-      const lip=mx(PLATE);
-      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+lip); ctx.lineTo(x,y+h); }
-      else  { ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+lip); }
+      /* the slope above, reflected in y - see the note there. The top stays flat across both studs
+         and the UNDERSIDE is what falls away, so the lip hangs from the roof instead of standing
+         on the base, and the one stud of flat bottom is the stud the part rests on. */
+      const run=Math.min(w, mx(STUD));
+      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h-run);
+              ctx.lineTo(x+w-run,y+h); ctx.lineTo(x,y+h); }
+      else  { ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h);
+              ctx.lineTo(x+run,y+h); ctx.lineTo(x,y+h-run); }
     } else if(p.shape==="cone"){
       const t=w*CONE_TIP;                              /* the same half the 3D view tapers to */
       ctx.moveTo(x,y+h); ctx.lineTo(x+(w-t)/2,y); ctx.lineTo(x+(w+t)/2,y); ctx.lineTo(x+w,y+h);
@@ -867,13 +890,25 @@ function drawBrick(b,ghost){
   if(studded(p) && mode==="standing"){
     /* STANDING: the studs stand PROUD OF THE TOP, because that is where they are on a brick you
        look at from the side. Drawn before nothing else covers them - they belong to this part. */
-    const sw=mx(4.8), sh=Math.max(1.4, mx(1.7));
+    /* A STUD STANDS ON THE TOP FACE; IT IS NOT SUNK THROUGH IT, AND IT IS NOT A LOZENGE. This drew
+       a box from y-sh to y+sh - half of it buried in the brick - with a corner radius of half its
+       own height, so both ends rounded fully and it read as "an oval like a racetrack... glued on
+       the side of the brick" (Glen, 2026-08-16). Real numbers instead, the SAME ones the 3D build
+       uses in cylZ: 4.8 mm across and 1.8 mm tall, sitting wholly above y with only the top corners
+       eased. The path is left OPEN along the bottom, so the fill closes it but the stroke draws no
+       line where the stud meets the face it stands on - a seam there is what makes a stud look
+       stuck on rather than moulded. */
+    const sw=mx(4.8), sHt=Math.max(1.2, mx(1.8)), sR=Math.min(mx(0.5), sHt/2, sw/2);
     for(let cx=0;cx<bcols;cx++){                    /* studs sit on the BODY, overhang included */
       if(p.shape==="slope" && (fl ? cx===bcols-1 : cx===0)) continue;   /* the fallen end has none */
-      const px2=x+mx(STUD)*(cx+.5);
+      const px2=x+mx(STUD)*(cx+.5), sL=px2-sw/2, sRt=px2+sw/2, sT=y-sHt;
       ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(px2-sw/2, y-sh, sw, sh*2, Math.min(sh,sw/2));
-      else ctx.rect(px2-sw/2, y-sh, sw, sh*2);
+      ctx.moveTo(sL, y);
+      ctx.lineTo(sL, sT+sR);
+      ctx.quadraticCurveTo(sL, sT, sL+sR, sT);
+      ctx.lineTo(sRt-sR, sT);
+      ctx.quadraticCurveTo(sRt, sT, sRt, sT+sR);
+      ctx.lineTo(sRt, y);
       ctx.fillStyle=studFace; ctx.fill();
       ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
     }
@@ -3049,6 +3084,17 @@ function drawPartsFold(){
 }
 $("partshead").onclick=()=>{ partsOpen=!partsOpen; drawPartsFold(); };
 drawPartsFold();
+/* THE RUNNING PAGE SAYS WHICH PAGE IT IS. Without this there is no way to tell a stale tab from a
+   change that did not work, and the two look identical: on 2026-08-16 Glen and I spent four rounds
+   on a slope whose corrected shape was sitting in the file and being served, while the browser drew
+   the old one - and neither of us could see which page was running. Read from the SANGALA_VERSION
+   comment itself rather than a constant beside it, so there is one number and it cannot drift from
+   the one the updater gates on. */
+(function(){ const c=[].slice.call(document.childNodes).filter(function(n){
+               return n.nodeType===8 && n.data.indexOf("SANGALA_VERSION")>=0; })[0];
+             const m=c && c.data.match(/SANGALA_VERSION:\s*(\S+)/);
+             $("aVer").textContent = m ? "Version "+m[1]
+               : "This page carries no version marker."; })();
 $("bAbout").onclick=()=>$("about").classList.add("show");
 $("aClose").onclick=()=>$("about").classList.remove("show");
 
