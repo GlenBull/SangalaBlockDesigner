@@ -51,6 +51,29 @@ convention. "Why do you persist in reinventing the wheel?" is the standing corre
 - Nothing is placed automatically. The student picks every part and places it — that is the point of
   the tool, not an implementation detail.
 
+## Two facts about parts, settled 2026-08-16 — do not re-derive either
+**THE STANDING VIEW IS THE FIGURE IN PROFILE.** What the workspace shows must be what you would see
+looking at the real crane from the side, so the 3D view and the snapshot must agree with it piece for
+piece. Glen said this twice; it is the test any change to placement has to pass.
+
+**A PART IS PLACED BY THE FACE IT RESTS ON, AND ITS BODY MAY REACH FURTHER.** The proof is a
+photograph of the real crest: a 1 x 3 black plate carries three pieces, each standing on ONE stud —
+inverted slope, cone, inverted slope — and the two slopes hang out past both ends of the plate.
+Measured on the parts and it holds: **3665's body is 2 studs long and it rests on 1 x 1; 3660 is
+2 x 2 and rests on 2 x 1; an ordinary slope's bottom is full, so it rests on all of itself.** An
+inverted slope is one stud wide at the bottom and two at the top; an ordinary slope is the opposite.
+**So no rule of the form "a slope occupies N columns" can ever be right** — that rule was shipped
+twice in one afternoon and reverted twice. `overCols`/`overLeft`/`overRight` beside `shape()` carry
+the overhang, and the workspace, `ldrTris` and `toLdr` all ask them, so a piece cannot be drawn one
+way and placed another.
+
+**The 3D view is drawn from the library's own `.dat` files**, the same ones LDView renders the
+snapshot from, fetched through the bridge's `/part` route. Do not add a hand-written mesh for a new
+part: the seven that existed were each a guess, and every one of them was wrong in a way only a
+photograph settled. **And never rewrite a saved design on the way in** — a migration that turned old
+slopes widened them until they swallowed the stud beside them, which is the builder's work destroyed
+to satisfy a convention.
+
 ## Where documents go (Glen, 2026-08-14)
 A document about this application is published to Dropbox at
 `AI Sandbox\Design through Making\Sangala Tools\Sangala Blocks Files\Documents\` — Jo cannot
