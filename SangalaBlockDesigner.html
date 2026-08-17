@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.034 -->
+<!-- SANGALA_VERSION: 2026-08-17.035 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2488,8 +2488,16 @@ function toLdr(){
     const oL=overLeft(p,b.flip), oR=overRight(p,b.flip);
     const bx=((b.col - oL) + (w + oL + oR)/2)*LDU_STUD;   /* where the cell's centre is */
     let y, bz;
-    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD; y=-((b.base||0) + h)*LDU_PLATE; }
-    else               { bz=0;                      y=-(plateRows - b.row)*LDU_PLATE; }
+    /* STANDING NOW HAS DEPTH, and this wrote bz=0 - every part at one depth, so a snapshot of a
+       figure several courses deep showed it flat. A layer moves TOWARDS the viewer, and in LDraw's
+       view that is NEGATIVE z: rendered through this bridge at its own 30,45 camera, three bricks at
+       z = -40, 0 and +40 come out with the -40 one nearest. Measured, not reasoned.
+       The band's CENTRE is written because the geometry correction below centres the mesh in it, and
+       the centre of a part whose back face sits at -base*STUD and which is d studs deep is
+       -(base + d/2). Back-aligning like this is what the 3D view does (`y1 = -base*STUD` is the back
+       face); centring on the layer line instead would only agree while every part is one stud deep. */
+    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD;          y=-((b.base||0) + h)*LDU_PLATE; }
+    else               { bz=-((b.base||0) + d/2)*LDU_STUD;   y=-(plateRows - b.row)*LDU_PLATE; }
     /* A flipped part is TURNED, not mirrored: mirroring a slope makes a part that does not exist.
        Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1).
        THE SAME TURN THE 3D VIEW APPLIES GOES IN HERE, from the one function that decides it - the
