@@ -211,6 +211,22 @@ def _walk_studs(path, xf=IDENT, depth=0, seen=(), out=None):
     return out
 
 
+def american(name):
+    """LDraw writes British; every Sangala surface writes American (Glen, 2026-08-17, reading
+    "Plate 1 x 2 with Groove with 1 Centre Stud" in the Library panel).
+
+    The colors have been converted since this script was written - LDraw's file says Grey and the
+    application's palette says Gray - and a part's NAME arrives by the same route and deserves the
+    same treatment. Only whole words are replaced, and the capitalization of each is kept, so
+    "Centre" becomes "Center" and a design number is never touched.
+    """
+    for brit, amer in (("Centre", "Center"), ("Centres", "Centers"), ("Grey", "Gray"),
+                       ("Colour", "Color"), ("Colours", "Colors"), ("Moulded", "Molded")):
+        name = re.sub(r"\b%s\b" % brit, amer, name)
+        name = re.sub(r"\b%s\b" % brit.lower(), amer.lower(), name)
+    return name
+
+
 def classify(name):
     """kind and shape, from the part's own description.
 
@@ -313,7 +329,7 @@ def build(rows):
         kind, shape = classify(name)
         raw_w = w
         w, dd = footprint(shape, w, dd)
-        part = {"id": number, "name": " ".join(name.split()), "kind": kind,
+        part = {"id": number, "name": american(" ".join(name.split())), "kind": kind,
                 "w": max(1, w), "d": max(1, dd), "h": max(1, h), "shape": shape}
         # Only where the footprint was left as it was measured. A slope's w and d are SWAPPED above
         # to turn the ramp across the screen, and a stud position measured in the part's own frame
