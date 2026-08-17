@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.055 -->
+<!-- SANGALA_VERSION: 2026-08-17.056 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1948,13 +1948,15 @@ $("tErase").onclick =()=>{closeMenus();setTool(tool==="erase"?"select":"erase");
    Glen, 2026-08-17: "Flip, in contrast, does not affect a selected brick in the workspace. However,
    turn should be the model. This should work on the selected brick on the workspace because then you
    will immediately see the result." With nothing selected it arms the next placement, as before. */
-function syncFlip(){
-  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
-  $("tFlip").classList.toggle("on", b ? !!b.flip : flip);
-}
+function syncFlip(){ $("tFlip").classList.toggle("on", flip); }
 $("tFlip").onclick  =()=>{
   const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
-  if(b){ b.flip = !b.flip; commit(); }
+  /* THE ARMING FOLLOWS THE BRICK, so the two can never disagree. Turning a selected brick without
+     also setting this left the button describing the brick while a DIFFERENT value was still armed
+     for the next placement - so selecting an upright brick put the light out while everything placed
+     afterwards still came down turned. Glen saw the result before the cause: "the 3D view is
+     flattened and distorted", a body of bricks each laid on its face. One state, shown once. */
+  if(b){ b.flip = !b.flip; flip = !!b.flip; commit(); }
   else flip = !flip;
   syncFlip(); draw();
 };
@@ -1965,13 +1967,12 @@ $("tFlip").onclick  =()=>{
    It does NOT re-settle the brick: turning changes the cells it claims, and settle() would compare
    the brick against itself and push it a layer forward. It stays in the layer it is in.
    No message either way: the button stays lit, which is the state. */
-function syncFace(){
-  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
-  $("tFace").classList.toggle("on", b ? b.turn==="face" : faceNext);
-}
+/* The light is the ARMING - what the next brick will do - and toggling a selected brick keeps the
+   two in step, so it describes the brick as well. It must never show one and mean the other. */
+function syncFace(){ $("tFace").classList.toggle("on", faceNext); }
 $("tFace").onclick  =()=>{
   const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
-  if(b){ b.turn = b.turn==="face" ? undefined : "face"; commit(); }
+  if(b){ b.turn = b.turn==="face" ? undefined : "face"; faceNext = b.turn==="face"; commit(); }
   else faceNext = !faceNext;
   syncFace(); draw();
 };
