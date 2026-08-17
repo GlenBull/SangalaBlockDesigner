@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.017 -->
+<!-- SANGALA_VERSION: 2026-08-16.018 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2024,14 +2024,12 @@ function restingBase(nb){        /* the base it would take: the top of whatever 
   bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
   return base;
 }
-function carries(b){             /* is anything resting ON this one? */
-  if(mode==="standing"){         /* resting ON it means sitting directly above it */
-    const f=foot(b);
-    return bricks.some(o=>{ if(o===b) return false; const g=foot(o);
-      return g.x1>f.x0 && f.x1>g.x0 && g.y1===f.y0; });
-  }
-  return bricks.some(o=>o!==b && overlaps(o,b) && o.base===b.base+thick(b.p));
-}
+/* A BRICK COMES OUT FROM ANYWHERE, not only off the top (Glen, 2026-08-16: "I would like to be
+   able to drag bricks in and out of the design no matter where they are located"). What stood here
+   was `carries()`, and the move and the erase both refused a brick with anything resting on it -
+   the last remnant of the physical rule that the no-gravity decision above had already set aside.
+   A plan is not the model: a designer pulls a course out of the middle to try another, and the
+   pieces above stay exactly where they were put, which is what "nothing falls" means. */
 /* landRow() and onFrame() were here: a part fell to whatever held it up, unless the frame was
    behind it. Both are gone with the gravity they served (see settle, below) - a helper left behind
    describes a rule the application no longer has, which is the most expensive kind of comment. */
@@ -2072,7 +2070,6 @@ cv.addEventListener("mousedown",(e)=>{
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
   if(i<0) return;
-  if(carries(bricks[i])){ say("That brick is holding another one up — move the one above it first."); return; }
   const b=bricks[i];
   moveDrag={i:i, dcol:c.col-b.col, drow:c.row-b.row, from:{col:b.col,row:b.row,base:b.base}, moved:false};
   cv.style.cursor="grabbing";
@@ -2111,7 +2108,6 @@ cv.addEventListener("click",e=>{
   const c=cell(e);
   if(tool==="erase"){
     const i=hit(c); if(i<0) return;
-    if(carries(bricks[i])){ say("That brick is holding another one up — take the one above it off first."); return; }
     bricks.splice(i,1); draw(); commit(); return;
   }
   if(tool!=="place") return;
