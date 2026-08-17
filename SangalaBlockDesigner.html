@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.035 -->
+<!-- SANGALA_VERSION: 2026-08-17.048 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -216,7 +216,33 @@
          Color heading and swatches, a whole section down, where it read as buried mid-panel - and a
          line that names the project belongs at the head of the panel, not in the middle of it
          (Glen, 2026-07-24). Moving it up also matches Mosaic, which the comment here always claimed. -->
-    <div id="projName" class="projline" style="display:none"></div>
+    <!-- THE NAME IS EDITABLE, because until now there was no way to rename a project at all. A save
+         names an unnamed project and never renames a named one - which is right, and is what stopped
+         a passing "Test.block" renaming an imported design - but it left no way to say "this really
+         is a different project now" (Glen, 2026-08-17, having saved Crane (head & body) and found it
+         still called Crane (head)). The dashed underline is what says it can be typed in. -->
+    <div id="projName" class="projline" style="display:none">Project: <span id="projEdit"
+         contenteditable="true" spellcheck="false" title="Click to rename this project"
+         style="outline:none;border-bottom:1px dashed #b09a72;padding:0 2px;cursor:text"></span></div>
+    <!-- THE BRICK THAT IS SELECTED, and it needed a place of its own. Its layer went into the message
+         line below first, which was wrong twice over: that line is a running commentary that the next
+         placement overwrites, and Color and Brick Size beneath it are settings for the NEXT brick, not
+         descriptions of this one. So the panel was interleaving two different kinds of thing with
+         nothing marking the join (Glen, 2026-08-17: "is this information about the selected brick,
+         with the color picker in between?"). Directly under the project name, at his choice, so the
+         panel reads down as "the brick I have selected", then "the settings for the next one". -->
+    <div id="selpanel" style="display:none">
+      <!-- no heading: the line appears only when a brick is selected, so it needs nothing to say so
+           (Glen, 2026-08-17: "You don't need to say 'Selected'") -->
+      <!-- ONE LINE, part and layer together. Glen, 2026-08-17: "this is too verbose; it makes it
+           difficult to parse the relevant information." projline's own look, but WRAPPING, since it
+           truncates with an ellipsis - right for a project name, and it would hide half of "Slope
+           Brick 45 2 x 1 Inverted without Inner Stopper Ring". -->
+      <!-- NOT BOLD. Bold is what the project name above it uses, and two bold lines together read as
+           two headings (Glen, 2026-08-17). Same size and color, ordinary weight - it is a reading,
+           not a title. -->
+      <div id="selName" style="margin-top:.4rem;font-size:.85rem;color:#5a4a34"></div>
+    </div>
     <div class="hint" id="status">Pick a part from the Toolbar, then click the frame to place it.</div>
 
     <h2 class="marker">Color</h2>
@@ -975,8 +1001,13 @@ function draw(){
      the one slope placed AFTER it covered its stud correctly - "when a stud is in a socket, it
      should never show through a brick" (2026-08-16). Rows count downward, so the lowest part has
      the largest row and is drawn first. Stable, so parts at one level keep their placement order. */
+  /* DEPTH DOMINATES, THEN HEIGHT. Sorting a standing figure by row alone was right while it was one
+     course deep; with layers, a brick placed BEHIND another could be drawn over it, because two
+     bricks in the same row fell back to the order they were placed in. Anything in front covers
+     anything behind it, whatever their heights; within one layer the higher brick still covers the
+     studs of the one it rests on. */
   const order=bricks.slice().sort(mode==="standing"
-    ? (a,b)=>(b.row||0)-(a.row||0)
+    ? (a,b)=>((a.base||0)-(b.base||0)) || ((b.row||0)-(a.row||0))
     : (a,b)=>(a.base||0)-(b.base||0));
   order.forEach(b=>drawBrick(b,false));
   /* THE SELECTED BRICK IS OUTLINED, because a selection you cannot see is not a selection - and
@@ -985,6 +1016,7 @@ function draw(){
      to mark a brick the pointer is deciding about. A selection whose brick has left the design -
      erased, undone, opened away - is dropped here rather than left dangling. */
   if(selBrick && bricks.indexOf(selBrick)<0) selBrick=null;
+  drawSelection();                     /* the panel block follows the selection, wherever it changed */
   if(selBrick){
     ctx.save();
     ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
@@ -2116,6 +2148,21 @@ function hit(c){                 /* the topmost brick under the pointer */
   return best;
 }
 const plates = n => n+(n===1?" plate":" plates");
+/* WHERE A BRICK CAME TO REST, in the words of the mode it was placed in. A relief stacks towards the
+   viewer in plates and has always said so. A standing figure said nothing, because until today it had
+   only one layer - the comment at the placement even read "it stays where it was put; nothing to
+   report". Now that it stacks back to front, a builder needs to be told which course a brick landed
+   in, or two bricks a stud apart in depth are indistinguishable on a flat plan. */
+const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0) : "Layer "+(b.base||0);
+/* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
+   that knows the selection is still real - a brick can leave the design by being erased, undone or
+   opened away, and the block must not go on describing it. */
+function drawSelection(){
+  const on = !!selBrick && bricks.indexOf(selBrick)>=0;
+  $("selpanel").style.display = on ? "" : "none";
+  if(!on) return;
+  $("selName").textContent = selBrick.p.name+" · "+layerTag(selBrick);
+}
 
 /* ---------- move a placed brick: pick it up with Select and drag it ----------
    The other half of parking on the cork (Glen, 2026-08-14): "I could quickly try two or three
@@ -2143,7 +2190,13 @@ cv.addEventListener("mousedown",(e)=>{
   /* DRAW IT AT ONCE. Setting the selection without repainting left the outline invisible until some
      unrelated redraw happened along, so the part was selected and did not look it - Delete worked on
      a brick carrying no mark (Glen, 2026-08-16). A selection is a thing you can SEE or it is nothing. */
-  if(selBrick!==b){ selBrick=b; draw(); say(b.p.name+" selected — press Delete to take it off."); }
+  /* THE PART, AND WHICH LAYER IT STANDS IN - nothing else. Glen, 2026-08-17: "we don't need the
+     '- press Delete to take it off'... it should say 'Slope Brick 33 3 x 1'." An instruction repeated
+     on every selection is noise once it has been read once; what a designer needs there is which of
+     the courses this brick is in, which a flat plan cannot otherwise tell them. */
+  /* No message: the Selected block above says what it is and which layer it stands in, and it STAYS
+     there. Repeating it in the running commentary would only duplicate it and then be overwritten. */
+  if(selBrick!==b){ selBrick=b; draw(); }
   moveDrag={i:i, dcol:c.col-b.col, drow:c.row-b.row, from:{col:b.col,row:b.row,base:b.base}, moved:false};
   cv.style.cursor="grabbing";
   e.preventDefault();
@@ -2163,9 +2216,11 @@ window.addEventListener("mouseup",()=>{
   bricks.splice(md.i,1); settle(b); bricks.push(b);
   suppressClick=true;                            /* the click this drag ends on must not place or erase */
   draw(); bom(); commit();
-  say(parked(b) ? b.p.name+" parked on the cork — it is not counted in the parts list."
-                : (mode==="standing" ? b.p.name+" moved."
-                                     : b.p.name+" moved to base "+plates(b.base)+"."));
+  /* SAY NOTHING. Glen, 2026-08-17: "you don't need to tell the designer that they moved the brick;
+     they know that." The block above already names the brick and gives its layer, which is the one
+     thing the application knows and they might not. Parking still speaks, because "it is not counted
+     in the parts list" is a consequence they cannot see. */
+  say(parked(b) ? b.p.name+" parked on the cork — it is not counted in the parts list." : "");
 });
 
 cv.addEventListener("mousemove",e=>{
@@ -2186,8 +2241,12 @@ cv.addEventListener("click",e=>{
   if(tool!=="place") return;
   const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip});
   bricks.push(nb);
-  say(mode!=="standing" ? nb.p.name+" placed at base "+plates(nb.base)+"."
-                        : nb.p.name+" placed.");   /* it stays where it was put; nothing to report */
+  /* THE BRICK JUST PLACED BECOMES THE SELECTED ONE, which is what makes placing and moving read the
+     same: after either, the block above names the brick and gives its layer, and the message line
+     says nothing. Glen, 2026-08-17: "you don't need to tell them the brick is green; they know that
+     also... make both screens consistent." It also means Delete takes off the piece you just put
+     down, which is the one you are most likely to want back. */
+  selBrick=nb; say("");
   draw(); commit();
 });
 /* ---------- Undo (Ctrl-Z): debounced snapshots of the design, restored on demand ----------
@@ -2279,13 +2338,36 @@ let docName="";
 /* Naming the project SHOWS it, exactly as Mosaic does (SangalaMosaic.html:627-630): the panel line
    reads "Project: <name>" and the window title carries it too, so what a save will be called can be
    read off the page instead of discovered in a dialog. */
-function setDocName(n){
-  docName = n ? String(n).replace(/\.[A-Za-z0-9]+$/,"").trim() : "";
-  const el=$("projName");
-  if(el){ el.textContent = docName ? "Project: "+docName : "";
-          el.style.display = docName ? "" : "none"; }
+/* `fromFile` says the name arrived as a FILE name and should lose its extension. A name the designer
+   TYPES must not be trimmed that way: "Crane v1.2" would come out as "Crane v1", which is the sort of
+   quiet mangling nobody thinks to test. */
+function setDocName(n, fromFile){
+  let s = n ? String(n).trim() : "";
+  if(s && fromFile) s = s.replace(/\.[A-Za-z0-9]+$/,"").trim();
+  docName = s;
+  const el=$("projName"), ed=$("projEdit");
+  if(ed) ed.textContent = docName;
+  if(el) el.style.display = docName ? "" : "none";
   document.title = docName ? docName+" — Sangala Blocks" : "Sangala Blocks";
 }
+(function(){
+  const ed=$("projEdit"); if(!ed) return;
+  /* Keystrokes must not reach the workspace: Delete would otherwise take off the selected brick
+     while the designer is editing a name, and Ctrl-Z would undo the design rather than the typing. */
+  ed.addEventListener("keydown", e=>{
+    if(e.key==="Enter"){ e.preventDefault(); ed.blur(); }
+    else if(e.key==="Escape"){ ed.textContent=docName; ed.blur(); }
+    e.stopPropagation();
+  });
+  ed.addEventListener("blur", ()=>{
+    const n = ed.textContent.replace(/\s+/g," ").trim();
+    /* Emptied by accident, or unchanged: put the name back rather than let a project become
+       nameless, which would hide the line and leave nothing to click. */
+    if(!n || n===docName){ ed.textContent=docName; return; }
+    setDocName(n);
+    say("");     /* they just typed it; the line above already shows it */
+  });
+})();
 function docFileName(ext){ return (docName || "sangala-blocks") + ext; }
 /* Read the file back and confirm the bytes landed. Choosing a name in the Save dialog CREATES the
    file immediately, at zero bytes; the contents only arrive when close() completes. If anything
@@ -2330,7 +2412,7 @@ async function saveChoice(baseName,formats,adopt){
       const bad=await writeShortfall(h, blob.size); if(bad){ say(bad); return null; }
       /* A save NAMES an unnamed project; it does not RENAME one that already has a name. Typing
          "Test" into the dialog names that file, not the crane you imported. */
-      if(adopt && !docName) setDocName(h.name);
+      if(adopt && !docName) setDocName(h.name, true);
       return h.name; }
     catch(e){ say("Save failed: "+e.message); return null; }
   }
@@ -2373,6 +2455,14 @@ function designJSON(){ return (
     /* The libraries this design was built from, so that a .block opened on another machine can say
        what it needs rather than quietly offering a smaller menu. */
     libraries:libraries,
+    /* AND THE LIBRARY ITSELF, not merely its name. Glen, 2026-08-17: "the library associated with a
+       project should load with the project." A name alone cannot be acted on - the page has no way to
+       reach a .parts file on disk - so opening a design could only ever have NAMED what was missing,
+       which is the notice he has just had removed. Carried in the file, the design is self-contained:
+       it opens complete on any machine, which also means one can be sent to Jo and simply work. The
+       parts are small - the crane's whole library is sixteen entries - and a library already loaded
+       wins, so a file cannot hold a stale copy over a fresh one. */
+    libParts:libParts,
     /* THE COLORS THE DESIGNER ASSIGNED TO LIBRARY PARTS, which are a decision about the design and
        not a passing state of the panel (Glen, 2026-08-17: "assigned colors need to be saved with the
        rest of the design"). Written as LDraw COLOR CODES rather than palette indices: a code is
@@ -3220,8 +3310,8 @@ cv.addEventListener("drop", e=>{
   const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
   const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip});
   bricks.push(nb);
+  selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
-  say(p.name+" placed from the "+(libraries[0]||"library")+" library, in "+COLORS[ci].name+".");
 });
 function addKindButton(kind, label){
   const menu = $("partmenu");
@@ -3232,7 +3322,9 @@ function addKindButton(kind, label){
   b.onclick = (e)=>{ e.stopPropagation(); part={...part, kind:kind}; closeMenus(); applySize(true); };
   menu.appendChild(b);
 }
-function loadParts(lib, fileName){
+/* `quiet` for a library that arrives WITH a project rather than by being opened: the designer did not
+   ask for it and does not need telling it happened. */
+function loadParts(lib, fileName, quiet){
   const added = [], already = [];
   (lib.parts||[]).forEach(p=>{
     const kind = p.kind || "brick";
@@ -3261,10 +3353,9 @@ function loadParts(lib, fileName){
                                  libParts.push(p); });
   libOpen = true;
   drawLibrary();
-  const pieces = (lib.parts||[]).reduce((n,p)=>n+(p.qty||0), 0);
+  if(quiet) return;
   say('Library "'+name+'" loaded: '+added.length+" part"+(added.length===1?"":"s")+" added to the menu"
       + (already.length ? ", "+already.length+" already offered" : "")
-      + (pieces ? " · "+pieces+" pieces in the collection" : "")
       + ". Pick one from the Part tool.");
 }
 $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader();
@@ -3273,7 +3364,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
        here first, which would have renamed the crane being built after the parts loaded to build
        it - the same fault as a parts list renaming its design, corrected once already. */
     if(d.sangala==="parts") return loadParts(d, f.name);                        /* a .parts library */
-    setDocName(f.name);
+    setDocName(f.name, true);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer, Studio or parts file");
     /* The project's OWN name wins over the file's. A design imported from Studio as "Crane
@@ -3292,14 +3383,16 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     guide=guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0]*frameScale, q[1]*frameScale]),
                                   holes:(g.holes||[]).map(h=>h.map(q=>[q[0]*frameScale, q[1]*frameScale]))}));
     buildFrameTop();          /* the frame must be indexed before anything lands on it */
-    /* A design may name the libraries it was built from. The bricks themselves carry everything
-       needed to DRAW them, so the design opens either way; what a missing library costs is the
-       ability to place more of its parts, and that is what is said rather than nothing. */
-    if(Array.isArray(d.libraries)){
-      const missing=d.libraries.filter(n=>libraries.indexOf(n)<0);
-      if(missing.length) setTimeout(()=>say('This design was built with '+missing.join(", ")
-        +'. Open that library to place more of its parts; the design itself is complete.'), 400);
-    }
+    /* THE LIBRARY COMES IN WITH THE DESIGN, and silently. Glen, 2026-08-17: "the library associated
+       with a project should load with the project." What stood here was a notice naming the library
+       the design was built from and telling the designer to go and open it - which he had already
+       struck out as clutter, and which was only ever needed because the library did not come along.
+       loadParts is idempotent: it skips a size the menu already offers and a part already listed, so
+       a library open in the session is not disturbed by an older copy travelling in a file. A file
+       written before this carries no libParts, and opens as it always did. */
+    if(Array.isArray(d.libParts) && d.libParts.length)
+      loadParts({name:(Array.isArray(d.libraries) && d.libraries[0]) || docName || "the project",
+                 parts:d.libParts}, null, true);
     /* The assigned colors come back by CODE, resolved against whatever the palette holds now. A code
        the palette no longer has is dropped rather than guessed at, so the part falls back to the color
        its library names - which is what an unassigned part does anyway. A file written before this
