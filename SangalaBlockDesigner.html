@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.031 -->
+<!-- SANGALA_VERSION: 2026-08-17.032 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2351,6 +2351,13 @@ function designJSON(){ return (
     /* The libraries this design was built from, so that a .block opened on another machine can say
        what it needs rather than quietly offering a smaller menu. */
     libraries:libraries,
+    /* THE COLORS THE DESIGNER ASSIGNED TO LIBRARY PARTS, which are a decision about the design and
+       not a passing state of the panel (Glen, 2026-08-17: "assigned colors need to be saved with the
+       rest of the design"). Written as LDraw COLOR CODES rather than palette indices: a code is
+       LDraw's own identifier and is what every other color in this file is written as, while an
+       index would silently point at a different color if the palette were ever reordered. */
+    libColors:Object.keys(libColor).reduce((o,id)=>{
+      const c=COLORS[libColor[id]]; if(c) o[id]=c.code; return o; }, {}),
     bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,d:b.p.d||1,h:b.p.h,shape:b.p.shape,
                            color:COLORS[b.colorIdx].code,col:b.col,row:b.row,base:b.base||0,
                            flip:b.flip,
@@ -3263,6 +3270,17 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
       if(missing.length) setTimeout(()=>say('This design was built with '+missing.join(", ")
         +'. Open that library to place more of its parts; the design itself is complete.'), 400);
     }
+    /* The assigned colors come back by CODE, resolved against whatever the palette holds now. A code
+       the palette no longer has is dropped rather than guessed at, so the part falls back to the color
+       its library names - which is what an unassigned part does anyway. A file written before this
+       carries none, and every part simply starts from its library color. */
+    libColor = Object.create(null);
+    if(d.libColors && typeof d.libColors==="object"){
+      Object.keys(d.libColors).forEach(id=>{
+        const ci = COLORS.findIndex(c=>c.code===d.libColors[id]);
+        if(ci>=0) libColor[id]=ci;
+      });
+    }
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
       base:b.base}));
@@ -3280,6 +3298,9 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
       for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++) base=Math.max(base, frameTop.get(cellKey(c,r))||0);
       below.forEach(o=>{ if(overlaps(b,o)) base=Math.max(base, o.base+thick(o.p)); });
       b.base=base; } });
+    /* the panel has to be redrawn or the restored colors sit in `libColor` unseen, and a row left
+       selected from the previous design would be marked in this one */
+    libSel = -1; drawLibrary();
     fit();
     hist=[]; redoStack=[]; commit();      /* the opened design is where undo stops */
     }catch(x){alert("Could not read that file: "+x.message);} };
