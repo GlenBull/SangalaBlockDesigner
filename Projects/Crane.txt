@@ -17,3 +17,37 @@
 # The bill, beside the head brick and one course lower than the crest. It is the same piece as
 # the crest's slopes the other way up, and the plate's overhanging stud is what holds it on.
 3040, 1, Red               # Slope Brick 45 2 x 1, the ramp falling away to the point
+
+# THE BODY. The core, not counting the wings, is two studs thick, and every part in it is
+# one stud wide - so each is used twice, one for each stud of thickness. The wings are a
+# lighter gray and are not in this section.
+
+# The top of the body: a long shallow run on the left meeting a shorter, steeper fall on
+# the right. Three studs over one brick of height forces the shallower angle - the left
+# piece is a 33 degree slope, not a 45.
+4286, 2, Dark Bluish Gray  # Slope Brick 33 3 x 1, the shallow slope on the left
+3040, 6, Dark Bluish Gray  # Slope Brick 45 2 x 1 - a gable of two, and a THIRD row behind
+                           # them, so up to three deep each way. The build settles the count.
+
+# The course beneath them carries the wings, so it needs studs on the outward face. The
+# photograph does not settle whether that face belongs to two bricks side by side or to a
+# single brick laid across the thickness, so all three candidates are in the library and
+# the build decides which is right.
+87087, 4, Dark Bluish Gray # Brick 1 x 1 with Stud on 1 Side
+11211, 4, Dark Bluish Gray # Brick 1 x 2 with Two Studs on One Side
+52107, 4, Dark Bluish Gray # Brick 1 x 2 with Studs on Sides, both faces
+
+# The course the slopes stand on runs the full four studs of the body's top and, on the
+# closer photograph, appears to be a single piece. A 1 x 4 would carry one row of slopes;
+# a 2 x 4 would carry two rows. A THIRD sloping brick sits behind those two, so the top of
+# the body is three studs thick, not two, and a 2 x 4 cannot carry all three. Whether it is
+# a plate or a brick is not settled either, so all four candidates are here.
+3020, 1, Dark Bluish Gray  # Plate 2 x 4, carrying both rows of slopes
+3001, 1, Dark Bluish Gray  # Brick 2 x 4, the same span a full brick tall
+3710, 1, Dark Bluish Gray  # Plate 1 x 4, if it carries only one row
+3010, 1, Dark Bluish Gray  # Brick 1 x 4, the same
+
+# THE NECK. A square post, one stud across and five bricks tall, standing on a part
+# cantilevered out from the body. It is a single piece, not a stack of five: the library
+# measures 2453b at 15 plates of body, which is five bricks exactly.
+2453b, 1, Light Bluish Gray # Brick 1 x 1 x 5, the neck

@@ -64,6 +64,127 @@
    "color": "Red",
    "colorCode": 4,
    "qty": 1
+  },
+  {
+   "id": "4286",
+   "name": "Slope Brick 33 3 x 1",
+   "kind": "slope",
+   "w": 3,
+   "d": 1,
+   "h": 3,
+   "shape": "slope",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 2
+  },
+  {
+   "id": "3040",
+   "name": "Slope Brick 45 2 x 1",
+   "kind": "slope",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "slope",
+   "geometry": "3040b",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 6
+  },
+  {
+   "id": "87087",
+   "name": "Brick 1 x 1 with Stud on 1 Side",
+   "kind": "brick",
+   "w": 1,
+   "d": 1,
+   "h": 3,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 4
+  },
+  {
+   "id": "11211",
+   "name": "Brick 1 x 2 with Two Studs on One Side",
+   "kind": "brick",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 4
+  },
+  {
+   "id": "52107",
+   "name": "Brick 1 x 2 with Studs on Sides",
+   "kind": "brick",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 4
+  },
+  {
+   "id": "3020",
+   "name": "Plate 2 x 4",
+   "kind": "plate",
+   "w": 4,
+   "d": 2,
+   "h": 1,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 1
+  },
+  {
+   "id": "3001",
+   "name": "Brick 2 x 4",
+   "kind": "brick",
+   "w": 4,
+   "d": 2,
+   "h": 3,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 1
+  },
+  {
+   "id": "3710",
+   "name": "Plate 1 x 4",
+   "kind": "plate",
+   "w": 4,
+   "d": 1,
+   "h": 1,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 1
+  },
+  {
+   "id": "3010",
+   "name": "Brick 1 x 4",
+   "kind": "brick",
+   "w": 4,
+   "d": 1,
+   "h": 3,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 1
+  },
+  {
+   "id": "2453b",
+   "name": "Brick 1 x 1 x 5 with Solid Stud",
+   "kind": "brick",
+   "w": 1,
+   "d": 1,
+   "h": 15,
+   "shape": "rect",
+   "color": "Light Bluish Gray",
+   "colorCode": 71,
+   "qty": 1
   }
  ]
 }
