@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.060 -->
+<!-- SANGALA_VERSION: 2026-08-17.061 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2048,15 +2048,19 @@ $("tErase").onclick =()=>{closeMenus();setTool(tool==="erase"?"select":"erase");
    Glen, 2026-08-17: "Flip, in contrast, does not affect a selected brick in the workspace. However,
    turn should be the model. This should work on the selected brick on the workspace because then you
    will immediately see the result." With nothing selected it arms the next placement, as before. */
-function syncFlip(){ $("tFlip").classList.toggle("on", flip); }
+/* A BUTTON ACTS ON WHAT IS SELECTED, AND ITS LIGHT DESCRIBES THAT SAME THING. Glen, 2026-08-17,
+   asked which way this should go and answered it: "it should affect the selected brick."
+   So with a brick selected, these three act on THAT BRICK and nothing else - the value armed for the
+   next placement is left exactly where the builder last put it. Making the arming follow the brick
+   was the earlier attempt, and it had a cost that took a while to see: turning a wing onto the side
+   of the figure quietly armed every part dragged in afterwards to come down on its face.
+   `armOrSel` is the pair of them: the selected brick if there is one, otherwise the arming. Both the
+   press and the light ask it, so the light cannot describe one while the press changes the other. */
+const selNow = () => (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
+function syncFlip(){ const b=selNow(); $("tFlip").classList.toggle("on", b ? !!b.flip : flip); }
 $("tFlip").onclick  =()=>{
-  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
-  /* THE ARMING FOLLOWS THE BRICK, so the two can never disagree. Turning a selected brick without
-     also setting this left the button describing the brick while a DIFFERENT value was still armed
-     for the next placement - so selecting an upright brick put the light out while everything placed
-     afterwards still came down turned. Glen saw the result before the cause: "the 3D view is
-     flattened and distorted", a body of bricks each laid on its face. One state, shown once. */
-  if(b){ b.flip = !b.flip; flip = !!b.flip; commit(); }
+  const b = selNow();
+  if(b){ b.flip = !b.flip; commit(); }
   else flip = !flip;
   syncFlip(); draw();
 };
@@ -2067,27 +2071,24 @@ $("tFlip").onclick  =()=>{
    It does NOT re-settle the brick: turning changes the cells it claims, and settle() would compare
    the brick against itself and push it a layer forward. It stays in the layer it is in.
    No message either way: the button stays lit, which is the state. */
-/* The light is the ARMING - what the next brick will do - and toggling a selected brick keeps the
-   two in step, so it describes the brick as well. It must never show one and mean the other. */
-function syncFace(){ $("tFace").classList.toggle("on", faceNext); }
+function syncFace(){ const b=selNow(); $("tFace").classList.toggle("on", b ? b.turn==="face" : faceNext); }
 $("tFace").onclick  =()=>{
-  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
-  if(b){ b.turn = b.turn==="face" ? undefined : "face"; faceNext = b.turn==="face"; commit(); }
+  const b = selNow();
+  if(b){ b.turn = b.turn==="face" ? undefined : "face"; commit(); }
   else faceNext = !faceNext;
   syncFace(); draw();
 };
 /* ROTATE FOLLOWS TURN AND FLIP: it acts on the brick you have selected so the result is on the plan
-   at once, and with nothing selected it arms the next placement. One state, shown once - the same
-   rule those two settled on 2026-08-17.
+   at once, and with nothing selected it arms the next placement - see the note on Flip above.
    IT NEEDS A TURNED PART. Rotating an upright brick in the profile view would stand it on its end,
    which is a different part rather than a turn of this one, so the button says so instead of doing
    something surprising. The light counts: it is out at square and lit at any quarter turn. */
-function syncRot(){ $("tRot").classList.toggle("on", !!rotNext); }
+function syncRot(){ const b=selNow(); $("tRot").classList.toggle("on", b ? !!((b.rot|0)&3) : !!rotNext); }
 $("tRot").onclick   =()=>{
-  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
+  const b = selNow();
   if(b){
     if(!faced(b)){ say("Rotate turns a part that is lying on its face. Press Turn first."); return; }
-    b.rot = (((b.rot|0)+1) & 3); rotNext = b.rot; commit();
+    b.rot = (((b.rot|0)+1) & 3); commit();
   } else rotNext = (rotNext+1) & 3;
   syncRot(); draw();
 };
