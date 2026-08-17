@@ -187,6 +187,18 @@
    "qty": 1
   },
   {
+   "id": "15573",
+   "name": "Plate 1 x 2 with Groove with 1 Centre Stud, without Understud",
+   "kind": "plate",
+   "w": 2,
+   "d": 1,
+   "h": 1,
+   "shape": "rect",
+   "color": "White",
+   "colorCode": 15,
+   "qty": 1
+  },
+  {
    "id": "4073",
    "name": "Plate 1 x 1 Round",
    "kind": "round",

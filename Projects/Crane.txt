@@ -56,6 +56,17 @@
 # measures 2453b at 15 plates of body, which is five bricks exactly.
 2453b, 1, Light Bluish Gray # Brick 1 x 1 x 5, the neck
 
+# WHAT THE NECK STANDS ON: a jumper plate. Jo Watts, shown on a call 2026-08-17 - "sockets
+# beneath and one stud in between on the top" - and that is the whole point of the part. Its
+# single stud is CENTRED on a 1 x 2 footprint, so the post it carries sits half a stud off
+# the grid, on the body's centre line rather than on a stud to one side.
+# 15573 rather than 3794: all three resolve, but 3794 redirects to 3794a, the version WITHOUT
+# a groove, and 15573 is the part in production - which is what an order would be filled with.
+# If Jo's is the older one, this line becomes 3794b.
+# NOTE: the application cannot yet place a part on a half stud. This part can be listed and
+# ordered; the offset it exists to create has no expression in the workspace.
+15573, 1, White            # Plate 1 x 2 with 1 Centre Stud - a jumper, carrying the neck
+
 # THE EYE. A white circle on the side of the black head, with the ring of a stud showing
 # in the middle of it - so a round PLATE, not a round tile, which is smooth on top. One
 # each side, as the buffalo's two sticker eyes are.
