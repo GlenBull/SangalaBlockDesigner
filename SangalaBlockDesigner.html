@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.056 -->
+<!-- SANGALA_VERSION: 2026-08-17.057 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -896,6 +896,23 @@ function studded(p){ return p.studs!==false && p.shape!=="cone"; }
 const CONE_TIP = 0.5;     /* top radius, as a fraction of the base radius */
 const CONE_BORE = 0.62;   /* the opening, as a fraction of the TOP radius */
 const CONE_DEPTH = 0.45;  /* how far the opening sinks, as a fraction of the height */
+/* A STUD SEEN END-ON, drawn in one place because it now has two callers: the studs of a part whose
+   connectors face the viewer (relief, and a turned part), and the studs on the SIDE of a SNOT brick
+   in the upright view. The mark has to be identical - the same thing seen the same way - and two
+   copies of it would not stay that way.
+   A stud is a little cylinder, so it is lit on one side and shaded on the other: two arcs inside its
+   own rim, which is what stops it reading as a flat dot. */
+function studRing(sx,sy,r,studFace,studEdge,hi,sh){
+  ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
+  ctx.fillStyle=studFace; ctx.fill();
+  ctx.lineWidth=Math.max(1.2, r*0.3);
+  ctx.beginPath(); ctx.arc(sx,sy,r*0.78, Math.PI*0.85, Math.PI*1.85);
+  ctx.strokeStyle=hi; ctx.stroke();
+  ctx.beginPath(); ctx.arc(sx,sy,r*0.78, Math.PI*1.85, Math.PI*0.85);
+  ctx.strokeStyle=sh; ctx.stroke();
+  ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
+  ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
+}
 function drawBrick(b,ghost){
   /* A BRICK IS DRAWN THE WAY STUDIO DRAWS A PART, in Studio's own three marks: the colour as the
      fill, a GRAY outline (#8a8a8a) which is Studio's mark for a part rather than a cut line, and
@@ -963,6 +980,23 @@ function drawBrick(b,ghost){
       ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
     }
   }
+  /* STUDS ON A FACE, which a profile view sees END-ON - so they are drawn as the ring, the mark this
+     application already uses for a connector pointing at the viewer. Glen, 2026-08-17, on 2434: "I
+     see the studs on the side in the 3D view but not in the 2d view." They are the reason a SNOT
+     brick is in the design at all - the wings hang on them - so a drawing that omits them says the
+     part is a plain block.
+     WHERE they are is measured in the library, not guessed here: `side` carries one [across, down]
+     per stud, in studs from the part's left edge and plates from its top, both faces deduped onto
+     the one position a profile shows. Flipping the part mirrors them with the body. Only in the
+     upright view: turned onto a face, or laid down in relief, these studs point across the screen
+     and would be seen edge-on, where a ring would be a lie. */
+  if(p.side && p.side.length && mode==="standing" && !fc){
+    const r=Math.max(1.4, mx(2.4));
+    p.side.forEach(s=>{
+      const across = fl ? (p.w - s[0]) : s[0];
+      studRing(x + mx(STUD)*across, y + mx(PLATE)*s[1], r, studFace, studEdge, hi, sh);
+    });
+  }
   if(studded(p) && (mode!=="standing" || fc)){
     const r=Math.max(1.4, mx(2.4));
     ctx.lineWidth=1;
@@ -976,18 +1010,7 @@ function drawBrick(b,ghost){
            studs at all (Glen, 2026-08-17, on a 33-degree slope turned onto its face). This is the
            same test the upright view makes, on the same axis. */
         if(fc && p.shape==="slope" && (fl ? cx===p.w-1 : cx===0)) continue;
-        const sx=x+mx(STUD)*(cx+.5), sy=y+mx(STUD)*(ry+.5);
-        ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
-        ctx.fillStyle=studFace; ctx.fill();
-        /* a stud is a little cylinder, so it is lit on one side and shaded on the other -
-           two arcs inside its own rim, which is what stops it reading as a flat dot */
-        ctx.lineWidth=Math.max(1.2, r*0.3);
-        ctx.beginPath(); ctx.arc(sx,sy,r*0.78, Math.PI*0.85, Math.PI*1.85);
-        ctx.strokeStyle=hi; ctx.stroke();
-        ctx.beginPath(); ctx.arc(sx,sy,r*0.78, Math.PI*1.85, Math.PI*0.85);
-        ctx.strokeStyle=sh; ctx.stroke();
-        ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
-        ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
+        studRing(x+mx(STUD)*(cx+.5), y+mx(STUD)*(ry+.5), r, studFace, studEdge, hi, sh);
       }
     }
   }
@@ -2547,7 +2570,9 @@ function designJSON(){ return (
                            /* written only when the part is turned, so an upright design is unchanged */
                            ...(b.turn?{turn:b.turn}:{}),
                            /* written only when it is FALSE, since all but a tile carry studs */
-                           ...(b.p.studs===false?{studs:false}:{})}))},null,1)); }
+                           ...(b.p.studs===false?{studs:false}:{}),
+                           /* and only when the part has studs on a face, which few do */
+                           ...(b.p.side&&b.p.side.length?{side:b.p.side}:{})}))},null,1)); }
 /* Save opens the menu; the menu items do the saving. Cloned from Mosaic's saveMenu, including the
    disable-what-cannot-be-saved rule: Instructions is dead until a snapshot exists. */
 function closeSaveMenu(){ $("saveMenu").style.display="none"; }
@@ -3397,7 +3422,9 @@ cv.addEventListener("drop", e=>{
   const c = cell(e);
   const p = {id:lp.id, name:lp.name||lp.id, w:Math.max(1,lp.w|0), d:Math.max(1,lp.d|0),
              h:Math.max(1,lp.h|0), shape:(lp.shape==="box"?"rect":lp.shape||"rect"),
-             studs:(lp.kind!=="tile")};
+             studs:(lp.kind!=="tile"),
+             /* the studs on its faces, measured in the library - see drawBrick */
+             ...(lp.side&&lp.side.length?{side:lp.side}:{})};
   /* IN THE COLOR ASSIGNED TO THAT PART, which is not necessarily the palette's: a builder who has set
      one row green and another black, then dragged the black one out, means black. The palette shows
      the SELECTED row's color; a part carries its own. */
@@ -3499,7 +3526,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
         if(ci>=0) libColor[id]=ci;
       });
     }
-    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs},
+    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs,side:b.side},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
       base:b.base, turn:b.turn}));
     /* A SAVED DESIGN IS OPENED EXACTLY AS IT WAS SAVED. There was a migration here that turned an

@@ -82,6 +82,71 @@ def has_stud(path, seen=None):
     return False
 
 
+IDENT = ([[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], [0.0, 0.0, 0.0])
+
+
+def compose(outer, inner):
+    """Put a sub-file's own placement into its parent's frame: outer applied to inner."""
+    (a, t), (b, u) = outer, inner
+    m = [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+    p = [a[i][0] * u[0] + a[i][1] * u[1] + a[i][2] * u[2] + t[i] for i in range(3)]
+    return (m, p)
+
+
+def side_studs(path, w, xf=IDENT, depth=0, seen=(), out=None):
+    """Where a part carries studs on a FACE rather than on top, in the plan view's own units.
+
+    A SNOT brick's side studs are the whole reason it is in a design - the wings hang on them - and
+    the standing view is a profile, so those studs point straight at the viewer and belong on the
+    drawing. Nothing in a .parts entry said they existed, so 2434 arrived as a plain block and Glen
+    had to open the 3D view to see what it was for (2026-08-17: "I see the studs on the side in the
+    3D view but not in the 2d view").
+
+    MEASURED, NOT READ OFF THE NAME. "with Studs on Sides" says nothing about how many or where, and
+    the four SNOT parts in the crane's library carry 8, 4, 2 and 1 of them. An LDraw stud primitive
+    is a cylinder along its own +Y, so a type-1 reference maps that axis to the matrix's middle
+    column; where the image of +Y is horizontal rather than vertical, the stud is on a face. The
+    matrix may also SCALE (stud4 arrives 11x tall), so it is the dominant direction that decides,
+    never the length.
+
+    Returned as [across, down] per stud: `across` in studs from the part's left edge, `down` in
+    plates from the top of its body - the two units the plan view already draws in. The LDraw origin
+    sits at the top of the body and centred across it, which is the same convention the height
+    measurement above depends on. Both faces are read and the positions DEDUPED: seen in profile the
+    near and far studs land on the same spot, and the drawing shows a stud, not a count.
+    """
+    out = [] if out is None else out
+    key = os.path.normcase(path)
+    if depth > 12 or key in seen:
+        return out
+    seen = seen + (key,)
+    for line in open(path, encoding="utf-8", errors="replace"):
+        t = line.split()
+        if not t or t[0] != "1" or len(t) < 15:
+            continue
+        try:
+            v = [float(x) for x in t[2:14]]
+        except ValueError:
+            continue
+        here = compose(xf, ([[v[3], v[4], v[5]], [v[6], v[7], v[8]], [v[9], v[10], v[11]]],
+                            [v[0], v[1], v[2]]))
+        ref = " ".join(t[14:]).replace("\\", "/").split("/")[-1].lower()
+        if ref.startswith("stud"):
+            ax, ay, az = here[0][0][1], here[0][1][1], here[0][2][1]     # image of the stud's +Y
+            if abs(ay) >= max(abs(ax), abs(az)):
+                continue                                                 # up or down: an ordinary stud
+            across = (here[1][0] + w * ldparts.STUD / 2) / ldparts.STUD
+            down = here[1][1] / PLATE_LDU
+            pos = [round(across, 3), round(down, 3)]
+            if pos not in out:
+                out.append(pos)
+            continue
+        sub = ldparts.locate(ref)
+        if sub:
+            side_studs(sub, w, here, depth + 1, seen, out)
+    return out
+
+
 def classify(name):
     """kind and shape, from the part's own description.
 
@@ -182,9 +247,18 @@ def build(rows):
             tall -= STUD_LDU
         h = int(round(tall / PLATE_LDU))
         kind, shape = classify(name)
+        raw_w = w
         w, dd = footprint(shape, w, dd)
         part = {"id": number, "name": " ".join(name.split()), "kind": kind,
                 "w": max(1, w), "d": max(1, dd), "h": max(1, h), "shape": shape}
+        # Only where the footprint was left as it was measured. A slope's w and d are SWAPPED above
+        # to turn the ramp across the screen, and a stud position measured in the part's own frame
+        # would then be stated against the wrong edge - so a sloped SNOT part, if one is ever
+        # ordered, says nothing rather than something misplaced.
+        if shape == "rect":
+            face = side_studs(path, raw_w)
+            if face:
+                part["side"] = face
         if target.lower() != number.lower():
             part["geometry"] = target        # the file the measurements came from, when redirected
         if color:
