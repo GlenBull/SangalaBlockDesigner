@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.050 -->
+<!-- SANGALA_VERSION: 2026-08-17.055 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -247,7 +247,11 @@
            not a title. -->
       <div id="selName" style="margin-top:.4rem;font-size:.85rem;color:#5a4a34"></div>
     </div>
-    <div class="hint" id="status">Pick a part from the Toolbar, then click the frame to place it.</div>
+    <!-- The message line. It speaks ONLY when it knows something the designer cannot see - a brick
+         parked off the plate, a frame running off the baseplate, a save that failed. It does not
+         instruct, it does not narrate an action back to the person who took it, and it starts EMPTY
+         (Glen, 2026-08-17: "we're still getting too much information cluttering up the panel"). -->
+    <div class="hint" id="status"></div>
 
     <h2 class="marker">Color</h2>
     <div class="swrow" id="swatches"></div>
@@ -901,7 +905,10 @@ function drawBrick(b,ghost){
      This replaces a moulded side elevation with lit and shaded faces and studs standing proud of
      the top, which was invented in this application alone and is why nothing here resembled the
      program the student arrives from. */
-  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, fc=faced(b), dp=rowsOf(p);
+  /* `dp` is the rows of STUDS the part shows, and for a turned one that is its DEPTH in studs - not
+     rowsOf, which is its height in plates. A 1 x 3 brick is three plates tall, so it drew three rows
+     of studs where the part has one (Glen, 2026-08-17). */
+  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, fc=faced(b), dp=fc ? (p.d||1) : rowsOf(p);
   /* the BODY, which for an inverted slope reaches past the stud it rests on */
   const oL=overLeft(p,fl), oR=overRight(p,fl), bcols=p.w+oL+oR;
   const x=mx((b.col-oL)*STUD), y=mx(b.row*vUnit()), w=mx(bcols*STUD);
@@ -961,8 +968,14 @@ function drawBrick(b,ghost){
     ctx.lineWidth=1;
     for(let ry=0;ry<dp;ry++){
       /* the sloped row falls away, so it carries no stud - an inverted slope keeps them all */
-      if(p.shape==="slope" && (fl ? ry===0 : ry===dp-1)) continue;
+      if(!fc && p.shape==="slope" && (fl ? ry===0 : ry===dp-1)) continue;
       for(let cx=0;cx<p.w;cx++){
+        /* A TURNED SLOPE LOSES A COLUMN, NOT A ROW. It has exactly one row, and its ramp runs along
+           the COLUMNS - the ramp span is the part's w, as the footprint has said since 2026-08-16.
+           The row rule above therefore struck out the only row it had and the part came out with no
+           studs at all (Glen, 2026-08-17, on a 33-degree slope turned onto its face). This is the
+           same test the upright view makes, on the same axis. */
+        if(fc && p.shape==="slope" && (fl ? cx===p.w-1 : cx===0)) continue;
         const sx=x+mx(STUD)*(cx+.5), sy=y+mx(STUD)*(ry+.5);
         ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
         ctx.fillStyle=studFace; ctx.fill();
@@ -1170,7 +1183,7 @@ function applySize(snap){
   lastR=rows; lastC=cols;
   $("szNote").textContent=KINDS[k].label+" "+catName(k, R+"x"+C, id)+"  ·  design "+id;
   setTool("place");
-  say("Click the frame to place a "+KINDS[k].label+" "+R+" x "+C+" (design "+id+").");
+  say("");
   draw();
 }
 $("szCols").oninput=applySize;
@@ -1929,11 +1942,22 @@ function setTool(t){
   cv.style.cursor = t==="place" ? "crosshair" : (t==="erase" ? "not-allowed" : "default");
   hover=null; draw();
 }
-$("tSelect").onclick=()=>{closeMenus();setTool("select");say("Select / move.");};
-$("tErase").onclick =()=>{closeMenus();setTool(tool==="erase"?"select":"erase");
-                          say(tool==="erase"?"Click a brick to take it off.":"Select / move.");};
-$("tFlip").onclick  =()=>{flip=!flip;$("tFlip").classList.toggle("on",flip);
-                          say("Slopes now face "+(flip?"right":"left")+".");draw();};
+$("tSelect").onclick=()=>{closeMenus();setTool("select");say("");};
+$("tErase").onclick =()=>{closeMenus();setTool(tool==="erase"?"select":"erase");say("");};
+/* FLIP FOLLOWS TURN: it acts on the brick you have selected, so the result is on the plan at once.
+   Glen, 2026-08-17: "Flip, in contrast, does not affect a selected brick in the workspace. However,
+   turn should be the model. This should work on the selected brick on the workspace because then you
+   will immediately see the result." With nothing selected it arms the next placement, as before. */
+function syncFlip(){
+  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
+  $("tFlip").classList.toggle("on", b ? !!b.flip : flip);
+}
+$("tFlip").onclick  =()=>{
+  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
+  if(b){ b.flip = !b.flip; commit(); }
+  else flip = !flip;
+  syncFlip(); draw();
+};
 /* TURN ACTS ON THE BRICK YOU HAVE SELECTED, and only sets the state for the next placement when
    nothing is selected. Glen, 2026-08-17: "turn doesn't turn it" - he had the eye already on the head,
    selected it, pressed Turn, and nothing happened, because this only armed the NEXT placement the way
@@ -1962,8 +1986,8 @@ $("bView3D").onclick=()=>{
   if(view3D){
     setTool("select");
     sizePvToCv(); pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); pvBounds(); renderPreview();
-    say("3D View: drag to rotate, scroll to zoom. Press 3D View again to build.");
-  } else { say("Select / move."); draw(); }
+    say("");
+  } else { say(""); draw(); }
 };
 let setupOpen=false;
 $("bSettings").onclick=()=>{
@@ -2206,7 +2230,7 @@ const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0) : "Layer "+(
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
   $("selpanel").style.display = on ? "" : "none";
-  syncFace();          /* the Turn button reads the selected brick, so it follows the selection */
+  syncFace(); syncFlip();   /* both buttons read the selected brick, so they follow the selection */
   if(!on) return;
   $("selName").textContent = selBrick.p.name+" · "+layerTag(selBrick);
 }
@@ -2232,7 +2256,7 @@ cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
-  if(i<0){ if(selBrick){ selBrick=null; draw(); say("Select / move."); } return; }   /* empty ground clears it */
+  if(i<0){ if(selBrick){ selBrick=null; draw(); say(""); } return; }   /* empty ground clears it */
   const b=bricks[i];
   /* DRAW IT AT ONCE. Setting the selection without repainting left the outline invisible until some
      unrelated redraw happened along, so the part was selected and did not look it - Delete worked on
@@ -2336,14 +2360,14 @@ function undo(){
   if(hist.length<2){ say("Nothing to undo."); return; }
   redoStack.push(hist.pop());                                            // the state we leave becomes redoable
   histBusy=true; restoreState(JSON.parse(hist[hist.length-1])); histBusy=false;   // restore the previous
-  say("Undid the last change. Ctrl+Y redoes it.");
+  say("");
 }
 function redo(){
   if(histTimer){ clearTimeout(histTimer); histTimer=null; commit(); }   // a settling new edit commits first (and clears redo)
   if(!redoStack.length){ say("Nothing to redo."); return; }
   const s=redoStack.pop(); hist.push(s);                                 // step forward again
   histBusy=true; restoreState(JSON.parse(s)); histBusy=false;
-  say("Redid the change.");
+  say("");
 }
 /* DELETE TAKES THE SELECTED BRICK OFF (Glen, 2026-08-16: "when i select a part, i would like to be
    able to delete it using the delete key"). Backspace does the same, because a builder reaching for
@@ -2359,11 +2383,10 @@ window.addEventListener("keydown",(e)=>{
   if(view3D) return;                                   /* looking, not building */
   const i = selBrick ? bricks.indexOf(selBrick) : -1;
   if(i<0) return;
-  const name = selBrick.p.name;
   bricks.splice(i,1); selBrick=null;
   e.preventDefault();
   draw(); bom(); commit();
-  say(name+" taken off — Ctrl-Z puts it back.");
+  say("");   /* the brick visibly goes; and Ctrl-Z is Ctrl-Z */
 });
 window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-Y redo (Cmd on a Mac)
   if(!(e.ctrlKey||e.metaKey) || e.altKey) return;
@@ -2674,6 +2697,28 @@ function toLdr(){
     const slopeish = p.shape==="slope" || p.shape==="invslope";
     const gx = box ? (box[0]+box[3])/2 : 0;
     const gz = box ? (box[2]+box[5])/2 : (slopeish ? -LDU_STUD/2 : 0);
+    /* A TURNED PART IS LAID ON ITS FACE - a quarter turn about X, so the studs that pointed up point
+       at the viewer. In LDraw a part's studs run along -Y and the viewer is at -Z (measured, see the
+       layer note above), so the turn maps (x,y,z) -> (x,-z,y): -Y goes to -Z, and the part's own +Z
+       becomes the model's up. Written as `1 0 0 0 0 -1 0 1 0`.
+       Its band is the part's own two other dimensions, swapped by that turn exactly as the 3D view
+       swaps them: d STUDS down the screen from the row it sits on, and h PLATES thick going forward
+       from its layer. The geometry correction is the same idea as above, with the box centre turned
+       the same way before it is subtracted.
+       FLIP IS NOT APPLIED to a turned part. The eye is symmetric so it cannot show, and guessing at
+       which way a turned wing should face is the kind of thing that has cost us a day. */
+    if(faced(b)){
+      const cy = -(plateRows - b.row)*LDU_PLATE + d*LDU_STUD/2;      /* down from the row it hangs on */
+      /* IT MOUNTS BY ITS UNDERSIDE, so that face sits ON the layer plane - it is not centred in a
+         band. Centring buried the eye two units into the head, because a part's box includes its
+         STUD, which stands out on one side only: the box is 12 units through where the plate itself
+         is 8. The underside is the box's own maximum y (studs run along -Y), and after the turn that
+         becomes the face against the figure. */
+      const yBot = box ? box[4] : h*LDU_PLATE;
+      out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(bx - gx)+" "+ldNum(cy + gz)+
+               " "+ldNum(-(b.base||0)*LDU_STUD - yBot)+" 1 0 0 0 0 -1 0 1 0 "+p.id+".dat");
+      return;
+    }
     const x = bx - (gx*c + gz*s), z = bz - (-gx*s + gz*c);
     out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(x)+" "+ldNum(y)+" "+ldNum(z)+" "+
              c+" 0 "+s+" 0 1 0 "+(-s || 0)+" 0 "+c+" "+p.id+".dat");
