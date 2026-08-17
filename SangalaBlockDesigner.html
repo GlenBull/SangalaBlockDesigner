@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.059 -->
+<!-- SANGALA_VERSION: 2026-08-17.060 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1319,8 +1319,23 @@ function bom(){
    when Studio's renderer changes, port it again deliberately.
    Only the host differs: bricksToTris() below feeds it boxes instead of Studio's meshes.
    ====================================================================================== */
+/* THE BUFFER AND THE BOX IT IS SHOWN IN MUST BE THE SAME SHAPE, or the browser scales one into the
+   other and the model comes out stretched on one axis - Glen, twice: "the distortion / flattening in
+   3D mode is back."
+   It was sizing only the BUFFER, from the board (bd - 40). The element's own size came from the
+   stylesheet's blanket `canvas{width:100%;height:calc(100vh - 178px)}`, which is the 2D canvas's
+   rule: a width measured against the board's padding box (bd - 12, not bd - 40) and a height
+   measured against the WINDOW rather than the board. Two different shapes, so every frame was
+   scaled unevenly, and by how much depended on the window - which is why it came and went and
+   looked each time like something that had broken again.
+   The 2D canvas never had this: sizeCanvas measures the canvas's OWN rect and backs it at exactly
+   that. This pins the same way round - the box is set to the buffer - because the 3D renderer treats
+   its buffer pixels as screen pixels when it orbits and when it reads the depth buffer back, so the
+   two must stay one to one. */
 function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRect();   /* 40 = the board's border + padding, both sides */
-  pv.width=Math.max(120,Math.round(bd.width-40)); pv.height=Math.max(120,Math.round(bd.height-40)); }
+  const w=Math.max(120,Math.round(bd.width-40)), h=Math.max(120,Math.round(bd.height-40));
+  pv.width=w; pv.height=h;
+  pv.style.width=w+"px"; pv.style.height=h+"px"; }
 
 let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvPlate=false, pvZbuf=null, pvGuide=null;
 let pvGhost=null;   // loose holes, drawn as the shape they would remove
