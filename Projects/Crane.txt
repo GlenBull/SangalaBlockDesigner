@@ -12,7 +12,11 @@
 # The crest stands on a plate, one piece to each of its three studs. That plate is cantilevered
 # one stud out over the beak: the brick beneath it carries only its left two studs.
 3623, 1, Black             # Plate 1 x 3, carrying the crest
-3004, 1, Black             # Brick 1 x 2, the head itself
+# The head carries the eye on its SIDE, so it is a brick with a stud on that face rather
+# than the plain 1 x 2 it was until now. PROVISIONAL, Glen 2026-08-16: either there is a
+# stud on the side, or Jo Watts glued the eye on - he finds out in the morning. If it was
+# glued, this goes back to 3004, Brick 1 x 2.
+11211, 1, Black            # Brick 1 x 2 with Two Studs on One Side, the head
 
 # The bill, beside the head brick and one course lower than the crest. It is the same piece as
 # the crest's slopes the other way up, and the plate's overhanging stud is what holds it on.
@@ -51,3 +55,11 @@
 # cantilevered out from the body. It is a single piece, not a stack of five: the library
 # measures 2453b at 15 plates of body, which is five bricks exactly.
 2453b, 1, Light Bluish Gray # Brick 1 x 1 x 5, the neck
+
+# THE EYE. A white circle on the side of the black head, with the ring of a stud showing
+# in the middle of it - so a round PLATE, not a round tile, which is smooth on top. One
+# each side, as the buffalo's two sticker eyes are.
+# NOTE: it can only sit there if the head brick has a stud on its SIDE. The head is
+# currently a plain Brick 1 x 2 (3004); carrying an eye would make it 87087 or 11211,
+# both of which are already in this library for the body's wing face.
+4073, 2, White             # Plate 1 x 1 Round, the eye

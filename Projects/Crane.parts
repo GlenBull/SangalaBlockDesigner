@@ -41,8 +41,8 @@
    "qty": 1
   },
   {
-   "id": "3004",
-   "name": "Brick 1 x 2",
+   "id": "11211",
+   "name": "Brick 1 x 2 with Two Studs on One Side",
    "kind": "brick",
    "w": 2,
    "d": 1,
@@ -185,6 +185,19 @@
    "color": "Light Bluish Gray",
    "colorCode": 71,
    "qty": 1
+  },
+  {
+   "id": "4073",
+   "name": "Plate 1 x 1 Round",
+   "kind": "round",
+   "w": 1,
+   "d": 1,
+   "h": 1,
+   "shape": "round",
+   "geometry": "6141",
+   "color": "White",
+   "colorCode": 15,
+   "qty": 2
   }
  ]
 }
