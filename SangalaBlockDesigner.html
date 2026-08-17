@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.061 -->
+<!-- SANGALA_VERSION: 2026-08-17.062 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -212,6 +212,10 @@
          the figure can point where the wing needs it to. It does nothing to an upright part: a plan
          is the only view a quarter turn means anything in. -->
     <button class="ltbtn" id="tRot" title="Rotate: turn the part a quarter turn counterclockwise. Works on a part that has been laid on its face with Turn">&#8634;<small>Rotate</small></button>
+    <!-- Half Step puts a part on the MIDLINE, half a layer forward of the one it rests in - where a
+         jumper plate's centred stud carries it. It cannot be seen on the plan, which is a profile,
+         so the Selected line reads "Layer 0.5" and the 3D view shows it. -->
+    <button class="ltbtn" id="tHalf" title="Half Step: sit the part half a layer forward, on the midline between two layers - where a jumper plate's centre stud carries it">&#189;<small>Half Step</small></button>
   </div>
 
   <!-- (3) WORKSPACE -->
@@ -548,6 +552,14 @@ let faceNext = false;
    quarter turn is meaningful in - spinning an upright brick in the profile view would stand it on
    its end, which is a different part, not a rotation of this one. */
 let rotNext = 0;
+/* HALF A LAYER BACK, for the part standing on a jumper plate. Glen, 2026-08-17: 15573's single stud
+   is centered on a 1 x 2 footprint, so the neck it carries sits on the bird's MIDLINE rather than on
+   a stud to one side - "the neck and head can be on the left side or the right side, but not in the
+   center... the center-stud brick makes that possible."
+   Held apart from `base` rather than added into it, because settle() recomputes base whenever a part
+   is placed or moved and would wash a fraction straight out. The layer a part rests IN is still a
+   whole number; this says it sits half a stud forward of it. */
+let halfNext = false;
 let tool = "select", showGuide = true, showGrid = true;
 /* TWO WAYS TO BUILD, and the frame serves both - it is the same silhouette either way.
    STANDING is the figure in the photographs: bricks stacked in courses, studs up, gravity from
@@ -980,7 +992,7 @@ function drawBrick(b,ghost){
   /* A PLACED BRICK STANDS PROUD OF WHAT IS BEHIND IT, so it casts a small shadow, and the
      further out it is stacked the further the shadow falls. Flat colour alone is what made a
      black brick read as a mass: nothing said it was an object sitting on something. */
-  const off=Math.max(1, mx(0.7)+(b.base||0)*mx(0.22));
+  const off=Math.max(1, mx(0.7)+depthOf(b)*mx(0.22));
   ctx.save(); ctx.globalAlpha=(ghost?.12:.22); ctx.translate(off,off);
   shape(p,b.col,b.row,fl,fc,rt); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
 
@@ -1108,8 +1120,8 @@ function draw(){
      anything behind it, whatever their heights; within one layer the higher brick still covers the
      studs of the one it rests on. */
   const order=bricks.slice().sort(mode==="standing"
-    ? (a,b)=>((a.base||0)-(b.base||0)) || ((b.row||0)-(a.row||0))
-    : (a,b)=>(a.base||0)-(b.base||0));
+    ? (a,b)=>(depthOf(a)-depthOf(b)) || ((b.row||0)-(a.row||0))
+    : (a,b)=>depthOf(a)-depthOf(b));
   order.forEach(b=>drawBrick(b,false));
   /* THE SELECTED BRICK IS OUTLINED, because a selection you cannot see is not a selection - and
      Delete would then be a keystroke that takes off a part the builder cannot identify. Drawn after
@@ -1917,7 +1929,7 @@ function bricksToTris(){
        figure, plates coming towards the viewer for a relief. Standing used to be pinned to 0 here,
        which is what made the figure one course deep. At base 0 this is still exactly 0, so every
        design saved before today opens unchanged. */
-    const y1 = -(b.base||0) * (mode==="standing" ? STUD : PLATE);
+    const y1 = -depthOf(b) * (mode==="standing" ? STUD : PLATE);
     const y0 = y1 - (fc ? (p.h||1)*PLATE : deepOf(p));
     if(mode==="standing"){
       /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
@@ -2091,6 +2103,19 @@ $("tRot").onclick   =()=>{
     b.rot = (((b.rot|0)+1) & 3); commit();
   } else rotNext = (rotNext+1) & 3;
   syncRot(); draw();
+};
+/* HALF STEP follows the same rule as the three above: it acts on the selected brick, and with
+   nothing selected it arms the next placement.
+   STANDING ONLY. In relief the layers are plates coming towards the viewer and a half plate is not
+   what a jumper plate does, so the button says so rather than doing something that looks like it
+   worked. */
+function syncHalf(){ const b=selNow(); $("tHalf").classList.toggle("on", b ? !!b.half : halfNext); }
+$("tHalf").onclick  =()=>{
+  if(mode!=="standing"){ say("Half Step belongs to a standing figure, where layers are studs deep."); return; }
+  const b = selNow();
+  if(b){ b.half = !b.half; commit(); }
+  else halfNext = !halfNext;
+  syncHalf(); draw();
 };
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
    is up, exactly as Studio does ("press 3D View again to edit"). */
@@ -2273,6 +2298,10 @@ const faced   = b => mode==="standing" && b && b.turn==="face";
    known to the drawing and not to the placement is a piece drawn one way and put down another,
    which is the fault the overhang rules were written to prevent. */
 const rotOf   = b => faced(b) ? ((b.rot|0) & 3) : 0;      /* only a turned part has a plan to spin */
+/* WHERE A PART ACTUALLY SITS THROUGH THE FIGURE, layer and half step together. Everything that puts
+   geometry in depth asks this - the 3D view, the LDraw export, the drawing order and the shadow - so
+   a part on the midline cannot be shown in one place and exported in another. */
+const depthOf = b => (b.base||0) + (b.half ? 0.5 : 0);
 const quarter = b => (rotOf(b) & 1) === 1;                /* an odd turn swaps the plan's two sides */
 const acrossOf= b => quarter(b) ? (b.p.d||1) : b.p.w;     /* studs across the screen */
 const deepOf2 = b => quarter(b) ? b.p.w : (b.p.d||1);     /* studs down it, before the row grid */
@@ -2348,14 +2377,18 @@ const plates = n => n+(n===1?" plate":" plates");
    only one layer - the comment at the placement even read "it stays where it was put; nothing to
    report". Now that it stacks back to front, a builder needs to be told which course a brick landed
    in, or two bricks a stud apart in depth are indistinguishable on a flat plan. */
-const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0) : "Layer "+(b.base||0);
+/* THE LABEL IS THE ONLY PLACE A HALF STEP SHOWS. The workspace is a profile and layers run INTO the
+   screen, so a part moved half a layer back does not shift by a pixel on the plan - it moves in the
+   3D view alone. "Layer 0.5" is Glen's own name for it (2026-08-17), and it keeps every number in
+   every design already saved exactly as it was. */
+const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0) : "Layer "+depthOf(b);
 /* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
    that knows the selection is still real - a brick can leave the design by being erased, undone or
    opened away, and the block must not go on describing it. */
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
   $("selpanel").style.display = on ? "" : "none";
-  syncFace(); syncFlip(); syncRot();   /* the three orientation buttons follow the selection */
+  syncFace(); syncFlip(); syncRot(); syncHalf();   /* the four follow the selection */
   if(!on) return;
   $("selName").textContent = selBrick.p.name+" · "+layerTag(selBrick);
 }
@@ -2423,7 +2456,7 @@ cv.addEventListener("mousemove",e=>{
   if(panDrag || moveDrag) return;                          /* panning or moving, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext}); draw();
+  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext}); draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
@@ -2435,7 +2468,7 @@ cv.addEventListener("click",e=>{
     bricks.splice(i,1); draw(); commit(); return;
   }
   if(tool!=="place") return;
-  const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext});
+  const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext});
   bricks.push(nb);
   /* THE BRICK JUST PLACED BECOMES THE SELECTED ONE, which is what makes placing and moving read the
      same: after either, the block above names the brick and gives its layer, and the message line
@@ -2455,7 +2488,7 @@ function serializeState(){
     guide: guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0],q[1]]),
                                    holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))})),
     bricks: bricks.map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
-                             flip:b.flip, base:b.base, turn:b.turn, rot:b.rot })) };
+                             flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half })) };
 }
 function commit(){ if(histBusy) return; const s=JSON.stringify(serializeState());   // push a snapshot unless it matches the current top
   if(hist.length && hist[hist.length-1]===s) return;                                 // no change -> no push, and the redo chain survives
@@ -2476,7 +2509,7 @@ function restoreState(st){
      without touching anything else. That is the builder's work undone by the undo, which is the one
      thing undo may not do. A wing is turned onto the face; an eye is too. */
   bricks=(st.bricks||[]).map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
-                                   flip:b.flip, base:b.base, turn:b.turn, rot:b.rot }));
+                                   flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half }));
   /* the controls follow the state, the way Studio's refreshEditPanel does - a restored mode that the
      menu still disagrees with is the next defect */
   setPageSize(pageKind); $("pagesize").value=pageKind;
@@ -2676,6 +2709,8 @@ function designJSON(){ return (
                            ...(b.turn?{turn:b.turn}:{}),
                            /* likewise only when it has been given one - see rotOf */
                            ...(b.rot?{rot:b.rot}:{}),
+                           /* written only when it sits on a midline, which few parts do */
+                           ...(b.half?{half:true}:{}),
                            /* written only when it is FALSE, since all but a tile carry studs */
                            ...(b.p.studs===false?{studs:false}:{}),
                            /* and only when the part has studs on a face, or fewer on top than
@@ -2793,8 +2828,8 @@ function toLdr(){
        the centre of a part whose back face sits at -base*STUD and which is d studs deep is
        -(base + d/2). Back-aligning like this is what the 3D view does (`y1 = -base*STUD` is the back
        face); centring on the layer line instead would only agree while every part is one stud deep. */
-    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD;          y=-((b.base||0) + h)*LDU_PLATE; }
-    else               { bz=-((b.base||0) + d/2)*LDU_STUD;   y=-(plateRows - b.row)*LDU_PLATE; }
+    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD;          y=-(depthOf(b) + h)*LDU_PLATE; }
+    else               { bz=-(depthOf(b) + d/2)*LDU_STUD;   y=-(plateRows - b.row)*LDU_PLATE; }
     /* A flipped part is TURNED, not mirrored: mirroring a slope makes a part that does not exist.
        Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1).
        THE SAME TURN THE 3D VIEW APPLIES GOES IN HERE, from the one function that decides it - the
@@ -2858,7 +2893,7 @@ function toLdr(){
          becomes the face against the figure. */
       const yBot = box ? box[4] : h*LDU_PLATE;
       out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(bx - (gx*rc + gz*rs))+" "+ldNum(cy + (-gx*rs + gz*rc))+
-               " "+ldNum(-(b.base||0)*LDU_STUD - yBot)+" "+
+               " "+ldNum(-depthOf(b)*LDU_STUD - yBot)+" "+
                ldNum(rc)+" 0 "+ldNum(rs)+" "+ldNum(rs)+" 0 "+ldNum(-rc)+" 0 1 0 "+p.id+".dat");
       return;
     }
@@ -3548,7 +3583,7 @@ cv.addEventListener("drop", e=>{
      the SELECTED row's color; a part carries its own. */
   const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
   const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
-  const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext});
+  const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext, half:halfNext});
   bricks.push(nb);
   selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
@@ -3646,7 +3681,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     }
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs,side:b.side,top:b.top},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
-      base:b.base, turn:b.turn, rot:b.rot}));
+      base:b.base, turn:b.turn, rot:b.rot, half:b.half}));
     /* A SAVED DESIGN IS OPENED EXACTLY AS IT WAS SAVED. There was a migration here that turned an
        older slope to lie ramp-across, and it was wrong to write: turning a 1-column slope into a
        2-column one WIDENS it, so it swallowed the column beside it - in the crest that column held
