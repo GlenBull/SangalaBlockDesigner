@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.032 -->
+<!-- SANGALA_VERSION: 2026-08-17.034 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1752,7 +1752,11 @@ function bricksToTris(){
     /* DEPTH RUNS ALONG -Y, because at the camera Studio starts with, +Y is the direction going
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
-    const y1 = mode==="standing" ? 0 : -(b.base||0)*PLATE;   /* standing: thickness towards you */
+    /* THE LAYER, in the unit that mode's layers are counted in - studs going forward for a standing
+       figure, plates coming towards the viewer for a relief. Standing used to be pinned to 0 here,
+       which is what made the figure one course deep. At base 0 this is still exactly 0, so every
+       design saved before today opens unchanged. */
+    const y1 = -(b.base||0) * (mode==="standing" ? STUD : PLATE);
     const y0 = y1 - deepOf(p);
     if(mode==="standing"){
       /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
@@ -2039,7 +2043,13 @@ function buildFrameTop(){
   });
 }
 
-const thick = p => p.h||1;
+/* HOW THICK A PART IS ALONG THE AXIS ITS LAYERS STACK ON, in that axis's own unit - which is not the
+   same axis in the two modes. A relief stacks TOWARDS the viewer and its layers are plates, so the
+   thickness is the part's height. A standing figure stacks BACK TO FRONT and its layers are studs, so
+   the thickness is the part's depth: a brick standing in profile is one stud thick, however tall it
+   is. `base` counts layers in whichever of the two applies, exactly as `rowsOf` and `deepOf` already
+   switch on the mode. */
+const thick = p => mode==="standing" ? (p.d||1) : (p.h||1);
 const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+rowsOf(b.p)});
 /* PARKED: a brick put down on the cork OUTSIDE the plate. Glen, 2026-08-14: "It would be helpful to
    be able to place bricks on the corkboard outside the workspace... I could quickly try two or
@@ -2057,11 +2067,15 @@ function parked(b){
 }
 function overlaps(a,b){ const A=foot(a), B=foot(b);
   return A.x0<B.x1 && B.x0<A.x1 && A.y0<B.y1 && B.y0<A.y1; }
-function restingBase(nb){        /* the base it would take: the top of whatever it comes to rest on */
+function restingBase(nb){        /* the layer it would take: just clear of whatever is already there */
   let base=0;
   const f=foot(nb);
-  for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++)      /* the frame, cell by cell */
-    base=Math.max(base, frameTop.get(cellKey(c,r))||0);
+  /* THE FRAME COUNTS ONLY IN RELIEF, where it is a surface parts stand ON and frameTop says how high
+     it stands. In a standing figure the frame is a BACKDROP - the silhouette behind the design - so
+     the first course sits against it at zero, and nothing about the frame pushes a brick forward. */
+  if(mode!=="standing")
+    for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++)
+      base=Math.max(base, frameTop.get(cellKey(c,r))||0);
   bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
   return base;
 }
@@ -2083,8 +2097,16 @@ function settle(nb){             /* put the part where the mode says it comes to
      figure in mid-air. But this is a PLAN of a model, not the model: a designer works out the
      courses in whatever order suits them, and a brick that jumps to the floor the moment it is
      placed takes the drawing away from them. The physical rule belongs to the physical build. */
-  if(mode==="standing"){ nb.base=0; }
-  else nb.base=restingBase(nb);
+  /* A STANDING FIGURE IS DEEP, NOT FLAT. This read `if(mode==="standing"){ nb.base=0; }` - every part
+     pinned to the back plane, so the figure could only ever be one course deep however deep the real
+     subject was. Glen, 2026-08-17, looking at the crane turned round in the 3D view: "it is clear
+     that I need to place sloping bricks on the back side as well as the front side."
+     So standing now lands a part the same way relief does: against the backdrop unless something is
+     already in that cell, and one layer forward of it if there is. The two modes differ only in which
+     axis they stack on and what a layer is worth - studs going forward here, plates coming towards
+     the viewer there - and `thick` answers that. Note this does NOT reintroduce gravity: nothing
+     falls, and a brick still stays in the column and row it was put in. */
+  nb.base = restingBase(nb);
   return nb;
 }
 function hit(c){                 /* the topmost brick under the pointer */
