@@ -41,6 +41,15 @@
 11211, 4, Dark Bluish Gray # Brick 1 x 2 with Two Studs on One Side
 52107, 4, Dark Bluish Gray # Brick 1 x 2 with Studs on Sides, both faces
 
+# THE WING. Asked for by Glen and Jo Watts on a call 2026-08-17, to build the wings from.
+# One piece does in a single part what the three candidates above do in several: it spans the
+# body's whole two-stud thickness and four studs of its length, stands two bricks tall, and
+# carries studs on BOTH long faces - so a wing hangs on each side of the body from one brick.
+# The count is 1 because the Library is bins: one bin holds the part, and the number needed is
+# read off the finished design, not stated here. The color is only a starting point - the palette
+# sets it when the part is chosen - so neither number on this line is a decision.
+2434, 1, Dark Bluish Gray  # Brick 2 x 4 x 2 with Studs on Sides, carrying a wing each side
+
 # The course the slopes stand on runs the full four studs of the body's top and, on the
 # closer photograph, appears to be a single piece. A 1 x 4 would carry one row of slopes;
 # a 2 x 4 would carry two rows. A THIRD sloping brick sits behind those two, so the top of

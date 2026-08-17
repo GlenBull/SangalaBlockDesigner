@@ -127,6 +127,18 @@
    "qty": 4
   },
   {
+   "id": "2434",
+   "name": "Brick 2 x 4 x 2 with Studs on Sides",
+   "kind": "brick",
+   "w": 4,
+   "d": 2,
+   "h": 6,
+   "shape": "rect",
+   "color": "Dark Bluish Gray",
+   "colorCode": 72,
+   "qty": 1
+  },
+  {
    "id": "3020",
    "name": "Plate 2 x 4",
    "kind": "plate",
