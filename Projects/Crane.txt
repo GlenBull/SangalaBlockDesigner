@@ -49,6 +49,15 @@
 # read off the finished design, not stated here. The color is only a starting point - the palette
 # sets it when the part is chosen - so neither number on this line is a decision.
 2434, 1, Dark Bluish Gray  # Brick 2 x 4 x 2 with Studs on Sides, carrying a wing each side
+# The wing itself. Jo Watts built one on the call and named the part; it stands on a plain 2 x 4
+# brick (3001, already above), which is what gives the wing its thickness and its grip.
+6069, 1, Light Bluish Gray # Wedge 4 x 4 Triple, the wing
+# The same wedge with notches cut in its underside, so it can be laid over studs rather than only
+# beside them. Same 4 x 4 footprint and the same brick of height; which one the wing wants depends
+# on what it has to clear, so both are in the library and the build decides.
+48933, 1, Light Bluish Gray # Wedge 4 x 4 Triple with Stud Notches
+# A longer wing, and a curved one: six studs of reach instead of four, still a brick tall.
+43712, 1, Light Bluish Gray # Wedge 6 x 4 Triple Curved
 
 # The course the slopes stand on runs the full four studs of the body's top and, on the
 # closer photograph, appears to be a single piece. A 1 x 4 would carry one row of slopes;
