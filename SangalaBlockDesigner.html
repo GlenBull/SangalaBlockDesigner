@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.018 -->
+<!-- SANGALA_VERSION: 2026-08-16.019 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1635,7 +1635,22 @@ function partYaw(p, box){
   /* an inverted slope always lies ramp-across: its footprint is the ONE stud it rests on, and the
      body reaching past that stud is the overhang, not a second column of footprint */
   if(p.shape === "invslope") return 90;
-  if(p.shape === "slope") return p.w === 2 ? 90 : 0;
+  if(p.shape === "slope"){
+    /* THE RAMP IS NOT ALWAYS TWO STUDS. It is for every 45-degree slope - 3040, 3039, 3037 - which
+       is why `p.w === 2` held for as long as those were the only slopes the menu offered. 4286 is a
+       33-DEGREE slope and its ramp spans THREE: three studs of length over one brick of height
+       forces the shallower angle. It fell to the else, took yaw 0, and its ramp ran back into the
+       figure instead of across the profile - Glen, 2026-08-16, on the crane's back: "the
+       back-facing sloping bricks have the wrong orientation in 3D view."
+       The span is the first number of the N x M in the part's OWN NAME, which both sources carry:
+       the built-in sizes say "Slope 2x1" and the library says "Slope Brick 33 3 x 1". Read the LAST
+       such pair, so the 45 or 33 in front of it is not mistaken for a measurement.
+       This still refuses to turn a 2 x 4 laid the long way: its ramp is 2 and the page gives it 4,
+       so the ramp runs back into the figure, which is the case the old comment set out to protect. */
+    const pairs = (p.name||"").match(/\d+\s*x\s*\d+/g);
+    const ramp = pairs ? parseInt(pairs[pairs.length-1], 10) : 2;
+    return p.w === ramp ? 90 : 0;
+  }
   if(!box) return 0;
   const wLD = Math.round((box[3]-box[0])/20), dLD = Math.round((box[5]-box[2])/20);
   return (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
