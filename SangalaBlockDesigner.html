@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-16.019 -->
+<!-- SANGALA_VERSION: 2026-08-17.031 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -161,6 +161,12 @@
 .swrow{display:flex;flex-wrap:wrap;gap:5px;margin:.3rem 0 .2rem}
 .sw{width:26px;height:26px;border-radius:5px;border:2px solid #efe0c4;outline:1px solid #b09a72;cursor:pointer}
 .sw.on{outline:2px solid #7a3b12;transform:scale(1.09)}
+/* A SELECTED LIBRARY ROW IS MARKED BY SHADE, NOT BY A BAR. Glen, 2026-08-17: "We should highlight by
+   changing the shade - perhaps a lighter shade of tan? - rather than by putting a vertical bar to mark
+   the selection." The panel's own tan is #efe0c4, so the row lifts to the lighter cream this file
+   already uses for menus rather than introducing a color of its own. Clicking a row only marks it -
+   it does not pick the part up. */
+#libtable tr[data-lib].on td{background:#fbf4e6}
 .bom{width:100%;border-collapse:collapse;font-size:.76rem;margin-top:.35rem}
 .bom td,.bom th{padding:2px 3px;border-bottom:1px solid #e0d0b0;text-align:left;color:#4a3c28}
 .bom th{color:#6b5a44;font-weight:600}
@@ -973,6 +979,18 @@ function draw(){
     ? (a,b)=>(b.row||0)-(a.row||0)
     : (a,b)=>(a.base||0)-(b.base||0));
   order.forEach(b=>drawBrick(b,false));
+  /* THE SELECTED BRICK IS OUTLINED, because a selection you cannot see is not a selection - and
+     Delete would then be a keystroke that takes off a part the builder cannot identify. Drawn after
+     every brick so it is never covered by a neighbour, and in the blue this application already uses
+     to mark a brick the pointer is deciding about. A selection whose brick has left the design -
+     erased, undone, opened away - is dropped here rather than left dangling. */
+  if(selBrick && bricks.indexOf(selBrick)<0) selBrick=null;
+  if(selBrick){
+    ctx.save();
+    ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
+    shape(selBrick.p, selBrick.col, selBrick.row, selBrick.flip); ctx.stroke();
+    ctx.restore();
+  }
   if(hover && tool==="place") drawBrick(hover,true);
   ctx.restore();
   ctx.restore();
@@ -1122,7 +1140,15 @@ function swatches(){
     const s=document.createElement("div");
     s.className="sw"+(i===selCol?" on":""); s.style.background=c.hex;
     s.title=c.name+" (LDraw "+c.code+")";
-    s.onclick=()=>{selCol=i;swatches();draw();};
+    /* PICKING A COLOR WHILE A LIBRARY ROW IS SELECTED ASSIGNS IT TO THAT PART, and it stays until the
+       builder changes it - the whole point of `libColor`. With no row selected this is just the paint
+       color for the Part tool, as it always was. */
+    s.onclick=()=>{
+      selCol=i;
+      const g = libSel>=0 ? libGroups[libSel] : null;
+      if(g) libColor[g.id]=i;
+      swatches(); drawLibrary(); draw();
+    };
     h.appendChild(s);
   });
 }
@@ -2080,12 +2106,22 @@ const plates = n => n+(n===1?" plate":" plates");
    The brick is lifted OUT of the array before settling, or it would find itself in its own columns
    and come to rest on top of itself - it would never move down again. */
 let moveDrag=null;
+/* THE SELECTED BRICK, held as the OBJECT rather than an index, because indices move under it: a
+   drag lifts the brick out of the array and pushes it back on the end, and Undo rebuilds the array
+   entirely. Anything holding a number would end up pointing at a different brick. Nothing checks
+   that the object is still IN the design either, so draw() drops a selection whose brick has gone -
+   erased, undone, or opened away. */
+let selBrick=null;
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
-  if(i<0) return;
+  if(i<0){ if(selBrick){ selBrick=null; draw(); say("Select / move."); } return; }   /* empty ground clears it */
   const b=bricks[i];
+  /* DRAW IT AT ONCE. Setting the selection without repainting left the outline invisible until some
+     unrelated redraw happened along, so the part was selected and did not look it - Delete worked on
+     a brick carrying no mark (Glen, 2026-08-16). A selection is a thing you can SEE or it is nothing. */
+  if(selBrick!==b){ selBrick=b; draw(); say(b.p.name+" selected — press Delete to take it off."); }
   moveDrag={i:i, dcol:c.col-b.col, drow:c.row-b.row, from:{col:b.col,row:b.row,base:b.base}, moved:false};
   cv.style.cursor="grabbing";
   e.preventDefault();
@@ -2181,6 +2217,26 @@ function redo(){
   histBusy=true; restoreState(JSON.parse(s)); histBusy=false;
   say("Redid the change.");
 }
+/* DELETE TAKES THE SELECTED BRICK OFF (Glen, 2026-08-16: "when i select a part, i would like to be
+   able to delete it using the delete key"). Backspace does the same, because a builder reaching for
+   "remove this" hits whichever one their keyboard put under their hand.
+   NO SINGLE KEYSTROKE MAY DESTROY WORK, so this goes through commit() like every other change and
+   Ctrl-Z puts the brick back - and the status line says so at the moment it happens, rather than
+   leaving the builder to hope. A focused field keeps its own Delete: typing a size or a project name
+   must not take a brick off the design. */
+window.addEventListener("keydown",(e)=>{
+  if(e.key!=="Delete" && e.key!=="Backspace") return;
+  const tg=(e.target&&e.target.tagName||"").toLowerCase();
+  if(tg==="input"||tg==="textarea"||tg==="select"||(e.target&&e.target.isContentEditable)) return;
+  if(view3D) return;                                   /* looking, not building */
+  const i = selBrick ? bricks.indexOf(selBrick) : -1;
+  if(i<0) return;
+  const name = selBrick.p.name;
+  bricks.splice(i,1); selBrick=null;
+  e.preventDefault();
+  draw(); bom(); commit();
+  say(name+" taken off — Ctrl-Z puts it back.");
+});
 window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-Y redo (Cmd on a Mac)
   if(!(e.ctrlKey||e.metaKey) || e.altKey) return;
   const tg=(e.target&&e.target.tagName||"").toLowerCase();
@@ -2963,50 +3019,151 @@ const KIND_MARK = {brick:"🧱", plate:"▬", slope:"◺", invslope:"◹",
                    round:"⬤", cone:"🔺", wedge:"◣", tile:"▭"};
 let libraries = [];                      /* the names of the libraries loaded, for the .block file */
 let libParts = [];                       /* what those libraries hold, for the Library section */
+let libSel = -1;                         /* the row the builder has clicked; a MARK, not a pickup */
+let libGroups = [];                      /* libParts folded to one entry per part number, for the rows */
+/* THE COLOR ASSIGNED TO EACH PART, by part number. Glen, 2026-08-17: "I selected a part with a black
+   square and changed it to green. but when i clicked off of it, the part reverted back to black.
+   assigned colors should remain stable until i change them." So a color is not a passing state of the
+   palette - it belongs to the part until the builder says otherwise. The library's own color is only
+   the starting value, recorded here the first time the row is selected. */
+let libColor = Object.create(null);      /* part number -> palette index */
+const libColorOf = g => {
+  if(!g) return -1;
+  if(g.id in libColor) return libColor[g.id];
+  return COLORS.findIndex(x=>x.code===g.colors[0].code);   /* -1 if the library's color is not in the palette */
+};
 let libOpen = true;                      /* opened when a library is loaded: the point is to be seen */
-/* The library's own contents, which is a different question from the design's bill of materials:
-   Parts above answers "what have I used", this answers "what have I got". Where a part carries a
-   quantity the list is an inventory of bricks in hand; where it does not, it is simply the set of
-   shapes the application now offers. */
+/* THE LIBRARY AND THE PARTS LIST ANSWER DIFFERENT QUESTIONS, and Glen drew the line (2026-08-17):
+   "the library is what can be used in the design space for a specific project. the parts list is the
+   list of parts on the workspace. the parts list can be used to order the parts to build the physical
+   model once it has been designed." So THIS is availability and Parts above is the bill of materials -
+   and `tally()` already groups that one by part AND color, which is what an order needs.
+
+   ONE ROW PER PART NUMBER, therefore, with one color on it. Two rows for one part differing only in
+   color were needed when the entry's color decided what got placed; the palette decides that now, so
+   they are duplicates. The GROUPING IS IN THE VIEW, not in the file: Glen chose that over merging the
+   lines, so `Crane.txt` keeps its narrative order - the head parts under "THE HEAD, working down from
+   the top", the body parts under theirs.
+
+   AND NO QUANTITIES. Glen, 2026-08-17: "the part in the library should never list number of parts; it
+   is a design tool, not an ordering tool." A count here invited exactly the confusion it caused - I
+   read the panel as stock twice and had to be corrected twice. What the library offers is a SHAPE and
+   a COLOR to design with; how many the finished design needs is a fact about the workspace, and
+   tally() answers it. The .parts file may still carry quantities and they are simply not shown. */
 function drawLibrary(){
-  const rows = libParts;
+  const groups = [], byId = new Map();
+  libParts.forEach((p,i)=>{
+    let g = byId.get(p.id);
+    if(!g){ g={id:p.id, name:p.name||p.id, first:i, colors:[]}; byId.set(p.id,g); groups.push(g); }
+    g.colors.push({code:p.colorCode, name:p.color});
+  });
+  libGroups = groups;
+  if(libSel >= groups.length) libSel = -1;      /* a new library leaves no stale mark behind */
   document.querySelector("#libtable tbody").innerHTML =
-    (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
-    rows.map((p,i)=>{
-      const c = COLORS.find(x=>x.code===p.colorCode);
-      return "<tr draggable='true' data-lib='"+i+"' title='Drag this part onto the workspace to place it'"
-        +" style='cursor:grab'><td>"+(p.name||p.id)+"<br><span class='dn'>Design "+p.id+"</span></td>"
-        +"<td>"+(c ? "<span class='chip' style='background:"+c.hex+"'></span>" : "")
-        +(p.color||"&mdash;")+"</td>"
-        +"<td class='q'>"+(typeof p.qty==="number" ? p.qty : "&mdash;")+"</td></tr>";
+    (groups.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Design</th></tr>" : "") +
+    groups.map((g,i)=>{
+      /* THE SELECTED ROW SHOWS THE PALETTE'S COLOR, not the library's. Glen, 2026-08-17: "The part has
+         been selected and i have selected the color red in the palette, but the color square beside
+         the part still shows yellow." The two are bound both ways - picking a row moves the palette,
+         picking a color moves the row's chip - so the pair can never disagree, and the chip answers
+         the question the builder is actually asking it: what will this be placed in? An unselected
+         row still shows what the library says the part comes in. */
+      /* ONE COLOR PER ROW, ALWAYS. Glen, 2026-08-17: "some parts in the library are showing two
+         colors - so presumably it would be a random select when the part is dragged onto the
+         workspace. a part in the library should only show one color at a time." Nothing was ever
+         random - the palette decides, and has since the drop handler stopped reading the entry - but
+         a row offering two answers made that impossible to tell from looking, which is the defect.
+         So a row states ONE color: the palette's while it is selected, otherwise the first the
+         library lists for that part. What else it comes in is said once, in the status line, at the
+         moment it is selected - which is where a passing fact belongs rather than in every row. */
+      const ci = libColorOf(g);
+      const shown = ci>=0 ? { hex: COLORS[ci].hex, name: COLORS[ci].name }
+                          : { hex: null, name: g.colors[0].name||"&mdash;" };
+      /* THE SQUARE IS THE ANSWER; THE NAME IS NOISE. Glen, 2026-08-17: "since we can see the color in
+         the color square, we don't need the text with the color name." It also cost the most room in
+         the panel - "Dark Bluish Gray" wrapped to two lines and made nine rows double height for a
+         fact the swatch states at a glance. The name is kept on the chip's tooltip, and the status
+         line says it aloud when the row is selected, so nothing is lost but the space. A color the
+         palette does not contain has no square to show, so there the name still stands in. */
+      const cells = shown.hex
+        ? "<span class='chip' style='background:"+shown.hex+"' title='"+shown.name+"'></span>"
+        : shown.name;
+      /* the drag carries the FIRST entry of the group: every entry of one part number has the same
+         footprint, height and shape, and the color no longer comes from the entry at all */
+      /* THE DESIGN NUMBER TAKES THE COLUMN THE QUANTITY VACATED, so a part is one line instead of two
+         (Glen, 2026-08-17: "we can save space by putting the design # in place of quantity - then each
+         part just takes up one line"). It used to sit under the name on a second line, which doubled
+         the height of every row to carry six characters. */
+      return "<tr draggable='true' data-lib='"+g.first+"' data-grp='"+i+"'"+(i===libSel?" class='on'":"")
+        +" title='Click to select it; drag it onto the workspace to place it'"
+        +" style='cursor:grab'><td>"+g.name+"</td>"
+        +"<td>"+cells+"</td>"
+        +"<td class='q'>"+g.id+"</td></tr>";
     }).join("");
   /* A LIBRARY ROW IS A DRAG SOURCE. Glen, 2026-08-15: "I need to be able to drag parts out of the
-     library list into the workspace." The row carries only its index; everything about the part -
-     its footprint, its height, its shape, its color - is read from the library entry when it lands,
-     so a part dragged from here is placed at the size the LDraw file measured rather than at
-     whatever the Part menu happens to say about that number. */
+     library list into the workspace." The row carries only its index; the part's footprint, height
+     and shape are read from the library entry when it lands, so a part dragged from here is placed
+     at the size the LDraw file measured rather than at whatever the Part menu happens to say about
+     that number. Its COLOR is not read from here - the palette decides that; see the drop handler. */
   document.querySelectorAll("#libtable tr[data-lib]").forEach(tr=>{
     tr.addEventListener("dragstart", e=>{
       e.dataTransfer.setData("text/plain", "sangala-lib:"+tr.dataset.lib);
       e.dataTransfer.effectAllowed = "copy";
     });
+    /* CLICKING A ROW MARKS IT AND MOVES THE PALETTE TO ITS COLOR - and does nothing else. Glen,
+       2026-08-17: "when a part in the library is selected, the color picker should select the color
+       as shown in the library. it should not wait until the part is dragged into the workspace to
+       take effect." So the library SEEDS the palette and the palette stays the authority: the color
+       is visible, and changeable, before anything is placed. The part is not picked up, the Part
+       tool is not changed, and dragging remains how a part reaches the workspace.
+       A row now stands for a PART NUMBER rather than a part-and-color, so the palette is seeded from
+       the FIRST color the row lists and the others are named in the status line - the builder can see
+       what else it comes in without the list carrying a second row for it. A color the palette does
+       not contain leaves the palette alone and says so, rather than silently placing something else. */
+    tr.addEventListener("click", ()=>{
+      libSel = parseInt(tr.dataset.grp, 10);
+      const g = libGroups[libSel];
+      let note = "";
+      if(g && g.colors.length){
+        const ci = libColorOf(g);
+        /* record it on first sight, so the part owns its color from then on rather than borrowing
+           the library's each time the row is looked at */
+        if(ci>=0){ selCol=ci; libColor[g.id]=ci; swatches(); }
+        else note = " Its color"+(g.colors[0].name?" ("+g.colors[0].name+")":"")+" is not in the palette, so the palette is unchanged.";
+      }
+      drawLibrary(); draw();
+      if(g) say(g.name+" selected — the palette is now "+COLORS[selCol].name+"."
+                + (g.colors.length>1 ? " It also comes in "
+                   +g.colors.slice(1).map(k=>k.name||"an unnamed color").join(", ")+"." : "")
+                + note);
+    });
   });
-  const pieces = rows.reduce((n,p)=>n+(p.qty||0), 0);
-  $("libcount").textContent = rows.length
-    ? " · "+rows.length+(rows.length===1?" part":" parts")+(pieces? ", "+pieces+" pieces":"") : "";
+  /* PARTS are distinct part NUMBERS, since that is what a row stands for. DO NOT READ THIS PANEL AS
+     STOCK. Glen has had to say it twice (2026-08-17): "the library is what can be used in the design
+     space for a specific project. the parts list is the list of parts on the workspace... the parts
+     list can be used to order the parts to build the physical model once it has been designed." So
+     nothing here is drawn down, counted against, or ordered from, and NO COUNT IS SHOWN AT ALL. The
+     ordering question is answered by tally() above, which groups the WORKSPACE by part and color.
+     The colors here are choices about what to design with. */
+  $("libcount").textContent = groups.length
+    ? " · "+groups.length+(groups.length===1?" part":" parts") : "";
   $("libnote").textContent = libraries.length
-    ? (libraries.length===1 ? libraries[0] : libraries.join(", "))
-      + (pieces ? "" : " · no quantities given, so this is the set of shapes offered rather than an inventory")
-    : "";
-  $("libpanel").style.display = rows.length ? "" : "none";
+    ? (libraries.length===1 ? libraries[0] : libraries.join(", ")) : "";
+  $("libpanel").style.display = groups.length ? "" : "none";
   $("libbody").style.display = libOpen ? "" : "none";
   $("libtog").innerHTML = libOpen ? "&#9662;" : "&#9656;";
   $("libhead").title = libOpen ? "Hide the library" : "Show the library";
 }
 $("libhead").onclick=()=>{ libOpen=!libOpen; drawLibrary(); };
-/* ...and the workspace is the drop target. The part lands on the cell it was dropped on, in its own
-   color where the palette has that color, and is placed by the same settle() every other placement
-   goes through - so a dragged part obeys whatever the rules are rather than having rules of its own. */
+/* ...and the workspace is the drop target. The part lands on the cell it was dropped on, IN THE
+   PALETTE'S COLOR, and is placed by the same settle() every other placement goes through - so a
+   dragged part obeys whatever the rules are rather than having rules of its own.
+   THE PALETTE DECIDES THE COLOR, NOT THE LIBRARY (Glen, 2026-08-17: "The color picker / palette
+   should control the color of the part selected in the library"). It used to be the other way about
+   - the library entry's own color won and the palette was consulted only when the palette did not
+   contain it - so a builder could pick a color, drag a part, and get a different one with no way to
+   say otherwise. The library's color is an inventory fact, which is what that panel is for: it
+   answers "what have I got", not "what shall I place". The chip in the row still shows it. */
 cv.addEventListener("dragover", e=>{ e.preventDefault(); e.dataTransfer.dropEffect="copy"; });
 cv.addEventListener("drop", e=>{
   const data = e.dataTransfer.getData("text/plain") || "";
@@ -3019,12 +3176,15 @@ cv.addEventListener("drop", e=>{
   const p = {id:lp.id, name:lp.name||lp.id, w:Math.max(1,lp.w|0), d:Math.max(1,lp.d|0),
              h:Math.max(1,lp.h|0), shape:(lp.shape==="box"?"rect":lp.shape||"rect"),
              studs:(lp.kind!=="tile")};
-  const ci = COLORS.findIndex(x=>x.code===lp.colorCode);
-  const nb = settle({p:p, colorIdx:(ci<0?selCol:ci), col:c.col, row:c.row, flip:flip});
+  /* IN THE COLOR ASSIGNED TO THAT PART, which is not necessarily the palette's: a builder who has set
+     one row green and another black, then dragged the black one out, means black. The palette shows
+     the SELECTED row's color; a part carries its own. */
+  const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
+  const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
+  const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip});
   bricks.push(nb);
   draw(); bom(); commit();
-  say(p.name+" placed from the "+(libraries[0]||"library")+" library."
-      + (ci<0 && lp.color ? " Its color, "+lp.color+", is not in the palette, so it was placed in the current color." : ""));
+  say(p.name+" placed from the "+(libraries[0]||"library")+" library, in "+COLORS[ci].name+".");
 });
 function addKindButton(kind, label){
   const menu = $("partmenu");
