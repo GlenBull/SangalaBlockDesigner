@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.058 -->
+<!-- SANGALA_VERSION: 2026-08-17.059 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -780,6 +780,15 @@ const overCols  = p => p.shape==="invslope" ? 1 : 0;         /* studs of body be
 const overLeft  = (p,fl) => fl ? 0 : overCols(p);            /* unflipped: the thin end is the left */
 const overRight = (p,fl) => fl ? overCols(p) : 0;
 
+/* A PLAN TURNED A QUARTER AT A TIME, counterclockwise, on a screen whose y runs DOWN: (u,v) becomes
+   (v, W-u), where W is how many studs across the plan is BEFORE that turn - so the box swaps its two
+   sides at every step and whatever is drawn on it rides round with it. The outline and the studs both
+   ask this, which is why a rotated part cannot end up with its studs off its own edge. */
+function spin(pts, pw, pd, r){
+  let W=pw;
+  for(let k=0;k<((r|0)&3);k++){ const V=W; pts=pts.map(q=>[q[1], V-q[0]]); W = (k&1) ? pw : pd; }
+  return pts;
+}
 function shape(p,col,row,fl,face,rot){
   const oL=overLeft(p,fl), oR=overRight(p,fl);
   const r=face ? ((rot|0)&3) : 0;                  /* only a plan can be turned - see rotOf */
@@ -860,8 +869,7 @@ function shape(p,col,row,fl,face,rot){
     const pw=p.w, pd=p.d||1, tip=pw/2;
     let pts = [[0,0],[pw,0],[pw-tip/2,pd],[tip/2,pd]];
     if(fl) pts = pts.map(q=>[pw-q[0], q[1]]);
-    let W=pw;
-    for(let k=0;k<r;k++){ const V=W; pts=pts.map(q=>[q[1], V-q[0]]); W = (k&1) ? pw : pd; }
+    pts = spin(pts, pw, pd, r);
     const s=mx(STUD);
     pts.forEach((q,i)=>{ const X=x+q[0]*s, Y=y+q[1]*s; i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); });
   } else if(ctx.roundRect){ ctx.roundRect(x,y,w,h,Math.min(mx(1.4), Math.min(w,h)/5)); }
@@ -999,7 +1007,10 @@ function drawBrick(b,ghost){
        line where the stud meets the face it stands on - a seam there is what makes a stud look
        stuck on rather than moulded. */
     const sw=mx(4.8), sHt=Math.max(1.2, mx(1.8)), sR=Math.min(mx(0.5), sHt/2, sw/2);
-    for(let cx=0;cx<bcols;cx++){                    /* studs sit on the BODY, overhang included */
+    /* upright, a measured part shows a stud only over the columns that carry one */
+    const topCols = (p.top && p.top.length) ? p.top.map(q=>Math.floor(q[0])) : null;
+    for(let cx=0;cx<bcols;cx++){
+      if(topCols && topCols.indexOf(cx-oL)<0) continue;                    /* studs sit on the BODY, overhang included */
       if(p.shape==="slope" && (fl ? cx===bcols-1 : cx===0)) continue;   /* the fallen end has none */
       const px2=x+mx(STUD)*(cx+.5), sL=px2-sw/2, sRt=px2+sw/2, sT=y-sHt;
       ctx.beginPath();
@@ -1033,6 +1044,14 @@ function drawBrick(b,ghost){
   if(studded(p) && (mode!=="standing" || fc)){
     const r=Math.max(1.4, mx(2.4));
     ctx.lineWidth=1;
+    /* A PART WHOSE STUDS DO NOT FILL IT SAYS WHERE THEY ARE, and the library measured them from the
+       part's own geometry. 6069 has two, side by side at its wide end; the grid below would give it
+       sixteen and put four of them outside its own outline (Glen, 2026-08-17). They take the same
+       quarter turn the outline does. */
+    if(p.top && p.top.length){
+      spin(p.top.map(q=>[q[0],q[1]]), p.w, p.d||1, rt).forEach(q=>
+        studRing(x+mx(STUD)*q[0], y+mx(STUD)*q[1], r, studFace, studEdge, hi, sh));
+    } else
     for(let ry=0;ry<dp;ry++){
       /* the sloped row falls away, so it carries no stud - an inverted slope keeps them all */
       if(!fc && p.shape==="slope" && (fl ? ry===0 : ry===dp-1)) continue;
@@ -2643,8 +2662,10 @@ function designJSON(){ return (
                            ...(b.rot?{rot:b.rot}:{}),
                            /* written only when it is FALSE, since all but a tile carry studs */
                            ...(b.p.studs===false?{studs:false}:{}),
-                           /* and only when the part has studs on a face, which few do */
-                           ...(b.p.side&&b.p.side.length?{side:b.p.side}:{})}))},null,1)); }
+                           /* and only when the part has studs on a face, or fewer on top than
+                              cells to put them in - which few do */
+                           ...(b.p.side&&b.p.side.length?{side:b.p.side}:{}),
+                           ...(b.p.top&&b.p.top.length?{top:b.p.top}:{})}))},null,1)); }
 /* Save opens the menu; the menu items do the saving. Cloned from Mosaic's saveMenu, including the
    disable-what-cannot-be-saved rule: Instructions is dead until a snapshot exists. */
 function closeSaveMenu(){ $("saveMenu").style.display="none"; }
@@ -3503,8 +3524,9 @@ cv.addEventListener("drop", e=>{
   const p = {id:lp.id, name:lp.name||lp.id, w:Math.max(1,lp.w|0), d:Math.max(1,lp.d|0),
              h:Math.max(1,lp.h|0), shape:(lp.shape==="box"?"rect":lp.shape||"rect"),
              studs:(lp.kind!=="tile"),
-             /* the studs on its faces, measured in the library - see drawBrick */
-             ...(lp.side&&lp.side.length?{side:lp.side}:{})};
+             /* the studs on its faces and on its top, measured in the library - see drawBrick */
+             ...(lp.side&&lp.side.length?{side:lp.side}:{}),
+             ...(lp.top&&lp.top.length?{top:lp.top}:{})};
   /* IN THE COLOR ASSIGNED TO THAT PART, which is not necessarily the palette's: a builder who has set
      one row green and another black, then dragged the black one out, means black. The palette shows
      the SELECTED row's color; a part carries its own. */
@@ -3606,7 +3628,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
         if(ci>=0) libColor[id]=ci;
       });
     }
-    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs,side:b.side},
+    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs,side:b.side,top:b.top},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
       base:b.base, turn:b.turn, rot:b.rot}));
     /* A SAVED DESIGN IS OPENED EXACTLY AS IT WAS SAVED. There was a migration here that turned an

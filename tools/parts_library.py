@@ -147,6 +147,70 @@ def side_studs(path, w, xf=IDENT, depth=0, seen=(), out=None):
     return out
 
 
+def top_studs(path, box, w, d):
+    """Where a part's studs actually sit on its top, WHEN THEY DO NOT FILL IT.
+
+    Glen, 2026-08-17, looking at a 4 x 4 wedge on the plan: the drawing put a stud in every cell of
+    the footprint, so a part with two studs came out with sixteen and the ones past the taper sat
+    outside its own outline. 6069 has exactly TWO, side by side at the wide end - which is what the
+    LDraw file says and what Jo's photograph of the part shows.
+
+    Measured the same way the side studs are: an upward stud is a reference to a stud primitive whose
+    axis is vertical. The tubes UNDERNEATH are stud primitives too (stud3, stud4), so the test is the
+    top face - a stud on top sits at the part's own origin plane, which LDraw puts at the top of the
+    body, while the tubes hang below it.
+
+    Returned as [across, down] per stud in STUDS, from the part's left edge and from the end that the
+    plan view draws first. Measured off the box rather than assumed centred: a wedge's origin is not
+    in the middle of its length (6069 runs -70 to +10 in z), so centring would place every stud on
+    the wrong row.
+
+    Omitted entirely when the studs DO fill the footprint, which is the ordinary case - an ordinary
+    brick says nothing here and is drawn exactly as it always was.
+    """
+    minx, maxx, miny, maxy, minz, maxz = box
+    out = []
+    for name, pos, axis in _walk_studs(path):
+        ax, ay, az = axis
+        if abs(ay) < max(abs(ax), abs(az)):
+            continue                                   # on a face: that is side_studs' business
+        if pos[1] > miny + STUD_LDU + 0.5:
+            continue                                   # a tube below the top face, not a stud on it
+        across = (pos[0] - minx) / ldparts.STUD
+        down = (maxz - pos[2]) / ldparts.STUD
+        p = [round(across, 3), round(down, 3)]
+        if p not in out:
+            out.append(p)
+    return out if 0 < len(out) < w * d else []
+
+
+def _walk_studs(path, xf=IDENT, depth=0, seen=(), out=None):
+    """Every stud primitive in a part, with where it sits and which way its axis points."""
+    out = [] if out is None else out
+    key = os.path.normcase(path)
+    if depth > 12 or key in seen:
+        return out
+    seen = seen + (key,)
+    for line in open(path, encoding="utf-8", errors="replace"):
+        t = line.split()
+        if not t or t[0] != "1" or len(t) < 15:
+            continue
+        try:
+            v = [float(x) for x in t[2:14]]
+        except ValueError:
+            continue
+        here = compose(xf, ([[v[3], v[4], v[5]], [v[6], v[7], v[8]], [v[9], v[10], v[11]]],
+                            [v[0], v[1], v[2]]))
+        ref = " ".join(t[14:]).replace("\\", "/").split("/")[-1].lower()
+        if ref.startswith("stud"):
+            out.append((ref, here[1], (here[0][0][1], here[0][1][1], here[0][2][1])))
+            continue
+        sub = ldparts.locate(ref)
+        if sub:
+            _walk_studs(sub, here, depth + 1, seen, out)
+    return out
+
+
 def classify(name):
     """kind and shape, from the part's own description.
 
@@ -259,6 +323,9 @@ def build(rows):
             face = side_studs(path, raw_w)
             if face:
                 part["side"] = face
+        top = top_studs(path, box, part["w"], part["d"])
+        if top:
+            part["top"] = top
         if target.lower() != number.lower():
             part["geometry"] = target        # the file the measurements came from, when redirected
         if color:
