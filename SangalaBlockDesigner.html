@@ -2370,8 +2370,12 @@ function restoreState(st){
      restored design cannot end up scaled twice */
   guide=guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0]*frameScale, q[1]*frameScale]),
                                 holes:(g.holes||[]).map(h=>h.map(q=>[q[0]*frameScale, q[1]*frameScale]))}));
+  /* TURN COMES BACK WITH THE BRICK. serializeState has written it since the day Turn was built, and
+     this dropped it on the way in - so one Ctrl-Z stood every turned part upright again, silently and
+     without touching anything else. That is the builder's work undone by the undo, which is the one
+     thing undo may not do. A wing is turned onto the face; an eye is too. */
   bricks=(st.bricks||[]).map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
-                                   flip:b.flip, base:b.base }));
+                                   flip:b.flip, base:b.base, turn:b.turn }));
   /* the controls follow the state, the way Studio's refreshEditPanel does - a restored mode that the
      menu still disagrees with is the next defect */
   setPageSize(pageKind); $("pagesize").value=pageKind;
