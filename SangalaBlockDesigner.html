@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.048 -->
+<!-- SANGALA_VERSION: 2026-08-17.050 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -204,6 +204,10 @@
          this had a broom, which is a different picture for the same thing. -->
     <button class="ltbtn" id="tErase" title="Erase: click a brick to take it off the design (Ctrl+Z undoes)">&#129533;<small>Erase</small></button>
     <button class="ltbtn" id="tFlip" title="Flip: face the chosen slope the other way">&#128260;<small>Flip</small></button>
+    <!-- Turn lays a part on the SIDE of the figure, studs towards you - the eye, and the flat plate
+         that makes a wing. Beside Flip because it is the same kind of control: it says how the NEXT
+         part goes down, and stays on until it is pressed again. -->
+    <button class="ltbtn" id="tFace" title="Turn: lay the part on the side of the figure, studs towards you">&#9635;<small>Turn</small></button>
   </div>
 
   <!-- (3) WORKSPACE -->
@@ -524,6 +528,9 @@ function applyFrameScale(){
    syncSizeFields() on load, so their value= attributes cannot set it and must simply agree. */
 let part = {kind:"brick", w:3, d:2, id:"3002", n:"2x3"};   // the part the Toolbar has chosen
 let selCol = 3, flip = false;
+/* Turn: the next part goes down on the SIDE of the figure, studs towards you. Beside `flip`
+   because it is the same kind of state - how the next placement is laid, not a mode. */
+let faceNext = false;
 let tool = "select", showGuide = true, showGrid = true;
 /* TWO WAYS TO BUILD, and the frame serves both - it is the same silhouette either way.
    STANDING is the figure in the photographs: bricks stacked in courses, studs up, gravity from
@@ -756,15 +763,18 @@ const overCols  = p => p.shape==="invslope" ? 1 : 0;         /* studs of body be
 const overLeft  = (p,fl) => fl ? 0 : overCols(p);            /* unflipped: the thin end is the left */
 const overRight = (p,fl) => fl ? overCols(p) : 0;
 
-function shape(p,col,row,fl){
+function shape(p,col,row,fl,face){
   const oL=overLeft(p,fl), oR=overRight(p,fl);
-  const x=mx((col-oL)*STUD), y=mx(row*vUnit()), w=mx((p.w+oL+oR)*STUD), h=mx(rowsOf(p)*vUnit());
+  const x=mx((col-oL)*STUD), y=mx(row*vUnit()), w=mx((p.w+oL+oR)*STUD);
+  /* Turned onto a face, the part presents its PLAN: the dimension across the screen is still its
+     width, but the one up the screen is its DEPTH in studs, not its height in plates. */
+  const h=face ? mx((p.d||1)*STUD) : mx(rowsOf(p)*vUnit());
   ctx.beginPath();
   /* STANDING is a SIDE view, so a part shows its elevation, not its plan (Glen: "the slope and
      cone are shown correctly in the 3D view but incorrectly in the 2D view"). From the side a
      slope is a wedge, a cone is a trapezoid, and a round brick is a plain rectangle - a cylinder
      seen side-on. In relief the same parts show their PLAN, which is where the circle belongs. */
-  if(mode==="standing"){
+  if(mode==="standing" && !face){
     /* A SLOPE IS ALWAYS DRAWN AS A SLOPE. I briefly drew a one-column slope as the rectangle its
        turned-away ramp truthfully presents, and it was a bad trade: Glen's two crest pieces became
        plain 1 x 1 columns on the workspace and there was no way to see what part was where. The
@@ -891,10 +901,11 @@ function drawBrick(b,ghost){
      This replaces a moulded side elevation with lit and shaded faces and studs standing proud of
      the top, which was invented in this application alone and is why nothing here resembled the
      program the student arrives from. */
-  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, dp=rowsOf(p);
+  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, fc=faced(b), dp=rowsOf(p);
   /* the BODY, which for an inverted slope reaches past the stud it rests on */
   const oL=overLeft(p,fl), oR=overRight(p,fl), bcols=p.w+oL+oR;
-  const x=mx((b.col-oL)*STUD), y=mx(b.row*vUnit()), w=mx(bcols*STUD), h=mx(dp*vUnit());
+  const x=mx((b.col-oL)*STUD), y=mx(b.row*vUnit()), w=mx(bcols*STUD);
+  const h=fc ? mx((p.d||1)*STUD) : mx(dp*vUnit());   /* turned, it is as tall as it is deep */
   /* THE MARKS TAKE THEIR CONTRAST FROM THE BRICK'S OWN COLOUR - see tones() above. A fixed brown
      ring works on Studio's unfilled white shapes and disappears on a filled black one, which is
      how a black brick came out as a blob with nothing legible on it. */
@@ -906,20 +917,20 @@ function drawBrick(b,ghost){
      black brick read as a mass: nothing said it was an object sitting on something. */
   const off=Math.max(1, mx(0.7)+(b.base||0)*mx(0.22));
   ctx.save(); ctx.globalAlpha=(ghost?.12:.22); ctx.translate(off,off);
-  shape(p,b.col,b.row,fl); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
+  shape(p,b.col,b.row,fl,fc); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
 
-  shape(p,b.col,b.row,fl);
+  shape(p,b.col,b.row,fl,fc);
   ctx.fillStyle=c.hex; ctx.fill();
   /* an inner bevel: the same outline stroked wide and CLIPPED to the brick, so only its inside
      half shows - the lit top edge of the moulding, which a single flat fill has no room for */
-  ctx.save(); shape(p,b.col,b.row,fl); ctx.clip();
+  ctx.save(); shape(p,b.col,b.row,fl,fc); ctx.clip();
   ctx.strokeStyle=T.bevel; ctx.lineWidth=Math.max(2, mx(0.7));
-  shape(p,b.col,b.row,fl); ctx.stroke(); ctx.restore();
-  shape(p,b.col,b.row,fl);
+  shape(p,b.col,b.row,fl,fc); ctx.stroke(); ctx.restore();
+  shape(p,b.col,b.row,fl,fc);
   ctx.strokeStyle=edge; ctx.lineWidth=1.3; ctx.stroke();
   /* One stud per stud cell, on the 8 mm pitch. Studio's own two exceptions come with the
      convention: a sloped row carries no stud, and a cone has none where a round brick has one. */
-  if(studded(p) && mode==="standing"){
+  if(studded(p) && mode==="standing" && !fc){
     /* STANDING: the studs stand PROUD OF THE TOP, because that is where they are on a brick you
        look at from the side. Drawn before nothing else covers them - they belong to this part. */
     /* A STUD STANDS ON THE TOP FACE; IT IS NOT SUNK THROUGH IT, AND IT IS NOT A LOZENGE. This drew
@@ -945,7 +956,7 @@ function drawBrick(b,ghost){
       ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
     }
   }
-  if(studded(p) && mode!=="standing"){
+  if(studded(p) && (mode!=="standing" || fc)){
     const r=Math.max(1.4, mx(2.4));
     ctx.lineWidth=1;
     for(let ry=0;ry<dp;ry++){
@@ -968,7 +979,7 @@ function drawBrick(b,ghost){
     }
   }
   if(ghost){ ctx.globalAlpha=1; ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=2;
-             shape(p,b.col,b.row,fl); ctx.stroke(); }
+             shape(p,b.col,b.row,fl,fc); ctx.stroke(); }
   ctx.globalAlpha=1;
 }
 
@@ -1020,7 +1031,7 @@ function draw(){
   if(selBrick){
     ctx.save();
     ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
-    shape(selBrick.p, selBrick.col, selBrick.row, selBrick.flip); ctx.stroke();
+    shape(selBrick.p, selBrick.col, selBrick.row, selBrick.flip, faced(selBrick)); ctx.stroke();
     ctx.restore();
   }
   if(hover && tool==="place") drawBrick(hover,true);
@@ -1719,7 +1730,10 @@ function partYaw(p, box){
 function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
   const m = ldrLoad(p.id);
   if(!m) return null;
-  const st = mode === "standing";
+  /* A TURNED PART TAKES THE RELIEF MAPPING, which is the whole of what "turned onto a face" means in
+     3D: relief lays a part with its studs towards the viewer, and that is where a part on the side of
+     the figure points. One flag, and the matrix, the studs and the thickness all follow. */
+  const st = mode === "standing" && !faced(b);
   /* widen the band to the BODY before centring the mesh in it: an inverted slope's geometry reaches
      a stud past the footprint it rests on, and centring it on the footprint would squeeze it */
   x0 -= overLeft(p, b.flip)*STUD; x1 += overRight(p, b.flip)*STUD;
@@ -1778,9 +1792,11 @@ function bricksToTris(){
   };
   bricks.forEach(b=>{
     if(parked(b)) return;        /* candidates on the cork are not part of the model, so not in 3D or the STL */
-    const p=b.p, d=p.d||1, t=thick(p), mine=[], vu=vUnit(), rws=rowsOf(p);
+    const p=b.p, d=p.d||1, t=thick(p), mine=[], vu=vUnit(), rws=rowsOf(p), fc=faced(b);
     const x0=b.col*STUD, x1=(b.col+p.w)*STUD;
-    const z1=H-b.row*vu, z0=H-(b.row+rws)*vu;
+    /* Turned, the part stands as tall as it is DEEP and is only as thick as it is HIGH - its own two
+       other dimensions, swapped by the quarter turn onto its face. */
+    const z1=H-b.row*vu, z0 = fc ? z1 - d*STUD : H-(b.row+rws)*vu;
     /* DEPTH RUNS ALONG -Y, because at the camera Studio starts with, +Y is the direction going
        AWAY: built the other way round the studs came out on the back of the model. The face that
        carries the studs is the one nearest the viewer, which is what a relief presents. */
@@ -1789,7 +1805,7 @@ function bricksToTris(){
        which is what made the figure one course deep. At base 0 this is still exactly 0, so every
        design saved before today opens unchanged. */
     const y1 = -(b.base||0) * (mode==="standing" ? STUD : PLATE);
-    const y0 = y1 - deepOf(p);
+    const y0 = y1 - (fc ? (p.h||1)*PLATE : deepOf(p));
     if(mode==="standing"){
       /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
          the corner at its fallen end, along the LENGTH, which is what you see from the side.
@@ -1918,6 +1934,23 @@ $("tErase").onclick =()=>{closeMenus();setTool(tool==="erase"?"select":"erase");
                           say(tool==="erase"?"Click a brick to take it off.":"Select / move.");};
 $("tFlip").onclick  =()=>{flip=!flip;$("tFlip").classList.toggle("on",flip);
                           say("Slopes now face "+(flip?"right":"left")+".");draw();};
+/* TURN ACTS ON THE BRICK YOU HAVE SELECTED, and only sets the state for the next placement when
+   nothing is selected. Glen, 2026-08-17: "turn doesn't turn it" - he had the eye already on the head,
+   selected it, pressed Turn, and nothing happened, because this only armed the NEXT placement the way
+   Flip does. Selecting a thing and acting on it is how the rest of the panel works.
+   It does NOT re-settle the brick: turning changes the cells it claims, and settle() would compare
+   the brick against itself and push it a layer forward. It stays in the layer it is in.
+   No message either way: the button stays lit, which is the state. */
+function syncFace(){
+  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
+  $("tFace").classList.toggle("on", b ? b.turn==="face" : faceNext);
+}
+$("tFace").onclick  =()=>{
+  const b = (selBrick && bricks.indexOf(selBrick)>=0) ? selBrick : null;
+  if(b){ b.turn = b.turn==="face" ? undefined : "face"; commit(); }
+  else faceNext = !faceNext;
+  syncFace(); draw();
+};
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
    is up, exactly as Studio does ("press 3D View again to edit"). */
 $("bView3D").onclick=()=>{
@@ -2082,7 +2115,20 @@ function buildFrameTop(){
    is. `base` counts layers in whichever of the two applies, exactly as `rowsOf` and `deepOf` already
    switch on the mode. */
 const thick = p => mode==="standing" ? (p.d||1) : (p.h||1);
-const foot  = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+rowsOf(b.p)});
+/* A PART TURNED ONTO A FACE IS EXACTLY WHAT RELIEF ALREADY DRAWS. Glen, 2026-08-17, on the eye and
+   then on the wing: "There is a flat plate that goes onto the side of the bird. This is the same
+   issue as the eye." Relief lays every part with its studs towards the viewer - that is what a relief
+   IS - so the plan glyph, the ring stud and the 3D matrix all exist already. Turning one part is
+   therefore not new drawing code; it is routing that part down the path relief uses while the rest of
+   the figure stays upright.
+   THE ROW GRID CANNOT HOLD IT, and that is by nature rather than by oversight: the standing plan
+   counts height in PLATES, and the dimension a turned part presents is measured in STUDS. A 1 x 1
+   round plate on its side is 8 mm tall - two and a half rows. It is drawn at its true size and sits
+   where it is put (Glen's call, 2026-08-17); only the CELLS it claims round up, because overlap has
+   to be counted in whole cells. */
+const faced   = b => mode==="standing" && b && b.turn==="face";
+const rowsFor = b => faced(b) ? Math.max(1, Math.ceil((b.p.d||1)*STUD/vUnit())) : rowsOf(b.p);
+const foot    = b => ({x0:b.col, x1:b.col+b.p.w, y0:b.row, y1:b.row+rowsFor(b)});
 /* PARKED: a brick put down on the cork OUTSIDE the plate. Glen, 2026-08-14: "It would be helpful to
    be able to place bricks on the corkboard outside the workspace... I could quickly try two or
    three bricks for fit." Studio settled what that means and this follows it - its canvas is "a
@@ -2160,6 +2206,7 @@ const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0) : "Layer "+(
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
   $("selpanel").style.display = on ? "" : "none";
+  syncFace();          /* the Turn button reads the selected brick, so it follows the selection */
   if(!on) return;
   $("selName").textContent = selBrick.p.name+" · "+layerTag(selBrick);
 }
@@ -2227,7 +2274,7 @@ cv.addEventListener("mousemove",e=>{
   if(panDrag || moveDrag) return;                          /* panning or moving, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip}); draw();
+  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined}); draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
@@ -2239,7 +2286,7 @@ cv.addEventListener("click",e=>{
     bricks.splice(i,1); draw(); commit(); return;
   }
   if(tool!=="place") return;
-  const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip});
+  const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined});
   bricks.push(nb);
   /* THE BRICK JUST PLACED BECOMES THE SELECTED ONE, which is what makes placing and moving read the
      same: after either, the block above names the brick and gives its layer, and the message line
@@ -2259,7 +2306,7 @@ function serializeState(){
     guide: guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0],q[1]]),
                                    holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))})),
     bricks: bricks.map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
-                             flip:b.flip, base:b.base })) };
+                             flip:b.flip, base:b.base, turn:b.turn })) };
 }
 function commit(){ if(histBusy) return; const s=JSON.stringify(serializeState());   // push a snapshot unless it matches the current top
   if(hist.length && hist[hist.length-1]===s) return;                                 // no change -> no push, and the redo chain survives
@@ -2473,6 +2520,8 @@ function designJSON(){ return (
     bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,d:b.p.d||1,h:b.p.h,shape:b.p.shape,
                            color:COLORS[b.colorIdx].code,col:b.col,row:b.row,base:b.base||0,
                            flip:b.flip,
+                           /* written only when the part is turned, so an upright design is unchanged */
+                           ...(b.turn?{turn:b.turn}:{}),
                            /* written only when it is FALSE, since all but a tile carry studs */
                            ...(b.p.studs===false?{studs:false}:{})}))},null,1)); }
 /* Save opens the menu; the menu items do the saving. Cloned from Mosaic's saveMenu, including the
@@ -3308,7 +3357,7 @@ cv.addEventListener("drop", e=>{
      the SELECTED row's color; a part carries its own. */
   const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
   const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
-  const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip});
+  const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip, turn:faceNext?"face":undefined});
   bricks.push(nb);
   selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
@@ -3406,7 +3455,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     }
     bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs},
       colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
-      base:b.base}));
+      base:b.base, turn:b.turn}));
     /* A SAVED DESIGN IS OPENED EXACTLY AS IT WAS SAVED. There was a migration here that turned an
        older slope to lie ramp-across, and it was wrong to write: turning a 1-column slope into a
        2-column one WIDENS it, so it swallowed the column beside it - in the crest that column held
