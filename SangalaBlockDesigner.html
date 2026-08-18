@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.064 -->
+<!-- SANGALA_VERSION: 2026-08-18.065 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -215,7 +215,8 @@
     <!-- Half Step puts a part on the MIDLINE, half a layer forward of the one it rests in - where a
          jumper plate's centred stud carries it. It cannot be seen on the plan, which is a profile,
          so the Selected line reads "Layer 0.5" and the 3D view shows it. -->
-    <button class="ltbtn" id="tHalf" title="Half Step: sit the part half a layer forward, on the midline between two layers - where a jumper plate's centre stud carries it">&#189;<small>Half Step</small></button>
+    <button class="ltbtn" id="tHalf" title="Half Step forward: sit the part half a layer towards you, on the midline between two layers - where a jumper plate's centre stud carries it">&#189;&#43;<small>Half Step</small></button>
+    <button class="ltbtn" id="tHalfB" title="Half Step back: the same half layer the other way">&#189;&#8722;<small>Half Step</small></button>
   </div>
 
   <!-- (3) WORKSPACE -->
@@ -560,7 +561,7 @@ let rotNext = 0;
    Held apart from `base` rather than added into it, because settle() recomputes base whenever a part
    is placed or moved and would wash a fraction straight out. The layer a part rests IN is still a
    whole number; this says it sits half a stud forward of it. */
-let halfNext = false;
+let halfNext = 0;
 let tool = "select", showGuide = true, showGrid = true;
 /* WHICH SIDE OF THE FIGURE YOU ARE STANDING ON. Glen, 2026-08-18: "we need a way to flip the crane
    so that I can add the blocks that go on the other side." A standing figure is deep, and the near
@@ -2126,14 +2127,21 @@ $("tRot").onclick   =()=>{
    STANDING ONLY. In relief the layers are plates coming towards the viewer and a half plate is not
    what a jumper plate does, so the button says so rather than doing something that looks like it
    worked. */
-function syncHalf(){ const b=selNow(); $("tHalf").classList.toggle("on", b ? !!b.half : halfNext); }
-$("tHalf").onclick  =()=>{
+/* Each button lights when the part is standing on ITS side of the layer, so the pair says where the
+   part sits rather than merely that it is off the layer. */
+function syncHalf(){ const b=selNow(), h = b ? halfOf(b) : halfNext;
+  $("tHalf").classList.toggle("on", h>0); $("tHalfB").classList.toggle("on", h<0); }
+function jogHalf(dir){
   if(mode!=="standing"){ say("Half Step belongs to a standing figure, where layers are studs deep."); return; }
   const b = selNow();
-  if(b){ b.half = !b.half; commit(); }
-  else halfNext = !halfNext;
+  /* Pressing the side it already sits on puts it back on the layer; a half step never compounds into
+     a whole one, because a whole one is a layer and the layer is what `base` is for. */
+  if(b){ b.half = (halfOf(b)===dir) ? 0 : dir; commit(); }
+  else halfNext = (halfNext===dir) ? 0 : dir;
   syncHalf(); draw();
-};
+}
+$("tHalf").onclick  =()=>jogHalf(0.5);
+$("tHalfB").onclick =()=>jogHalf(-0.5);
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
    is up, exactly as Studio does ("press 3D View again to edit"). */
 $("bView3D").onclick=()=>{
@@ -2337,7 +2345,12 @@ const rotOf   = b => b ? ((b.rot|0) & 3) : 0;
 /* WHERE A PART ACTUALLY SITS THROUGH THE FIGURE, layer and half step together. Everything that puts
    geometry in depth asks this - the 3D view, the LDraw export, the drawing order and the shadow - so
    a part on the midline cannot be shown in one place and exported in another. */
-const depthOf = b => (b.base||0) + (b.half ? 0.5 : 0);
+/* HALF A LAYER, EITHER WAY. Glen, 2026-08-18: "it would be helpful if jog could go either
+   direction." It was a plain on/off that only ever went forward, so a part that wanted to sit on the
+   midline BEHIND its layer could not say so. `true` is still read as forward, so anything saved
+   while it was a flag opens exactly as it was written. */
+const halfOf  = b => b && b.half===true ? 0.5 : ((b && +b.half) || 0);
+const depthOf = b => (b.base||0) + halfOf(b);
 const quarter = b => (rotOf(b) & 1) === 1;                /* an odd turn swaps the plan's two sides */
 const acrossOf= b => quarter(b) ? (b.p.d||1) : b.p.w;     /* studs across the screen */
 const deepOf2 = b => quarter(b) ? b.p.w : (b.p.d||1);     /* studs down it, before the row grid */
@@ -2761,8 +2774,9 @@ function designJSON(){ return (
                            ...(b.turn?{turn:b.turn}:{}),
                            /* likewise only when it has been given one - see rotOf */
                            ...(b.rot?{rot:b.rot}:{}),
-                           /* written only when it sits on a midline, which few parts do */
-                           ...(b.half?{half:true}:{}),
+                           /* written only when it sits on a midline, which few parts do, and
+                              signed since 2026-08-18 - forward or back */
+                           ...(halfOf(b)?{half:halfOf(b)}:{}),
                            /* written only when it is FALSE, since all but a tile carry studs */
                            ...(b.p.studs===false?{studs:false}:{}),
                            /* and only when the part has studs on a face, or fewer on top than
