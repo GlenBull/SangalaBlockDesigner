@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.072 -->
+<!-- SANGALA_VERSION: 2026-08-18.073 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2511,7 +2511,12 @@ const plates = n => n+(n===1?" plate":" plates");
    sign. `depthOf` stays what it has always been - where the part's back face sits, counted from that
    plane - and this is the name put on it. Nothing stored changes, so every design already saved opens
    reading exactly as it was built. */
-const layerName = d => d>=0 ? d+1 : d;
+/* Glen, 2026-08-18: "A piece sitting on the Midline should be Layer 1. By definition, then, a piece
+   straddling the midline should be Layer 0.5."
+   So the FRONT side counts up from 1 and takes the straddling course with it - a piece half a step
+   back from Layer 1 is Layer 0.5 - while the BACK side counts down from -1. Zero belongs to the
+   plane, and no course is ever called by it. */
+const layerName = d => d>=-0.5 ? d+1 : d;
 const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
   /* rounded: a turned part is 0.4 of a stud thick, and stacking those exactly is what puts a tail of
      binary fractions on a number a builder has to read */
