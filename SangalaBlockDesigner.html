@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.066 -->
+<!-- SANGALA_VERSION: 2026-08-18.067 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -215,8 +215,8 @@
     <!-- Half Step puts a part on the MIDLINE, half a layer forward of the one it rests in - where a
          jumper plate's centred stud carries it. It cannot be seen on the plan, which is a profile,
          so the Selected line reads "Layer 0.5" and the 3D view shows it. -->
-    <button class="ltbtn" id="tHalf" title="Half Step forward: sit the part half a layer towards you, on the midline between two layers - where a jumper plate's centre stud carries it">&#189;&#43;<small>Half Step</small></button>
-    <button class="ltbtn" id="tHalfB" title="Half Step back: the same half layer the other way">&#189;&#8722;<small>Half Step</small></button>
+    <button class="ltbtn" id="tHalf" title="Jog the part half a layer towards you. Press again to keep going - two presses move it a whole layer">&#189;&#43;<small>Half Step</small></button>
+    <button class="ltbtn" id="tHalfB" title="Jog the part half a layer away from you. Press again to keep going">&#189;&#8722;<small>Half Step</small></button>
   </div>
 
   <!-- (3) WORKSPACE -->
@@ -2127,16 +2127,30 @@ $("tRot").onclick   =()=>{
    STANDING ONLY. In relief the layers are plates coming towards the viewer and a half plate is not
    what a jumper plate does, so the button says so rather than doing something that looks like it
    worked. */
-/* Each button lights when the part is standing on ITS side of the layer, so the pair says where the
-   part sits rather than merely that it is off the layer. */
-function syncHalf(){ const b=selNow(), h = b ? halfOf(b) : halfNext;
-  $("tHalf").classList.toggle("on", h>0); $("tHalfB").classList.toggle("on", h<0); }
+/* IT IS A JOG, AND A JOG KEEPS GOING. Glen, 2026-08-18, with the eye floating beside the head: "i
+   have no way to ever get the eye in place. it will shift a half step one way or the other but can't
+   be shifted to rest on the brick beneath it."
+   It stopped at half a layer on my reasoning that a whole layer is what `base` is for and a half step
+   should not compound into one. That reasoning left a part stranded: a piece one whole layer out
+   could not be brought in at all, because nothing else in the program moves a placed part through
+   the figure - depth was only ever made by placing. So each press moves it half a layer and the
+   presses add up: two make a whole one, four make two, and it runs as far as the builder needs in
+   either direction. Where it lands is split back into the layer it is in and the half it stands off,
+   so `base` stays the whole number it has always been.
+   NO LIGHT WHEN A BRICK IS SELECTED. These are a jog rather than a state, and the state is already
+   said properly in the Selected line, which reads the layer and the half together - "Layer 1.5". The
+   light is kept for the arming, where there is nothing else to show it. */
+function syncHalf(){ const b=selNow();
+  $("tHalf").classList.toggle("on", !b && halfNext>0);
+  $("tHalfB").classList.toggle("on", !b && halfNext<0); }
 function jogHalf(dir){
   if(mode!=="standing"){ say("Half Step belongs to a standing figure, where layers are studs deep."); return; }
   const b = selNow();
-  /* Pressing the side it already sits on puts it back on the layer; a half step never compounds into
-     a whole one, because a whole one is a layer and the layer is what `base` is for. */
-  if(b){ b.half = (halfOf(b)===dir) ? 0 : dir; commit(); }
+  if(b){
+    const nd = depthOf(b) + dir, fl = Math.floor(nd);
+    b.base = fl; b.half = (nd - fl) ? 0.5 : 0;
+    commit(); drawSelection();
+  }
   else halfNext = (halfNext===dir) ? 0 : dir;
   syncHalf(); draw();
 }
