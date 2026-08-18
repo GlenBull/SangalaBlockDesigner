@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.075 -->
+<!-- SANGALA_VERSION: 2026-08-18.079 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -74,6 +74,28 @@
   .board{position:relative;border-radius:12px;padding:14px;border:6px solid #8a6a44;
     box-shadow:inset 0 0 24px rgba(60,40,20,.4)}
   #build{display:flex;flex-direction:column}   /* column, so the zoom control can pin to the bottom - Studio's #fab */
+  /* Positioned against the board's padding box, so it holds its place while the design pans and
+     zooms underneath it - a view that scrolls off the edge is worse than none. It opens at the top
+     RIGHT and stays there through a resize; once carried somewhere by its bar it holds that spot
+     instead, clamped to the board so it can never be put where it cannot be reached. */
+  /* RESIZED BY ITS OWN CORNER HANDLE, not by the CSS `resize:both` grip. The grip is the control
+     every other resizable box on the machine uses and it would have cost no drag arithmetic - but it
+     is painted in the bottom-right corner of the box, which here is covered by the canvas, and a
+     grip whose hit test loses to a child is a control that does nothing when you pull it. A handle of
+     our own sits above the canvas and can be verified. The canvas buffer is kept 1:1 with the box by
+     a ResizeObserver either way, which the renderer requires: it treats its buffer pixels as screen
+     pixels when it orbits and when it reads the depth buffer back. */
+  #minibox{position:absolute;right:8px;top:8px;z-index:3;border-radius:6px;overflow:hidden;
+    border:1px solid rgba(60,40,20,.5);box-shadow:0 2px 10px rgba(0,0,0,.35);background:#c3cedb}
+  #minigrip{position:absolute;right:0;bottom:0;width:16px;height:16px;z-index:4;cursor:nwse-resize;
+    background:linear-gradient(135deg,transparent 0 46%,rgba(60,40,20,.5) 46% 54%,transparent 54% 70%,
+                                      rgba(60,40,20,.5) 70% 78%,transparent 78%)}
+  /* A plain strip rather than a patterned grip: the board underneath is already a field of dots,
+     and a second dotted texture 15 px tall read as noise beside it. The move cursor and the tooltip
+     are what say it can be carried. */
+  #minibar{height:15px;cursor:move;background:linear-gradient(#eaf0f6,#ccd6e2);
+    border-bottom:1px solid rgba(60,40,20,.3)}
+  #pvmini{display:block;cursor:grab;width:100%;height:calc(100% - 15px)}   /* 15px = the title bar above it */
   body.dropping .board{border-color:#2d7bb8;box-shadow:0 0 0 4px rgba(45,123,184,.55),inset 0 0 24px rgba(60,40,20,.4)}
   /* Studio's canvas rule, verbatim. The HEIGHT COMES FROM THE VIEWPORT, not from the parent chain -
      which is the whole reason Studio's workspace is always fully on screen and never depends on how a
@@ -220,7 +242,15 @@
   </div>
 
   <!-- (3) WORKSPACE -->
-  <div class="board cork"><canvas id="cv"></canvas><canvas id="pv" style="display:none;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:grab"></canvas></div>
+  <!-- THE INSET 3D VIEW sits over the cork at the top-right corner of the board (Glen, 2026-08-18:
+       "i would rather have it in the upper right than the upper left"), and can be carried anywhere on
+       the board by its title bar. It is a canvas of its own, but NOT a renderer of its own - see
+       syncMini(). The BAR is what makes the two drags distinguishable: on the canvas a drag turns the
+       model, on the bar it moves the window, exactly as a window behaves. -->
+  <div class="board cork"><canvas id="cv"></canvas><div id="minibox"><div id="minibar"
+       title="Drag to move this window"></div><canvas id="pvmini"
+       title="The design in 3D. Drag to turn it, wheel to zoom. The selected brick is ringed in blue"></canvas><div
+       id="minigrip" title="Drag to resize this window"></div></div><canvas id="pv" style="display:none;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:grab"></canvas></div>
 
   <!-- (4) RIGHT CONTROL PANEL -->
   <div id="build" class="panel">
@@ -1161,6 +1191,7 @@ function draw(){
   ctx.restore();
   ctx.restore();
   bom();
+  syncMini();     /* the inset shows the same design from another angle, so it follows every redraw - cheaply, see the stamp */
 }
 
 /* ---------- left toolbar flyout: Studio's #partmenu pattern ---------- */
@@ -1373,6 +1404,14 @@ function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRe
 let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvPlate=false, pvZbuf=null, pvGuide=null;
 let pvGhost=null;   // loose holes, drawn as the shape they would remove
 let pvPart=null, pvIdBuf=null, pvNrm=null, pvEdge=null;   // which PIECE each triangle belongs to, the piece under each pixel, the surface normal there, and the line weight drawn over it - see the outline pass
+let pvSel=0;   // the piece the workspace has selected, 1-based as pvIdBuf counts them; 0 = none. See the selection pass in renderPreview
+/* THE INSET'S CAMERA, held apart from the 3D View's so turning one never turns the other - the full
+   view is where you study the model, the inset is a fixed reference you glance at. It opens at the
+   three-quarter angle a LEGO instruction is drawn at. */
+let miniYaw=-0.45, miniPitch=0.22, miniZoom=1, miniBase=1, miniCenter=[0,0,0], miniDrag=null, miniStamp="";
+let boxDrag=null;   /* carrying the whole window by its bar, which is a different gesture from turning the model inside it */
+const MINIBAR=15;   /* the title bar's height, and #pvmini's own calc() - the two must agree */
+let gripDrag=null;  /* pulling the corner, the third of the window's three gestures: turn, carry, resize */
 // One color per printed PIECE. Fused shapes share a color because they ARE one piece; separate pieces get
 // different ones. Without this there is no way to SEE whether a Fuse took: the preview draws every body into
 // one triangle soup, so two shapes that merely overlap look exactly like two that are fused - which is how a
@@ -1387,7 +1426,10 @@ function pvSetTris(b){   // parts are concatenated in order by buildTris, so a p
 }
 const A1_BED=180;   // Bambu Lab A1 Mini build plate: 180 x 180 mm
 const pvBed=(mn,mx)=>{ const cx=(mn[0]+mx[0])/2, cy=(mn[1]+mx[1])/2, h=A1_BED/2; return {x0:cx-h,y0:cy-h,x1:cx+h,y1:cy+h}; };   // bed centered under the footprint (slicer centers the part too)
-function pvBounds(){   // fit/center on the model PLUS the A1 Mini bed at z=0, so the whole bed and the Base gap stay framed
+/* Fit and centre the camera on the model. Called with no argument it sets the 3D View's own camera,
+   exactly as before; called with a canvas it MEASURES that one and returns the fit instead of assigning
+   it, which is how the inset gets its own framing without disturbing the full view's. */
+function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=0, so the whole bed and the Base gap stay framed
   let mn=[1e9,1e9,1e9], mx=[-1e9,-1e9,-1e9];
   // Frame the guides and the loose holes as well, or a design made only of those has nothing to fit to -
   // the camera lands on a degenerate box and they are projected off the canvas, which looks exactly like
@@ -1395,22 +1437,36 @@ function pvBounds(){   // fit/center on the model PLUS the A1 Mini bed at z=0, s
   const framed = pvTris.concat(pvGuide || [], pvGhost || []);
   framed.forEach(t=>t.forEach(p=>{ for(let i=0;i<3;i++){ if(p[i]<mn[i])mn[i]=p[i]; if(p[i]>mx[i])mx[i]=p[i]; } }));
   let bx0=mn[0],bx1=mx[0],by0=mn[1],by1=mx[1],bz0=mn[2],bz1=mx[2];
-  if(pvPlate){ const b=pvBed(mn,mx); bx0=Math.min(bx0,b.x0);bx1=Math.max(bx1,b.x1);by0=Math.min(by0,b.y0);by1=Math.max(by1,b.y1);bz0=Math.min(0,bz0); }   // include the whole bed when it's shown
-  pvCenter=[(bx0+bx1)/2,(by0+by1)/2,(bz0+bz1)/2];
-  const span=Math.max(bx1-bx0,by1-by0,bz1-bz0)||1; pvBase=Math.min($("pv").width,$("pv").height)*0.62/span;
+  if(pvPlate && !cvEl){ const b=pvBed(mn,mx); bx0=Math.min(bx0,b.x0);bx1=Math.max(bx1,b.x1);by0=Math.min(by0,b.y0);by1=Math.max(by1,b.y1);bz0=Math.min(0,bz0); }   // include the whole bed when it's shown
+  const el=cvEl||$("pv");
+  const center=[(bx0+bx1)/2,(by0+by1)/2,(bz0+bz1)/2];
+  const span=Math.max(bx1-bx0,by1-by0,bz1-bz0)||1, base=Math.min(el.width,el.height)*0.62/span;
+  if(!cvEl){ pvCenter=center; pvBase=base; }
+  return {center:center, base:base};
 }
 
-function renderPreview(){
-  const pv=$("pv"), g=pv.getContext("2d",{willReadFrequently:true}), W=pv.width, H=pv.height;   // the z-buffer reads back every frame - hint the browser so getImageData is fast
+/* ONE RENDERER, TWO VIEWS. It used to read the single camera off the module globals and draw into
+   the single #pv canvas, which is all it needed while the 3D View was the only place 3D appeared.
+   The inset is the same picture at another size and another angle, so what changes is the ARGUMENT,
+   not the code: pass {cv, yaw, pitch, zoom, base, center} and it draws there instead. Called with
+   nothing it behaves exactly as before, which is what the 3D View still does.
+   The scratch buffers below (pvZbuf, pvIdBuf, pvNrm, pvEdge) stay shared and re-size themselves when
+   the pixel count changes. That costs nothing here because the two views are never up at once - the
+   inset hides while the full view is open - so the buffers are allocated once per size, not per frame.
+   The BUILD PLATE is never drawn in the inset: it is 180 mm of bed around a figure a few studs wide,
+   and framing the whole of it would shrink the design to a speck. */
+function renderPreview(o){
+  const pv=(o&&o.cv)||$("pv"), g=pv.getContext("2d",{willReadFrequently:true}), W=pv.width, H=pv.height;   // the z-buffer reads back every frame - hint the browser so getImageData is fast
+  const plate = o ? false : pvPlate;
   const bg=g.createLinearGradient(0,0,0,H); bg.addColorStop(0,"#dfe7ef"); bg.addColorStop(1,"#c3cedb");
   g.fillStyle=bg; g.fillRect(0,0,W,H);
-  const ca=Math.cos(pvYaw),sa=Math.sin(pvYaw),ce=Math.cos(pvPitch),se=Math.sin(pvPitch);
-  const scale=pvBase*pvZoom, cx=W/2, cy=H/2, C=pvCenter;
+  const ca=Math.cos(o?o.yaw:pvYaw),sa=Math.sin(o?o.yaw:pvYaw),ce=Math.cos(o?o.pitch:pvPitch),se=Math.sin(o?o.pitch:pvPitch);
+  const scale=(o?o.base*o.zoom:pvBase*pvZoom), cx=W/2, cy=H/2, C=o?o.center:pvCenter;
   const proj=p=>{ const x=p[0]-C[0], y=p[1]-C[1], z=p[2]-C[2];
     const rx=x*ca-y*sa, ry=x*sa+y*ca;                 // yaw about Z (up)
     const pz=ry*se + z*ce;                            // pitch about X: pz = vertical on screen
     return [cx+rx*scale, cy-pz*scale, ry*ce - z*se]; };   // 3rd = depth into screen (bigger = farther)
-  if(pvPlate){   // ---- build plate (A1 Mini bed) at z=0: gridded plane so Base reads as the gap object-to-bed; toggle off to orbit under the object ----
+  if(plate){   // ---- build plate (A1 Mini bed) at z=0: gridded plane so Base reads as the gap object-to-bed; toggle off to orbit under the object ----
   let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
   for(const t of pvTris) for(const p of t){ if(p[0]<mnx)mnx=p[0]; if(p[1]<mny)mny=p[1]; if(p[0]>mxx)mxx=p[0]; if(p[1]>mxy)mxy=p[1]; }
   const bed=pvBed([mnx,mny],[mxx,mxy]), gx0=bed.x0,gy0=bed.y0,gx1=bed.x1,gy1=bed.y1, P0=(x,y)=>proj([x,y,0]);
@@ -1625,8 +1681,32 @@ function renderPreview(){
     const f = m>=2 ? 0.35 : 0.55;                            // silhouette heavy and dark, interior lines light
     const p=i<<2; px[p]=(px[p]*f)|0; px[p+1]=(px[p+1]*f)|0; px[p+2]=(px[p+2]*f)|0;
   }
+  /* THE SELECTED PART, RINGED IN THE WORKSPACE'S OWN BLUE. This is the whole point of the inset:
+     the elevation says which brick is selected and the inset says WHERE IT IS, front to back. Using
+     the same #1a5fb4 the plan outlines a selection with is what ties the two pictures together - a
+     second highlight colour would read as a second kind of thing.
+     A ring rather than a tint, because a tint would take away the brick's own colour, which is how
+     you recognise the part in the first place. Drawn one pixel INWARD as well, or at inset size a
+     single-pixel ring disappears against the outline pass that has just darkened the same edges.
+     A part hidden behind others has no pixels and so takes no ring - turn the inset to find it. */
+  if(pvSel){
+    const ring=new Uint8Array(W*H);
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      const i=y*W+x; if(pvIdBuf[i]!==pvSel) continue;
+      if((x+1>=W||pvIdBuf[i+1]!==pvSel)||(x<1||pvIdBuf[i-1]!==pvSel)
+       ||(y+1>=H||pvIdBuf[i+W]!==pvSel)||(y<1||pvIdBuf[i-W]!==pvSel)) ring[i]=1;
+    }
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){        // widen inward only, so the part never grows as it turns
+      const i=y*W+x; if(ring[i]!==1) continue;
+      if(x+1<W && pvIdBuf[i+1]===pvSel && !ring[i+1]) ring[i+1]=2;
+      if(x>0   && pvIdBuf[i-1]===pvSel && !ring[i-1]) ring[i-1]=2;
+      if(y+1<H && pvIdBuf[i+W]===pvSel && !ring[i+W]) ring[i+W]=2;
+      if(y>0   && pvIdBuf[i-W]===pvSel && !ring[i-W]) ring[i-W]=2;
+    }
+    for(let i=0;i<W*H;i++){ if(!ring[i]) continue; const p=i<<2; px[p]=26; px[p+1]=95; px[p+2]=180; px[p+3]=255; }
+  }
   g.putImageData(img,0,0);
-  if(pvPlate){
+  if(plate){
     // The bed is drawn UNDER the model, so a design wider than 180 mm hides it completely and the plate
     // looks as though it never came on. Re-draw its edge OVER the model, dashed where the model covers it:
     // the outline is then always visible, and where it crosses the design it says plainly that the design
@@ -1656,6 +1736,149 @@ function renderPreview(){
   pv.addEventListener("wheel",e=>{ e.preventDefault(); pvZoom=Math.max(0.25,Math.min(6,pvZoom*Math.exp(-e.deltaY*0.0012))); renderPreview(); },{passive:false});
   window.addEventListener("resize",()=>{ draw(); if(pvOn){ sizePvToCv(); pvBounds(); renderPreview(); } });   // re-fit the board canvas; keep the overlay glued to it
 })();
+
+/* ---------- THE INSET 3D VIEW ----------------------------------------------------------------
+   Glen, 2026-08-18: "users can't tell what layer the LEGO bricks are being placed in... a small
+   inset window in the upper left-hand corner of the corkboard... then when a user selected a brick
+   it would be apparent where the brick had been placed, front to back."
+   The workspace is a FRONT ELEVATION - across the plate and up it - so depth appears in it only as
+   one brick covering another, and the layer a part sits in has to be read off a number in the panel.
+   This is that missing axis, shown rather than named.
+   IT IS NOT A SECOND RENDERER. renderPreview() is handed another canvas and another camera, and both
+   views draw the ONE triangle list bricksToTris() builds, so the inset cannot disagree with the full
+   3D View about the design. It orbits because the renderer's mouse handling comes with it. */
+/* THE OPENING SIZE IS OURS, EVERY SIZE AFTER IT IS THE USER'S. This used to recompute a quarter of
+   the board's width on every redraw, which was right while the window could not be resized and is
+   wrong now: it would have snatched back any size the grip was dragged to. So the quarter-width rule
+   fires once, to open the window at a usable size, and from then on the only thing that touches its
+   size is clampMini, and only to keep it from outgrowing the board. */
+function sizeMini(){
+  const mb=$("minibox"), mn=$("pvmini");
+  if(!mb.style.width){
+    const w=Math.max(150,Math.min(300,Math.round(mb.parentElement.getBoundingClientRect().width*0.26)));
+    mb.style.width=w+"px"; mb.style.height=(Math.round(w*0.82)+MINIBAR)+"px";
+  }
+  clampMini();      /* a window carried near an edge must come back inside when the board narrows */
+  return sizeMiniBuffer();
+}
+/* The CSS box drives the buffer, never the other way round - so the canvas is measured, not computed,
+   and the two cannot drift however the box was sized. Setting width or height clears the bitmap, so
+   the caller re-renders when this returns true. */
+function sizeMiniBuffer(){
+  const mn=$("pvmini"), w=Math.max(1,mn.clientWidth), h=Math.max(1,mn.clientHeight);
+  if(mn.width===w && mn.height===h) return false;
+  mn.width=w; mn.height=h; return true;
+}
+/* KEEP IT ON THE BOARD. Only a window that has been MOVED is clamped: until then it is held in the
+   top-right corner by CSS `right`, which follows a resize on its own and needs no arithmetic.
+   offsetLeft/offsetTop are measured from the board's padding box, which is the box the window is
+   positioned in, so clientWidth/clientHeight are the right limits to test against. */
+function clampMini(){
+  const mb=$("minibox"), bd=mb.offsetParent; if(!bd || !bd.clientWidth) return;
+  /* SIZE FIRST: a window dragged out to fill the board, or a board narrowed under a window already
+     wide, must come back inside before its position can be judged against it. */
+  const maxW=bd.clientWidth-16, maxH=bd.clientHeight-16;
+  if(mb.offsetWidth >maxW && maxW>=120) mb.style.width =maxW+"px";
+  if(mb.offsetHeight>maxH && maxH>=114) mb.style.height=maxH+"px";
+  if(mb.style.left==="") return;                 /* still held by its right edge, which follows a resize on its own */
+  const l=Math.max(0,Math.min(bd.clientWidth -mb.offsetWidth,  parseFloat(mb.style.left)||0));
+  const t=Math.max(0,Math.min(bd.clientHeight-mb.offsetHeight, parseFloat(mb.style.top) ||0));
+  mb.style.left=l+"px"; mb.style.top=t+"px";
+}
+function renderMini(){
+  renderPreview({cv:$("pvmini"), yaw:miniYaw, pitch:miniPitch, zoom:miniZoom, base:miniBase, center:miniCenter});
+}
+/* THE STAMP IS WHAT KEEPS THIS CHEAP, and it is the reason the inset can live inside draw(). draw()
+   runs on every mouse move - the ghost brick follows the pointer - and rebuilding the triangles there
+   would rasterize the whole figure because a pointer moved three pixels. So the design is reduced to
+   a short string and the inset redraws only when that string changes: a part placed, moved, turned,
+   coloured or deleted, the mode, the side you are standing on, or which brick is selected. */
+function syncMini(){
+  const mb=$("minibox");
+  if(view3D){ mb.style.display="none"; return; }   /* the full view is up; a picture of it in its own corner says nothing */
+  const wasHidden = mb.style.display==="none";
+  mb.style.display="";
+  const live=bricks.filter(b=>!parked(b));         /* a candidate parked on the cork is not in the model, so not in 3D either */
+  const sel=selBrick ? live.indexOf(selBrick)+1 : 0;   /* pvSetTris numbers the pieces in this same order, 1-based */
+  const geo=mode+"|"+viewBack+"|"+frameScale+"|"+pageKind+"|"+live.map(b=>
+      b.p.id+","+b.col+","+b.row+","+b.base+","+(b.half||0)+","+(b.turn?1:0)+","+(b.rot||0)+","+(b.flip?1:0)+","+b.colorIdx).join(";");
+  const resized=sizeMini();
+  if(geo===miniStamp && sel===pvSel && !resized && !wasHidden) return;
+  /* THE SELECTION IS HELD APART FROM THE GEOMETRY, because choosing a different brick moves nothing:
+     it changes which piece wears the ring and nothing else. Rebuilding the figure's 25,000 triangles
+     to answer a click would be the most expensive thing in the application, and the commonest. */
+  if(geo!==miniStamp || resized || wasHidden){
+    miniStamp=geo;
+    pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()}));
+    const fit=pvBounds($("pvmini")); miniCenter=fit.center; miniBase=fit.base;   /* re-framed as the figure grows; the angle you left it at is kept */
+  }
+  pvSel=sel;
+  renderMini();
+}
+(function(){ const mn=$("pvmini");
+  /* Its own handlers, on the canvas itself: the workspace's zoom and pan listeners are bound to #cv,
+     so an event that lands on the inset never reaches them and the design cannot be panned by
+     accident while the figure is being turned. */
+  mn.addEventListener("mousedown",e=>{ miniDrag=[e.clientX,e.clientY,miniYaw,miniPitch]; mn.style.cursor="grabbing"; e.preventDefault(); e.stopPropagation(); });
+  window.addEventListener("mousemove",e=>{ if(!miniDrag) return;
+    miniYaw=miniDrag[2]+(e.clientX-miniDrag[0])*0.01;
+    miniPitch=Math.max(-1.45,Math.min(1.45,miniDrag[3]+(e.clientY-miniDrag[1])*0.01)); renderMini(); });
+  window.addEventListener("mouseup",()=>{ if(miniDrag){ miniDrag=null; mn.style.cursor="grab"; } });
+  mn.addEventListener("wheel",e=>{ e.preventDefault(); e.stopPropagation();
+    miniZoom=Math.max(0.25,Math.min(6,miniZoom*Math.exp(-e.deltaY*0.0012))); renderMini(); },{passive:false});
+  /* THE BAR CARRIES THE WINDOW, and it is a separate strip precisely so the two drags cannot be
+     confused: a drag on the canvas turns the model, a drag on the bar moves the window. A modifier
+     key would have done the same job and told nobody it was there.
+     The first move switches the window from being held by its right edge to being held by its left,
+     so that from then on it stays where it was put rather than following the edge on a resize.
+     WHERE IT SITS IS NOT PART OF THE DESIGN, so it is not saved: a .block file records the model,
+     and a window position travelling in one would move another builder's inset on open. */
+  const mb=$("minibox");
+  $("minibar").addEventListener("mousedown",e=>{
+    const bd=mb.offsetParent, r=mb.getBoundingClientRect(), br=bd.getBoundingClientRect();
+    boxDrag=[e.clientX-r.left, e.clientY-r.top, br.left+bd.clientLeft, br.top+bd.clientTop];
+    e.preventDefault(); e.stopPropagation();
+  });
+  window.addEventListener("mousemove",e=>{ if(!boxDrag) return;
+    mb.style.right="auto";
+    mb.style.left=(e.clientX-boxDrag[0]-boxDrag[2])+"px";
+    mb.style.top =(e.clientY-boxDrag[1]-boxDrag[3])+"px";
+    clampMini();
+  });
+  window.addEventListener("mouseup",()=>{ boxDrag=null; });
+  /* THE PICTURE FOLLOWS THE BOX. Dragging the grip changes the box and nothing else; this is what
+     re-cuts the buffer to match and re-frames the model in it, so the design fills the new size
+     instead of sitting small in a corner of it. The angle and the zoom you left it at are kept.
+     No loop: the canvas is sized by CSS out of the box, so writing its buffer cannot resize the box. */
+  /* THE CORNER PULLS THE BOX, and nothing else: the observer above turns a changed box into a
+     changed picture, so this stays plain arithmetic on two style properties. Held to a floor of
+     120 x 114 - below that the figure is a smudge and the title bar is most of the window - and to
+     the board above, by the same clamp that keeps it from being carried off the edge. */
+  $("minigrip").addEventListener("mousedown",e=>{
+    gripDrag=[e.clientX,e.clientY,mb.offsetWidth,mb.offsetHeight];
+    e.preventDefault(); e.stopPropagation();
+  });
+  window.addEventListener("mousemove",e=>{ if(!gripDrag) return;
+    mb.style.width =Math.max(120,gripDrag[2]+(e.clientX-gripDrag[0]))+"px";
+    mb.style.height=Math.max(114,gripDrag[3]+(e.clientY-gripDrag[1]))+"px";
+    clampMini(); miniResized();      /* redrawn as the corner moves, not once the drag lets go */
+  });
+  window.addEventListener("mouseup",()=>{ gripDrag=null; });
+  /* The grip calls miniResized() directly so the picture follows the corner while it is being
+     pulled. The observer is what catches every OTHER way the box can change - the board resizing
+     under a window that then has to be clamped back inside it, or the panel beside it opening. */
+  if(window.ResizeObserver) new ResizeObserver(()=>{ clampMini(); miniResized(); }).observe(mb);
+})();
+/* A CHANGED BOX IS A CHANGED PICTURE, and this is the one place that turns one into the other:
+   re-cut the buffer to the box, then re-frame the model in it so the design FILLS the new size
+   rather than sitting small in a corner of it. The angle and the zoom you left it at are kept.
+   No loop is possible: the canvas is sized by CSS out of the box, so writing its buffer cannot
+   resize the box that decided it. */
+function miniResized(){
+  if(!pvTris || !sizeMiniBuffer()) return;
+  const fit=pvBounds($("pvmini")); miniCenter=fit.center; miniBase=fit.base;
+  renderMini();
+}
 
 /* A BRICK IS A BOX, in millimetres with Z up, which is the scene Studio's renderer expects.
    Across the plate is X, up the plate is Z, and DEPTH - the direction a layer stands proud -
@@ -1820,6 +2043,7 @@ function ldrLoad(id){
 }
 function ldrArrived(){
   if(view3D){ pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); renderPreview(); }
+  else { miniStamp=""; syncMini(); }   /* the real part has replaced the stand-in box: the inset is drawn from the same triangles */
 }
 
 /* WHICH WAY A PART MUST TURN to lie the way the page has placed it. Two rules, and the order
