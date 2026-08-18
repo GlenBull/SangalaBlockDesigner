@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.068 -->
+<!-- SANGALA_VERSION: 2026-08-18.070 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2344,8 +2344,17 @@ function buildFrameTop(){
    is. `base` counts layers in whichever of the two applies, exactly as `rowsOf` and `deepOf` already
    switch on the mode. */
 const thick = p => mode==="standing" ? (p.d||1) : (p.h||1);
-/* the same measure for a brick that may have been turned - the layer arithmetic asks this one */
-const thickB = b => mode==="standing" ? deepOf2(b) : (b.p.h||1);
+/* HOW MUCH OF THE FIGURE'S DEPTH A BRICK ACTUALLY TAKES UP, which is what the next part must clear.
+   A PART LAID ON ITS FACE IS AS THICK AS IT IS TALL, not as deep as its footprint. The wing is 4
+   studs across its plan and 3 PLATES through - 1.2 studs - and this reported 4, so anything settling
+   against it was pushed more than three times too far out and the wing claimed layers it was nowhere
+   near (Glen, 2026-08-18: "they are not shown in the correct layer in the 3D view").
+   The fraction is honest rather than tidy: a plate lying on its side is 0.4 of a stud and the layer
+   grid is studs, exactly as the ROW grid cannot hold a turned part either. `base` has taken
+   fractions since the half step, so the arithmetic already carries it. */
+const thickB = b => mode!=="standing" ? (b.p.h||1)
+               : faced(b) ? (b.p.h||1)*PLATE/STUD
+               : deepOf2(b);
 /* A PART TURNED ONTO A FACE IS EXACTLY WHAT RELIEF ALREADY DRAWS. Glen, 2026-08-17, on the eye and
    then on the wing: "There is a flat plate that goes onto the side of the bird. This is the same
    issue as the eye." Relief lays every part with its studs towards the viewer - that is what a relief
@@ -2421,7 +2430,7 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
     return back;
   }
   bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thickB(b)); });
-  return base;
+  return Math.round(base*1000)/1000;
 }
 /* A BRICK COMES OUT FROM ANYWHERE, not only off the top (Glen, 2026-08-16: "I would like to be
    able to drag bricks in and out of the design no matter where they are located"). What stood here
@@ -2485,7 +2494,10 @@ const plates = n => n+(n===1?" plate":" plates");
    screen, so a part moved half a layer back does not shift by a pixel on the plan - it moves in the
    3D view alone. "Layer 0.5" is Glen's own name for it (2026-08-17), and it keeps every number in
    every design already saved exactly as it was. */
-const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0) : "Layer "+depthOf(b);
+const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
+  /* rounded: a turned part is 0.4 of a stud thick, and stacking those exactly is what puts a tail of
+     binary fractions on a number a builder has to read */
+  : "Layer "+(Math.round(depthOf(b)*100)/100);
 /* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
    that knows the selection is still real - a brick can leave the design by being erased, undone or
    opened away, and the block must not go on describing it. */
