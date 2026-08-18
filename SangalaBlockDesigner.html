@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.070 -->
+<!-- SANGALA_VERSION: 2026-08-18.071 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2426,10 +2426,16 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
      added from the back simply sits behind the ones already placed. */
   if(viewBack){
     let back=0;
-    bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) back=Math.min(back, b.base - thickB(nb)); });
+    bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) back=Math.min(back, depthOf(b) - thickB(nb)); });
     return back;
   }
-  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thickB(b)); });
+  /* CLEAR OF WHERE THE BRICK ACTUALLY IS, half step and all. This read `b.base`, which is the layer
+     a part is counted in and NOT where it sits: a part half-stepped onto the midline is half a stud
+     further out than its layer says, so anything settled against it landed half a stud INSIDE it.
+     The whole of Glen's crane head is half-stepped onto the midline, so every piece he added to it
+     had to be jogged out by hand afterwards, which is how the eye came to be adrift behind the head
+     (2026-08-18). depthOf is where it is; base is only what it is called. */
+  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, depthOf(b)+thickB(b)); });
   return Math.round(base*1000)/1000;
 }
 /* A BRICK COMES OUT FROM ANYWHERE, not only off the top (Glen, 2026-08-16: "I would like to be
