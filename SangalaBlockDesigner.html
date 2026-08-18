@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-17.062 -->
+<!-- SANGALA_VERSION: 2026-08-18.063 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -211,7 +211,7 @@
     <!-- Rotate spins a TURNED part a quarter turn counterclockwise, so a wedge laid on the side of
          the figure can point where the wing needs it to. It does nothing to an upright part: a plan
          is the only view a quarter turn means anything in. -->
-    <button class="ltbtn" id="tRot" title="Rotate: turn the part a quarter turn counterclockwise. Works on a part that has been laid on its face with Turn">&#8634;<small>Rotate</small></button>
+    <button class="ltbtn" id="tRot" title="Rotate: turn the part a quarter turn counterclockwise, about the face it is resting on">&#8634;<small>Rotate</small></button>
     <!-- Half Step puts a part on the MIDLINE, half a layer forward of the one it rests in - where a
          jumper plate's centred stud carries it. It cannot be seen on the plan, which is a profile,
          so the Selected line reads "Layer 0.5" and the 3D view shows it. -->
@@ -803,7 +803,7 @@ function spin(pts, pw, pd, r){
 }
 function shape(p,col,row,fl,face,rot){
   const oL=overLeft(p,fl), oR=overRight(p,fl);
-  const r=face ? ((rot|0)&3) : 0;                  /* only a plan can be turned - see rotOf */
+  const r=(rot|0)&3;                              /* about the face it rests on - see rotOf */
   const x=mx((col-oL)*STUD), y=mx(row*vUnit());
   /* Turned onto a face, the part presents its PLAN: the dimension across the screen is still its
      width, but the one up the screen is its DEPTH in studs, not its height in plates - and a
@@ -1930,7 +1930,7 @@ function bricksToTris(){
        which is what made the figure one course deep. At base 0 this is still exactly 0, so every
        design saved before today opens unchanged. */
     const y1 = -depthOf(b) * (mode==="standing" ? STUD : PLATE);
-    const y0 = y1 - (fc ? (p.h||1)*PLATE : deepOf(p));
+    const y0 = y1 - (fc ? (p.h||1)*PLATE : (mode==="standing" ? deepOf2(b)*STUD : (p.h||1)*PLATE));
     if(mode==="standing"){
       /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
          the corner at its fallen end, along the LENGTH, which is what you see from the side.
@@ -2092,16 +2092,13 @@ $("tFace").onclick  =()=>{
 };
 /* ROTATE FOLLOWS TURN AND FLIP: it acts on the brick you have selected so the result is on the plan
    at once, and with nothing selected it arms the next placement - see the note on Flip above.
-   IT NEEDS A TURNED PART. Rotating an upright brick in the profile view would stand it on its end,
-   which is a different part rather than a turn of this one, so the button says so instead of doing
-   something surprising. The light counts: it is out at square and lit at any quarter turn. */
+   IT WORKS ON ANY PART: about the vertical for one standing upright, about the viewing axis for one
+   laid on its face. The light is out at square and lit at any quarter turn. */
 function syncRot(){ const b=selNow(); $("tRot").classList.toggle("on", b ? !!((b.rot|0)&3) : !!rotNext); }
 $("tRot").onclick   =()=>{
   const b = selNow();
-  if(b){
-    if(!faced(b)){ say("Rotate turns a part that is lying on its face. Press Turn first."); return; }
-    b.rot = (((b.rot|0)+1) & 3); commit();
-  } else rotNext = (rotNext+1) & 3;
+  if(b){ b.rot = (((b.rot|0)+1) & 3); commit(); }
+  else rotNext = (rotNext+1) & 3;
   syncRot(); draw();
 };
 /* HALF STEP follows the same rule as the three above: it acts on the selected brick, and with
@@ -2281,6 +2278,8 @@ function buildFrameTop(){
    is. `base` counts layers in whichever of the two applies, exactly as `rowsOf` and `deepOf` already
    switch on the mode. */
 const thick = p => mode==="standing" ? (p.d||1) : (p.h||1);
+/* the same measure for a brick that may have been turned - the layer arithmetic asks this one */
+const thickB = b => mode==="standing" ? deepOf2(b) : (b.p.h||1);
 /* A PART TURNED ONTO A FACE IS EXACTLY WHAT RELIEF ALREADY DRAWS. Glen, 2026-08-17, on the eye and
    then on the wing: "There is a flat plate that goes onto the side of the bird. This is the same
    issue as the eye." Relief lays every part with its studs towards the viewer - that is what a relief
@@ -2297,7 +2296,15 @@ const faced   = b => mode==="standing" && b && b.turn==="face";
    asks it - the workspace, the cells it claims, the 3D view and the LDraw export alike. A rotation
    known to the drawing and not to the placement is a piece drawn one way and put down another,
    which is the fault the overhang rules were written to prevent. */
-const rotOf   = b => faced(b) ? ((b.rot|0) & 3) : 0;      /* only a turned part has a plan to spin */
+/* A QUARTER TURN IS ABOUT THE FACE THE PART RESTS ON, and that holds however it is lying. Standing
+   upright, that face is its underside and the turn is a yaw about the vertical - a 1 x 2 plate laid
+   the other way about, which is how a jumper plate gets its centred stud across the figure instead
+   of along it (Glen, 2026-08-18: "I need to be able to turn the white piece so that it can be placed
+   on the gray piece"). Laid on its face by Turn, the same rule gives the spin in the screen plane.
+   This was gated to turned parts only, on the reasoning that spinning an upright brick would stand
+   it on its end. It would not: standing it on its end is a rotation about a HORIZONTAL axis, which
+   nothing here offers. A yaw only swaps which way the footprint runs. */
+const rotOf   = b => b ? ((b.rot|0) & 3) : 0;
 /* WHERE A PART ACTUALLY SITS THROUGH THE FIGURE, layer and half step together. Everything that puts
    geometry in depth asks this - the 3D view, the LDraw export, the drawing order and the shadow - so
    a part on the midline cannot be shown in one place and exported in another. */
@@ -2332,7 +2339,7 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
   if(mode!=="standing")
     for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++)
       base=Math.max(base, frameTop.get(cellKey(c,r))||0);
-  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thick(b.p)); });
+  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thickB(b)); });
   return base;
 }
 /* A BRICK COMES OUT FROM ANYWHERE, not only off the top (Glen, 2026-08-16: "I would like to be
@@ -2828,15 +2835,16 @@ function toLdr(){
        the centre of a part whose back face sits at -base*STUD and which is d studs deep is
        -(base + d/2). Back-aligning like this is what the 3D view does (`y1 = -base*STUD` is the back
        face); centring on the layer line instead would only agree while every part is one stud deep. */
-    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD;          y=-(depthOf(b) + h)*LDU_PLATE; }
-    else               { bz=-(depthOf(b) + d/2)*LDU_STUD;   y=-(plateRows - b.row)*LDU_PLATE; }
+    const dTurn = deepOf2(b);                 /* how deep it runs once the quarter turn is applied */
+    if(mode==="relief"){ bz=(b.row + d/2)*LDU_STUD;              y=-(depthOf(b) + h)*LDU_PLATE; }
+    else               { bz=-(depthOf(b) + dTurn/2)*LDU_STUD;   y=-(plateRows - b.row)*LDU_PLATE; }
     /* A flipped part is TURNED, not mirrored: mirroring a slope makes a part that does not exist.
        Half a turn about the vertical axis, which in LDraw's downward Y is (-1,0,0 / 0,1,0 / 0,0,-1).
        THE SAME TURN THE 3D VIEW APPLIES GOES IN HERE, from the one function that decides it - the
        snapshot is the same design seen by another renderer, and a part turned in one and not the
        other is the defect Glen found in the crest. A quarter turn is (0,0,1 / 0,1,0 / -1,0,0). */
     const box = ldrMesh[p.id] && ldrMesh[p.id].box;
-    const yaw = (partYaw(p, box) + (b.flip ? 180 : 0)) * Math.PI/180;
+    const yaw = (partYaw(p, box) + (b.flip ? 180 : 0) + 90*rotOf(b)) * Math.PI/180;
     const c = Math.round(Math.cos(yaw)), s = Math.round(Math.sin(yaw));
     /* A PART'S ORIGIN IS NOT THE MIDDLE OF ITS FOOTPRINT, and for every 45-degree slope it is half
        a stud away from it: 3040, 3665, 3039 and 3660 all measure z from -30 to +10, because LDraw
