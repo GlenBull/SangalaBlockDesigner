@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.063 -->
+<!-- SANGALA_VERSION: 2026-08-18.064 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -304,6 +304,7 @@
         <span style="font-weight:700">Show</span>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the frame outline you are building against"><input type="checkbox" id="ckFrame" checked style="width:auto;margin:0"> Frame</label>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the stud grid"><input type="checkbox" id="ckGrid" checked style="width:auto;margin:0"> Grid</label>
+        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Turn the figure around and work on its far side. Nothing in the design is changed - this is which side you are standing on"><input type="checkbox" id="ckBack" style="width:auto;margin:0"> Other Side</label>
       </div>
     </div>
 
@@ -561,6 +562,17 @@ let rotNext = 0;
    whole number; this says it sits half a stud forward of it. */
 let halfNext = false;
 let tool = "select", showGuide = true, showGrid = true;
+/* WHICH SIDE OF THE FIGURE YOU ARE STANDING ON. Glen, 2026-08-18: "we need a way to flip the crane
+   so that I can add the blocks that go on the other side." A standing figure is deep, and the near
+   side hides the far one - so the wings, and anything else that attaches to a side, could only ever
+   be built on the face you happen to be looking at.
+   IT CHANGES NOTHING IN THE DESIGN. Not one brick's column, layer or facing is rewritten; this is
+   where the viewer is standing, and it can be turned on and off all day without touching the model.
+   Turning the crane round rather than editing it is also what keeps a slope's facing safe: mirroring
+   a design would have to decide which way every sloped part now points, and that is exactly the kind
+   of decision that has cost this project days. */
+let viewBack = false;
+const COLS = () => Math.round(modelW/STUD);        /* the plate's width in studs, the mirror's axis */
 /* TWO WAYS TO BUILD, and the frame serves both - it is the same silhouette either way.
    STANDING is the figure in the photographs: bricks stacked in courses, studs up, gravity from
    the ground, and the model a stud or two thick. The screen's vertical axis is therefore PLATES,
@@ -1104,6 +1116,10 @@ function draw(){
      grid belongs inside it because the grid says where a stud can LAND, and a stud lands where the
      design's own lattice is. This is placePoly applied once to the whole picture. */
   ctx.save(); ctx.translate(mx(placeX), mx(placeY));
+  /* SEEN FROM THE OTHER SIDE, the whole design is mirrored across the plate - the lattice, the frame
+     and every brick together, so nothing can drift out of step with anything else. One transform,
+     laid over the placement that everything already shares. */
+  if(viewBack){ ctx.translate(mx(COLS()*STUD), 0); ctx.scale(-1,1); }
   if(showGrid) drawGrid();
   if(showGuide) drawGuide();
   /* BACK TO FRONT, so a brick covers the one it rests on - AND WHAT "BACK" MEANS DEPENDS ON THE
@@ -1119,9 +1135,13 @@ function draw(){
      bricks in the same row fell back to the order they were placed in. Anything in front covers
      anything behind it, whatever their heights; within one layer the higher brick still covers the
      studs of the one it rests on. */
+  /* Back to front FROM WHERE THE VIEWER IS. Standing on the other side reverses which layer is
+     furthest away, so the sort reverses with it - otherwise the far side would be drawn last and
+     cover the very bricks it was turned round to reveal. */
+  const away = viewBack ? -1 : 1;
   const order=bricks.slice().sort(mode==="standing"
-    ? (a,b)=>(depthOf(a)-depthOf(b)) || ((b.row||0)-(a.row||0))
-    : (a,b)=>depthOf(a)-depthOf(b));
+    ? (a,b)=>away*(depthOf(a)-depthOf(b)) || ((b.row||0)-(a.row||0))
+    : (a,b)=>away*(depthOf(a)-depthOf(b)));
   order.forEach(b=>drawBrick(b,false));
   /* THE SELECTED BRICK IS OUTLINED, because a selection you cannot see is not a selection - and
      Delete would then be a keystroke that takes off a part the builder cannot identify. Drawn after
@@ -2155,6 +2175,9 @@ $("pagesize").onchange=e=>{ setPageSize(e.target.value);
   offPageWarning(); commit(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
+$("ckBack").onchange =e=>{viewBack=e.target.checked; hover=null; draw();
+  say(viewBack ? "Looking at the far side of the figure. Bricks you place now stack towards you, which is away from the front."
+               : "");};
 
 /* ---------- magnify: wheel zoom (toward cursor), buttons, pan (middle-mouse / Space+drag) ----------
    Every line below is Studio's, with only the names of the plate's own measurements changed. Same
@@ -2209,8 +2232,14 @@ function cell(e){
   const p=canvasPt(e);
   /* ...and then the design's own placement, the same offset draw() lays the lattice down at. Without
      unwinding it here the brick would be drawn one place and land in another. */
-  const x=(p[0]-view.panX)/PX - MX - placeX, y=(p[1]-view.panY)/PX - MY - placeY;
-  return {col:Math.floor(x/STUD), row:Math.floor(y/vUnit())};
+  let x=(p[0]-view.panX)/PX - MX - placeX;
+  const y=(p[1]-view.panY)/PX - MY - placeY;
+  /* ...and through the mirror, when the viewer is on the far side. The cell under the pointer is the
+     mirrored one; a part placed on it still reaches to the RIGHT on screen, which is leftwards in the
+     design, so the anchor moves by the part's own width. Without that a wide brick landed with its
+     far end under the pointer and its body somewhere else entirely. */
+  if(viewBack) x = COLS()*STUD - x;
+  return {col:Math.floor(x/STUD), row:Math.floor(y/vUnit()), mirrored:viewBack};
 }
 
 /* ---------- LAYERS ----------
@@ -2339,6 +2368,16 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
   if(mode!=="standing")
     for(let r=f.y0;r<f.y1;r++) for(let c=f.x0;c<f.x1;c++)
       base=Math.max(base, frameTop.get(cellKey(c,r))||0);
+  /* TOWARDS THE VIEWER, WHICHEVER SIDE THAT IS. From the front a part comes to rest just clear of
+     what is already there, at a higher layer; from the far side "clear of it" is a LOWER layer, so
+     the layers run negative - which is exactly the signed depth Glen described when he named the
+     midline (Layer 0 between Layer 1 and Layer -1). Nothing about the stored design changes; a brick
+     added from the back simply sits behind the ones already placed. */
+  if(viewBack){
+    let back=0;
+    bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) back=Math.min(back, b.base - thickB(nb)); });
+    return back;
+  }
   bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, b.base+thickB(b)); });
   return base;
 }
@@ -2351,6 +2390,12 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
 /* landRow() and onFrame() were here: a part fell to whatever held it up, unless the frame was
    behind it. Both are gone with the gravity they served (see settle, below) - a helper left behind
    describes a rule the application no longer has, which is the most expensive kind of comment. */
+/* The anchor a pointer cell gives a part, seen from whichever side. On the near side it is the cell
+   itself; on the far side the part grows leftwards in design coordinates, so its left edge sits its
+   own width back from the cell under the pointer. */
+const anchor = (c, p, rot) => viewBack
+  ? c.col - (Math.max(1, ((rot|0)&1) ? (p.d||1) : (p.w||1)) - 1)
+  : c.col;
 function settle(nb){             /* put the part where the mode says it comes to rest */
   if(parked(nb)){ nb.base=0; return nb; }   /* on the cork: no gravity, no frame - it stays put */
   /* NOTHING FALLS. A brick stays where it is put, on the frame or off it, with a frame imported or
@@ -2463,7 +2508,7 @@ cv.addEventListener("mousemove",e=>{
   if(panDrag || moveDrag) return;                          /* panning or moving, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext}); draw();
+  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext}); draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
@@ -2475,7 +2520,7 @@ cv.addEventListener("click",e=>{
     bricks.splice(i,1); draw(); commit(); return;
   }
   if(tool!=="place") return;
-  const nb=settle({p:cur(),colorIdx:selCol,col:c.col,row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext});
+  const nb=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext});
   bricks.push(nb);
   /* THE BRICK JUST PLACED BECOMES THE SELECTED ONE, which is what makes placing and moving read the
      same: after either, the block above names the brick and gives its layer, and the message line
@@ -3591,7 +3636,7 @@ cv.addEventListener("drop", e=>{
      the SELECTED row's color; a part carries its own. */
   const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
   const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
-  const nb = settle({p:p, colorIdx:ci, col:c.col, row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext, half:halfNext});
+  const nb = settle({p:p, colorIdx:ci, col:anchor(c,p,rotNext), row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext, half:halfNext});
   bricks.push(nb);
   selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
