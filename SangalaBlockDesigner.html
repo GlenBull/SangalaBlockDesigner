@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.073 -->
+<!-- SANGALA_VERSION: 2026-08-18.074 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2511,16 +2511,21 @@ const plates = n => n+(n===1?" plate":" plates");
    sign. `depthOf` stays what it has always been - where the part's back face sits, counted from that
    plane - and this is the name put on it. Nothing stored changes, so every design already saved opens
    reading exactly as it was built. */
-/* Glen, 2026-08-18: "A piece sitting on the Midline should be Layer 1. By definition, then, a piece
-   straddling the midline should be Layer 0.5."
-   So the FRONT side counts up from 1 and takes the straddling course with it - a piece half a step
-   back from Layer 1 is Layer 0.5 - while the BACK side counts down from -1. Zero belongs to the
-   plane, and no course is ever called by it. */
-const layerName = d => d>=-0.5 ? d+1 : d;
+/* A LAYER IS NAMED FROM THE MIDDLE OF THE PART, not from the face it happens to start at.
+   Glen, 2026-08-18: "the front half and back half are not symmetrical. The eye on the front reads
+   1.5; the eye on the back reads -1." Both eyes are the same distance out, and they must read the
+   same distance out. This named the part's BACK face, and mirroring a design swaps which face that
+   is - so a mirrored pair could never read symmetrically however the sign was arranged.
+   Its middle is symmetric by nature, and the half-stud offset puts the numbers where Glen set them:
+   a piece resting ON the midline has its middle half a stud out, and reads Layer 1; a piece
+   STRADDLING has its middle on the plane, and reads Layer 0.5; the first course behind reads -1.
+   Zero belongs to the plane and no course is ever called by it. */
+const layerMid  = b => depthOf(b) + thickB(b)/2;
+const layerName = c => c>=0 ? c+0.5 : c-0.5;
 const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
   /* rounded: a turned part is 0.4 of a stud thick, and stacking those exactly is what puts a tail of
      binary fractions on a number a builder has to read */
-  : "Layer "+(Math.round(layerName(depthOf(b))*100)/100);
+  : "Layer "+(Math.round(layerName(layerMid(b))*100)/100);
 /* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
    that knows the selection is still real - a brick can leave the design by being erased, undone or
    opened away, and the block must not go on describing it. */
