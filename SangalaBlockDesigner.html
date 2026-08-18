@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.065 -->
+<!-- SANGALA_VERSION: 2026-08-18.066 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2430,10 +2430,20 @@ function settle(nb){             /* put the part where the mode says it comes to
   nb.base = restingBase(nb);
   return nb;
 }
-function hit(c){                 /* the topmost brick under the pointer */
-  let best=-1, top=-1;
-  bricks.forEach((b,i)=>{ const f=foot(b);
-    if(c.col>=f.x0 && c.col<f.x1 && c.row>=f.y0 && c.row<f.y1 && b.base>=top){ best=i; top=b.base; } });
+/* The brick NEAREST THE VIEWER under the pointer.
+   TWO THINGS THIS GOT WRONG, both of them mine, and both invisible until layers could go negative.
+   It began its search at -1, so a brick at layer -2 or deeper could never satisfy the test and simply
+   could not be selected - Glen, 2026-08-18, having jogged the eye behind the head: "now I have gotten
+   it into a state where select will not even select it." A part you cannot select is a part you
+   cannot move, undo or delete, so it is stranded in the design.
+   And "nearest" depends on which side you are standing on: from the far side the brick nearest you is
+   the one with the LOWEST depth, so the comparison turns round with the view, exactly as the drawing
+   order does. It also reads depthOf rather than base, so a half step counts.  */
+function hit(c){
+  let best=-1, top=-Infinity;
+  const near = viewBack ? -1 : 1;
+  bricks.forEach((b,i)=>{ const f=foot(b), d=near*depthOf(b);
+    if(c.col>=f.x0 && c.col<f.x1 && c.row>=f.y0 && c.row<f.y1 && d>=top){ best=i; top=d; } });
   return best;
 }
 const plates = n => n+(n===1?" plate":" plates");
