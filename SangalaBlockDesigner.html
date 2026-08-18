@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.067 -->
+<!-- SANGALA_VERSION: 2026-08-18.068 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1871,7 +1871,7 @@ function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
   /* A TURNED PART TAKES THE RELIEF MAPPING, which is the whole of what "turned onto a face" means in
      3D: relief lays a part with its studs towards the viewer, and that is where a part on the side of
      the figure points. One flag, and the matrix, the studs and the thickness all follow. */
-  const st = mode === "standing" && !faced(b);
+  const st = mode === "standing" && !faced(b), fc = faced(b);
   /* widen the band to the BODY before centring the mesh in it: an inverted slope's geometry reaches
      a stud past the footprint it rests on, and centring it on the footprint would squeeze it */
   x0 -= overLeft(p, b.flip)*STUD; x1 += overRight(p, b.flip)*STUD;
@@ -1885,8 +1885,23 @@ function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
   const c = Math.round(Math.cos(yaw*Math.PI/180)), s = Math.round(Math.sin(yaw*Math.PI/180));
   /* yaw about the part's own vertical, then its axes onto the page's: standing runs the part's
      height up the screen, relief lays it into the screen with the footprint standing up */
-  const A = st ? [c*LDU, 0, s*LDU,  s*LDU, 0, -c*LDU,  0, -LDU, 0]
-               : [c*LDU, 0, s*LDU,  0, LDU, 0,  s*LDU, 0, -c*LDU];
+  /* A TURNED PART IS ROTATED, NOT REFLECTED. The relief mapping below has a determinant of -1 - it
+     mirrors the part - and that was invisible while relief drew plates and bricks, which are the same
+     in a mirror. On a wedge it is plain: the 3D view drew it wide at the BOTTOM where the plan and the
+     exported model both have it wide at the top, and a mirror also reverses which way its quarter
+     turns appear to go, so Rotate looked as though it turned the wrong way (Glen, 2026-08-18: "the
+     wing and the blue brick are facing the wrong direction - and the opposite direction in which they
+     are shown in the 2D view, so clearly the math is wrong").
+     SETTLED BY RENDERING THE TWO VIEWS SIDE BY SIDE, not by argument: the plan and the LDView export
+     agree with each other, so the 3D view is the one that was wrong.
+     A part laid on its face presents its plan square to the viewer, which is the identity at rest -
+     its own x across the screen, its own z UP it, and its own y going away, so the studs (which run
+     along -y) point at you. The quarter turns are then a plain rotation in the screen plane.
+     RELIEF IS LEFT EXACTLY AS IT WAS. Its own mapping has been in use since the mode was built and is
+     not what Glen is looking at; changing it here would alter every relief design at once. */
+  const A = st  ? [c*LDU, 0, s*LDU,  s*LDU, 0, -c*LDU,  0, -LDU, 0]
+          : fc  ? [c*LDU, 0, -s*LDU,  0, LDU, 0,  s*LDU, 0, c*LDU]
+                : [c*LDU, 0, s*LDU,  0, LDU, 0,  s*LDU, 0, -c*LDU];
   const put = q => [A[0]*q[0]+A[1]*q[1]+A[2]*q[2], A[3]*q[0]+A[4]*q[1]+A[5]*q[2], A[6]*q[0]+A[7]*q[1]+A[8]*q[2]];
   let bx0=1e9,by0=1e9,bz0=1e9,bx1=-1e9,by1=-1e9,bz1=-1e9;
   for(let i = 0; i < 8; i++){
