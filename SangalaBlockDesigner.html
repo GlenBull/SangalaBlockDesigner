@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.079 -->
+<!-- SANGALA_VERSION: 2026-08-18.080 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -239,6 +239,17 @@
          so the Selected line reads "Layer 0.5" and the 3D view shows it. -->
     <button class="ltbtn" id="tHalf" title="Jog the part half a layer towards you. Press again to keep going - two presses move it a whole layer">&#189;&#43;<small>Half Step</small></button>
     <button class="ltbtn" id="tHalfB" title="Jog the part half a layer away from you. Press again to keep going">&#189;&#8722;<small>Half Step</small></button>
+    <!-- WHICH SIDE YOU ARE STANDING ON. Last in the column, and set apart from everything above it,
+         because those buttons all say how the NEXT part goes down and this one changes nothing about
+         the design at all - it turns the figure round so the far side can be worked on.
+         IT NAMES THE SIDE YOU ARE LOOKING AT rather than the side you would go to (Glen, 2026-08-18:
+         "The button should show the current view; clicking it should toggle it to the other side").
+         So it reads Front while you face the front, and Back once you have turned round - a reading,
+         like the Selected line, not an instruction. It also lights while you are round the back,
+         because a builder who has forgotten which way the figure faces will place parts on the wrong
+         side of it, and the Toolbar is where they are already looking. -->
+    <button class="ltbtn" id="tSide" style="margin-top:.5rem"
+            title="Which side of the figure you are standing on. Click to walk round to the other side - nothing in the design is changed">&#8644;<small id="tSideName">Front</small></button>
   </div>
 
   <!-- (3) WORKSPACE -->
@@ -335,7 +346,10 @@
         <span style="font-weight:700">Show</span>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the frame outline you are building against"><input type="checkbox" id="ckFrame" checked style="width:auto;margin:0"> Frame</label>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the stud grid"><input type="checkbox" id="ckGrid" checked style="width:auto;margin:0"> Grid</label>
-        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Turn the figure around and work on its far side. Nothing in the design is changed - this is which side you are standing on"><input type="checkbox" id="ckBack" style="width:auto;margin:0"> Other Side</label>
+        <!-- "Other Side" used to sit here as a third checkbox under Show, beside Frame and Grid, and
+             it never belonged: Frame and Grid say what is DRAWN over the design, and this says where
+             the builder is STANDING. It is on the Toolbar now, and it names the side rather than
+             asking about it (Glen, 2026-08-18). Nothing under Show is a view. -->
       </div>
     </div>
 
@@ -2436,9 +2450,16 @@ $("pagesize").onchange=e=>{ setPageSize(e.target.value);
   offPageWarning(); commit(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
-$("ckBack").onchange =e=>{viewBack=e.target.checked; hover=null; draw();
+/* The button IS the state: there is no second control to keep in step with, and viewBack is not
+   saved with the design, so this is the only thing that can change it. */
+function syncSide(){
+  $("tSide").classList.toggle("on", viewBack);
+  $("tSideName").textContent = viewBack ? "Back" : "Front";
+}
+$("tSide").onclick =()=>{ viewBack=!viewBack; hover=null; syncSide(); draw();
   say(viewBack ? "Looking at the far side of the figure. Bricks you place now stack towards you, which is away from the front."
                : "");};
+syncSide();
 
 /* ---------- magnify: wheel zoom (toward cursor), buttons, pan (middle-mouse / Space+drag) ----------
    Every line below is Studio's, with only the names of the plate's own measurements changed. Same
