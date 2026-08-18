@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.074 -->
+<!-- SANGALA_VERSION: 2026-08-18.075 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2511,21 +2511,27 @@ const plates = n => n+(n===1?" plate":" plates");
    sign. `depthOf` stays what it has always been - where the part's back face sits, counted from that
    plane - and this is the name put on it. Nothing stored changes, so every design already saved opens
    reading exactly as it was built. */
-/* A LAYER IS NAMED FROM THE MIDDLE OF THE PART, not from the face it happens to start at.
+/* A LAYER IS HOW FAR THE PART REACHES FROM THE MIDLINE - the face furthest out, signed.
    Glen, 2026-08-18: "the front half and back half are not symmetrical. The eye on the front reads
    1.5; the eye on the back reads -1." Both eyes are the same distance out, and they must read the
    same distance out. This named the part's BACK face, and mirroring a design swaps which face that
    is - so a mirrored pair could never read symmetrically however the sign was arranged.
-   Its middle is symmetric by nature, and the half-stud offset puts the numbers where Glen set them:
-   a piece resting ON the midline has its middle half a stud out, and reads Layer 1; a piece
-   STRADDLING has its middle on the plane, and reads Layer 0.5; the first course behind reads -1.
-   Zero belongs to the plane and no course is ever called by it. */
-const layerMid  = b => depthOf(b) + thickB(b)/2;
-const layerName = c => c>=0 ? c+0.5 : c-0.5;
+   Naming the MIDDLE fixed the symmetry and broke something else, which Glen caught at once: "the
+   blue brick reads Layer 1, while the gray brick beneath it reads Layer 0.5; so to the user, it
+   appears that from the front they are in the same place, while... they are reported as being in
+   different layers." Two parts flush at the front but of different thickness have different middles.
+   The face FURTHEST from the midline settles both: it is where the part reaches to, so two parts
+   flush at the front read the same however thick they are, and a mirrored pair reads the same
+   distance out with opposite signs. Every case Glen set falls out of it - a piece resting ON the
+   midline reaches one stud and reads Layer 1; a piece STRADDLING reaches half a stud each way and
+   reads Layer 0.5; the first course behind reads -1, the second -2. Zero belongs to the plane and
+   names no course. */
+const layerName = b => { const back=depthOf(b), front=back+thickB(b);
+  return Math.abs(front)>=Math.abs(back) ? front : back; };
 const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
   /* rounded: a turned part is 0.4 of a stud thick, and stacking those exactly is what puts a tail of
      binary fractions on a number a builder has to read */
-  : "Layer "+(Math.round(layerName(layerMid(b))*100)/100);
+  : "Layer "+(Math.round(layerName(b)*100)/100);
 /* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
    that knows the selection is still real - a brick can leave the design by being erased, undone or
    opened away, and the block must not go on describing it. */
