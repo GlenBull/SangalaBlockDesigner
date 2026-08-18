@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.071 -->
+<!-- SANGALA_VERSION: 2026-08-18.072 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2500,10 +2500,22 @@ const plates = n => n+(n===1?" plate":" plates");
    screen, so a part moved half a layer back does not shift by a pixel on the plan - it moves in the
    3D view alone. "Layer 0.5" is Glen's own name for it (2026-08-17), and it keeps every number in
    every design already saved exactly as it was. */
+/* WHAT THE BUILDER CALLS A LAYER. Glen, 2026-08-18: "the front side should be Layer 1, Layer 2, etc.
+   The back side (flipped) should be Layer -1, Layer -2, etc. So the numbers on the back side should
+   always be in the negative range."
+   So the layers run OUTWARD from the plane the figure is built on, and there is no layer 0: the first
+   stud in front of that plane is Layer 1 and the first behind it is Layer -1. Zero names the plane
+   itself, not a course of bricks.
+   IT DOES NOT FOLLOW THE VIEWER. Turning the figure round with Other Side does not renumber anything;
+   the back of the bird is negative whichever side you are standing on, which is the whole point of a
+   sign. `depthOf` stays what it has always been - where the part's back face sits, counted from that
+   plane - and this is the name put on it. Nothing stored changes, so every design already saved opens
+   reading exactly as it was built. */
+const layerName = d => d>=0 ? d+1 : d;
 const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
   /* rounded: a turned part is 0.4 of a stud thick, and stacking those exactly is what puts a tail of
      binary fractions on a number a builder has to read */
-  : "Layer "+(Math.round(depthOf(b)*100)/100);
+  : "Layer "+(Math.round(layerName(depthOf(b))*100)/100);
 /* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
    that knows the selection is still real - a brick can leave the design by being erased, undone or
    opened away, and the block must not go on describing it. */
