@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.080 -->
+<!-- SANGALA_VERSION: 2026-08-18.097 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -87,6 +87,23 @@
      pixels when it orbits and when it reads the depth buffer back. */
   #minibox{position:absolute;right:8px;top:8px;z-index:3;border-radius:6px;overflow:hidden;
     border:1px solid rgba(60,40,20,.5);box-shadow:0 2px 10px rgba(0,0,0,.35);background:#c3cedb}
+  /* The Mini 3D Viewer button, which opens and closes the inset window. The panel's own button look
+     (`.card button`), compacted to sit on a line with the spinner, and the Toolbar's blue for "on"
+     so that showing a thing is signalled the same way everywhere in the application. */
+  /* .64rem is the menu bar's own label size (`.tbtn small`), which sets "3D View" and reads clearly
+     at that size - Glen, 2026-08-18: "The text for 3D View is quite a bit smaller and yet it is still
+     quite legible." Two buttons naming two kinds of 3D view should not disagree about type size. */
+  .depthbtn{padding:.24rem .5rem;border:1px solid #c9b48c;border-radius:6px;
+    background:linear-gradient(#fffdf7,#efe6d3);color:#7a3b12;cursor:pointer;font-size:.64rem}
+  .depthbtn:hover{background:linear-gradient(#ffffff,#f5ecd9)}
+  .depthbtn.on{background:linear-gradient(#bfe3ff,#8fcaf5);border-color:#3f8fd0;color:#22536f}
+  /* A SPINNER WITH NO READOUT: two stacked arrows and nothing to read. See the Depth control. */
+  .spin{display:inline-flex;flex-direction:column;border:1px solid #b09a72;border-radius:4px;overflow:hidden}
+  .spin button{width:20px;height:12px;padding:0;border:none;background:linear-gradient(#fffdf7,#eee3cc);
+    color:#7a3b12;font-size:8px;line-height:1;cursor:pointer;display:block}
+  .spin button:hover{background:linear-gradient(#ffffff,#f5ecd9)}
+  .spin button:active{background:#e4d6b8}
+  .spin button+button{border-top:1px solid #d8c9a8}
   #minigrip{position:absolute;right:0;bottom:0;width:16px;height:16px;z-index:4;cursor:nwse-resize;
     background:linear-gradient(135deg,transparent 0 46%,rgba(60,40,20,.5) 46% 54%,transparent 54% 70%,
                                       rgba(60,40,20,.5) 70% 78%,transparent 78%)}
@@ -234,11 +251,11 @@
          the figure can point where the wing needs it to. It does nothing to an upright part: a plan
          is the only view a quarter turn means anything in. -->
     <button class="ltbtn" id="tRot" title="Rotate: turn the part a quarter turn counterclockwise, about the face it is resting on">&#8634;<small>Rotate</small></button>
-    <!-- Half Step puts a part on the MIDLINE, half a layer forward of the one it rests in - where a
-         jumper plate's centred stud carries it. It cannot be seen on the plan, which is a profile,
-         so the Selected line reads "Layer 0.5" and the 3D view shows it. -->
-    <button class="ltbtn" id="tHalf" title="Jog the part half a layer towards you. Press again to keep going - two presses move it a whole layer">&#189;&#43;<small>Half Step</small></button>
-    <button class="ltbtn" id="tHalfB" title="Jog the part half a layer away from you. Press again to keep going">&#189;&#8722;<small>Half Step</small></button>
+    <!-- The two Half Step buttons stood here. They are gone from the Toolbar at Glen's word
+         (2026-08-18): "I want to get those half-step buttons off the tool bar. They belong in a
+         spinner control that will move a brick toward the front or back in half-step increments."
+         The Toolbar says how the NEXT part goes down; where a placed brick SITS is a property of
+         that brick, and belongs in the block that describes it. See the Depth spinner in the panel. -->
     <!-- WHICH SIDE YOU ARE STANDING ON. Last in the column, and set apart from everything above it,
          because those buttons all say how the NEXT part goes down and this one changes nothing about
          the design at all - it turns the figure round so the far side can be worked on.
@@ -285,7 +302,12 @@
          nothing marking the join (Glen, 2026-08-17: "is this information about the selected brick,
          with the color picker in between?"). Directly under the project name, at his choice, so the
          panel reads down as "the brick I have selected", then "the settings for the next one". -->
-    <div id="selpanel" style="display:none">
+    <!-- THE ROW IS ALWAYS PRESENT, though most of what it holds is not. It used to appear only with
+         a selection; the Inset toggle put in it is a VIEW control that belongs to nobody's brick, and
+         a design with no bricks in it yet would have had no way to reach it - turn the inset off,
+         start a new project, and it could never be turned back on. So the row stands and its two
+         per-brick parts, the name and Depth, come and go with the selection. -->
+    <div id="selpanel">
       <!-- no heading: the line appears only when a brick is selected, so it needs nothing to say so
            (Glen, 2026-08-17: "You don't need to say 'Selected'") -->
       <!-- ONE LINE, part and layer together. Glen, 2026-08-17: "this is too verbose; it makes it
@@ -295,7 +317,83 @@
       <!-- NOT BOLD. Bold is what the project name above it uses, and two bold lines together read as
            two headings (Glen, 2026-08-17). Same size and color, ordinary weight - it is a reading,
            not a title. -->
-      <div id="selName" style="margin-top:.4rem;font-size:.85rem;color:#5a4a34"></div>
+      <!-- DEPTH, AND NO LAYER READING AT ALL (Glen, 2026-08-18: "The name of the spinner control
+           should be 'Depth' for now. And we don't have to show the layer. The user will be able to
+           see the relative positioning in the inset window"). The inset shows where the brick sits
+           among its neighbours, which is what a layer number was being asked to say in words, and
+           a picture says it without having to settle what the number counts.
+           So the spinner carries the one quantity it actually moves: how far the brick's back face
+           stands from the midline, in studs, forward positive. That number is exact - `base` is a
+           whole number and `half` is 0 or a half - so it is always on a stop, which the layer
+           reading was not: a plate turned on its side is 1.2 studs thick and reached 3.2.
+           Beside rather than beneath, in a row that lets the NAME wrap and holds the spinner at its
+           own width - "Slope Brick 45 2 x 1 Inverted without Inner Stopper Ring" is a real part name
+           and would push anything sharing its line off the panel.
+           It is hidden in relief mode, where a half step means nothing: relief layers are plates. -->
+      <!-- BASELINE, NOT TOP. Top-aligning boxes of different heights left the part name riding above
+           the word "Depth" (Glen, 2026-08-18: "Depth is on a different line than sloped brick; the two
+           are not aligned") - the name is a line of text 18 px tall and the Depth group is 26 px,
+           because the spinner sets its height, so their tops agreed and their texts did not. Aligning
+           on the baseline puts the two words on one line, which is what the eye reads; a name long
+           enough to wrap aligns on its FIRST line, where the reading starts. -->
+      <div style="display:flex;align-items:baseline;gap:.5rem;margin-top:.4rem">
+        <!-- The name takes the room it needs and wraps when it must, rather than filling the line:
+             "Depth" is to sit BESIDE it (Glen, 2026-08-18), not at the far end of a gap. -->
+        <div id="selName" style="flex:0 1 auto;font-size:.85rem;color:#5a4a34"></div>
+        <!-- Depth and its arrows are one thing and belong to the SELECTED BRICK, so they come and go
+             together with the selection. The word is a label again; the toggle that briefly wore it
+             has become Mini 3D Viewer, at the far right.
+             IT IS SET AS A LABEL, NOT AS MORE OF THE NAME (Glen, 2026-08-18: "Depth looks as though it
+             could be part of the part name"). At the same size, weight and colour, with only a small
+             gap between them, "Slope Brick 33 3 x 1 Depth" reads as one phrase - the eye has nothing to
+             tell it where the reading stops and the control begins. So the word takes the type its own
+             control uses, .64rem, in a lighter brown.
+             AND IT SITS AT THE OTHER END OF THE ROW, beside the Mini 3D Viewer button (Glen,
+             2026-08-18: "should we put the label and spinner control next to the mini-viewer
+             button?"). Setting it in a quieter type only made it less likely to be read as more of
+             the part name; moving it away removes the question. The row now reads as what is
+             SELECTED on the left and what can be done about its DEPTH on the right - the control
+             that changes depth beside the window that shows it. The auto margin sits on this
+             group now rather than on the button, so the pair travels to the right edge together. -->
+        <!-- The two depth controls are ONE GROUP in the markup as well as to the eye, which is what
+             lets them share a centre line while the group as a whole still hangs from the row's
+             baseline beside the part name. It also carries the auto margin, so the pair holds the
+             right edge whether or not the spinner within it is showing. -->
+        <span id="depthpair" style="flex:none;display:flex;align-items:center;gap:.55rem;margin-left:auto">
+        <span id="selLayer" style="flex:none;display:flex;align-items:center;gap:.3rem;
+                     font-size:.64rem;letter-spacing:.02em;color:#907c5c">
+          Depth
+          <span class="spin">
+            <button id="spUp" title="Move this brick half a layer towards you">&#9650;</button>
+            <button id="spDn" title="Move this brick half a layer away from you">&#9660;</button>
+          </span>
+        </span>
+        <!-- MINI 3D VIEWER, HARD RIGHT, pushed there by the auto margin rather than by a spacer, so
+             it holds the far edge whatever the part is called. It shows and hides the inset window.
+             ITS NAME IS NOT "3D VIEWER", and the near-miss is the whole point (Glen, 2026-08-18):
+             "One is a 3D view of the entire workspace replacing the 2D view. the other is a 'mini 3D
+             viewer'... They are not the same thing so therefore they should not have the same name."
+             The menu bar's 3D View swaps the whole board; this opens a small window beside the design
+             and leaves you building. A letter between two names is not a distinction.
+             IT DOES NOT COME AND GO WITH THE SELECTION, unlike everything to its left: it belongs to
+             no brick, and a design with nothing in it yet would otherwise have no way to bring the
+             window back once it had been closed. Session only - which windows are open is not part
+             of the design, so it does not travel in a .block. -->
+        <!-- BROKEN ACROSS TWO LINES at Glen's word (2026-08-18), "Mini 3D" over "Viewer". The break
+             is explicit rather than left to the box's width, so the label reads the same however the
+             panel is sized - a wrap that depends on the room available is a label that rearranges
+             itself. It also hands the part name back the 50 px the one-line version had taken from
+             it, which is why the longest names wrap less than they did.
+             THE BUTTON AND THE SPINNER SHARE A CENTRE LINE (Glen, 2026-08-18: "I would center the
+             button to align vertically with the spinner control"). Both are centred in the row rather
+             than hung from its baseline or its top, so the two controls read as a pair however tall
+             either of them is. The button is 31 px and the spinner 26, so meeting in the middle costs
+             the word "Depth" 2.5 px against the part name's baseline - which is a quarter of the gap
+             that made the two look like different lines, and invisible beside it. -->
+        <button id="bDepth" class="depthbtn" style="flex:none;text-align:center;line-height:1.05"
+                title="Show or hide the mini 3D viewer, the small window on the workspace. The menu bar's 3D View is the other thing: it turns the whole board 3D">Mini 3D<br>Viewer</button>
+        </span>
+      </div>
     </div>
     <!-- The message line. It speaks ONLY when it knows something the designer cannot see - a brick
          parked off the plate, a frame running off the baseplate, a save that failed. It does not
@@ -605,7 +703,10 @@ let rotNext = 0;
    Held apart from `base` rather than added into it, because settle() recomputes base whenever a part
    is placed or moved and would wash a fraction straight out. The layer a part rests IN is still a
    whole number; this says it sits half a stud forward of it. */
-let halfNext = 0;
+/* `halfNext` is gone with the Toolbar buttons. It armed the NEXT part to land half a step forward,
+   which the buttons offered when nothing was selected - and nothing offers now. It costs a click
+   rather than a capability: a part just placed IS the selected one, so the spinner is already
+   pointing at it and one step puts it where the jumper plate's centred stud carries it. */
 let tool = "select", showGuide = true, showGrid = true;
 /* WHICH SIDE OF THE FIGURE YOU ARE STANDING ON. Glen, 2026-08-18: "we need a way to flip the crane
    so that I can add the blocks that go on the other side." A standing figure is deep, and the near
@@ -1424,6 +1525,10 @@ let pvSel=0;   // the piece the workspace has selected, 1-based as pvIdBuf count
    three-quarter angle a LEGO instruction is drawn at. */
 let miniYaw=-0.45, miniPitch=0.22, miniZoom=1, miniBase=1, miniCenter=[0,0,0], miniDrag=null, miniStamp="";
 let boxDrag=null;   /* carrying the whole window by its bar, which is a different gesture from turning the model inside it */
+/* CLOSED WHEN THE APPLICATION OPENS (Glen, 2026-08-18: "The default should load with the 3D
+   mini-viewer turned off"). It is a window you call for while working on depth, not part of the
+   workspace, so the board opens clear and the button in the panel is what brings it up. */
+let insetOn=false;
 const MINIBAR=15;   /* the title bar's height, and #pvmini's own calc() - the two must agree */
 let gripDrag=null;  /* pulling the corner, the third of the window's three gestures: turn, carry, resize */
 // One color per printed PIECE. Fused shapes share a color because they ARE one piece; separate pieces get
@@ -1809,7 +1914,9 @@ function renderMini(){
    coloured or deleted, the mode, the side you are standing on, or which brick is selected. */
 function syncMini(){
   const mb=$("minibox");
-  if(view3D){ mb.style.display="none"; return; }   /* the full view is up; a picture of it in its own corner says nothing */
+  /* Turned off, or the full 3D View is up - in which case a picture of it in its own corner says
+     nothing. Either way there is no canvas to keep current, so nothing below runs. */
+  if(view3D || !insetOn){ mb.style.display="none"; return; }
   const wasHidden = mb.style.display==="none";
   mb.style.display="";
   const live=bricks.filter(b=>!parked(b));         /* a candidate parked on the cork is not in the model, so not in 3D either */
@@ -2393,9 +2500,19 @@ $("tRot").onclick   =()=>{
    NO LIGHT WHEN A BRICK IS SELECTED. These are a jog rather than a state, and the state is already
    said properly in the Selected line, which reads the layer and the half together - "Layer 1.5". The
    light is kept for the arming, where there is nothing else to show it. */
+/* NO NUMBER IS SHOWN, and this is the whole of what the control has to keep in step: whether it
+   is there at all. Glen, 2026-08-18: "i asked for this not to show a number. Why does the user need
+   a number if they can see its position in the 3D viewer?" The inset answers where the brick sits,
+   and a number beside it would be a second, weaker account of the same thing - one that had first
+   to settle what it counted, which is the question still open with Jo.
+   Hidden with the whole block when nothing is selected, and in relief mode, where a half step has
+   no meaning because the layers are plates. */
 function syncHalf(){ const b=selNow();
-  $("tHalf").classList.toggle("on", !b && halfNext>0);
-  $("tHalfB").classList.toggle("on", !b && halfNext<0); }
+  const show = !!b && mode==="standing";
+  $("selLayer").style.display = show ? "flex" : "none";
+  /* No margin to hand over: the auto margin sits on the pair, which stays whether or not the
+     spinner inside it does, so the button cannot fall back to the left of the row. */
+}
 function jogHalf(dir){
   if(mode!=="standing"){ say("Half Step belongs to a standing figure, where layers are studs deep."); return; }
   const b = selNow();
@@ -2404,11 +2521,13 @@ function jogHalf(dir){
     b.base = fl; b.half = (nd - fl) ? 0.5 : 0;
     commit(); drawSelection();
   }
-  else halfNext = (halfNext===dir) ? 0 : dir;
   syncHalf(); draw();
 }
-$("tHalf").onclick  =()=>jogHalf(0.5);
-$("tHalfB").onclick =()=>jogHalf(-0.5);
+/* Up is towards you, down is away - the same two moves the Toolbar's half-step buttons made, and
+   the same jogHalf that carried them, so a part steps through a whole layer in two presses exactly
+   as it did before. */
+$("spUp").onclick =()=>jogHalf(0.5);
+$("spDn").onclick =()=>jogHalf(-0.5);
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
    is up, exactly as Studio does ("press 3D View again to edit"). */
 $("bView3D").onclick=()=>{
@@ -2450,6 +2569,9 @@ $("pagesize").onchange=e=>{ setPageSize(e.target.value);
   offPageWarning(); commit(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
+/* Coming back it is drawn from scratch: syncMini sees a hidden window and rebuilds rather than
+   trusting a bitmap that the design may have moved on from while it was away. */
+$("bDepth").onclick=()=>{ insetOn=!insetOn; $("bDepth").classList.toggle("on", insetOn); syncMini(); };
 /* The button IS the state: there is no second control to keep in step with, and viewBack is not
    saved with the design, so this is the only thing that can change it. */
 function syncSide(){
@@ -2771,6 +2893,12 @@ const plates = n => n+(n===1?" plate":" plates");
    midline reaches one stud and reads Layer 1; a piece STRADDLING reaches half a stud each way and
    reads Layer 0.5; the first course behind reads -1, the second -2. Zero belongs to the plane and
    names no course. */
+/* THE REACH RULE, AND IT IS CURRENTLY UNCALLED. It settled what a layer NUMBER means - how far
+   the part reaches from the midline, taking whichever face is further - across four attempts on
+   2026-08-18, each earlier one rejected by a case Glen produced. The panel no longer shows a layer
+   at all (see the Depth spinner), so nothing reads this today. It is kept, and kept named, because
+   the question of what a layer should be numbered is still open with Jo, and re-deriving this rule
+   from scratch is exactly the day that has already been spent once. */
 const layerName = b => { const back=depthOf(b), front=back+thickB(b);
   return Math.abs(front)>=Math.abs(back) ? front : back; };
 const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
@@ -2782,10 +2910,12 @@ const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
    opened away, and the block must not go on describing it. */
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
-  $("selpanel").style.display = on ? "" : "none";
   syncFace(); syncFlip(); syncRot(); syncHalf();   /* the four follow the selection */
-  if(!on) return;
-  $("selName").textContent = selBrick.p.name+" · "+layerTag(selBrick);
+  if(!on){ $("selName").textContent=""; return; }   /* the row stays for the Inset toggle; the reading goes */
+  /* THE NAME ALONE, because the spinner beside it now carries the layer and one fact shown twice is
+     one fact that can disagree with itself. Relief keeps its reading here: it has no spinner, since
+     a half step means nothing where the layers are plates. */
+  $("selName").textContent = selBrick.p.name + (mode==="standing" ? "" : " · "+layerTag(selBrick));
 }
 
 /* ---------- move a placed brick: pick it up with Select and drag it ----------
@@ -2851,7 +2981,7 @@ cv.addEventListener("mousemove",e=>{
   if(panDrag || moveDrag) return;                          /* panning or moving, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext}); draw();
+  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext}); draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
@@ -2863,7 +2993,7 @@ cv.addEventListener("click",e=>{
     bricks.splice(i,1); draw(); commit(); return;
   }
   if(tool!=="place") return;
-  const nb=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext,half:halfNext});
+  const nb=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext});
   bricks.push(nb);
   /* THE BRICK JUST PLACED BECOMES THE SELECTED ONE, which is what makes placing and moving read the
      same: after either, the block above names the brick and gives its layer, and the message line
@@ -3980,7 +4110,7 @@ cv.addEventListener("drop", e=>{
      the SELECTED row's color; a part carries its own. */
   const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
   const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
-  const nb = settle({p:p, colorIdx:ci, col:anchor(c,p,rotNext), row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext, half:halfNext});
+  const nb = settle({p:p, colorIdx:ci, col:anchor(c,p,rotNext), row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext});
   bricks.push(nb);
   selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
