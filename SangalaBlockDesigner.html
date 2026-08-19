@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.119 -->
+<!-- SANGALA_VERSION: 2026-08-19.120 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3528,6 +3528,33 @@ function copyBrick(){
      Selected block naming it - which says it better than a sentence would. */
   say("Copied the "+b.p.name+" - Ctrl+V pastes a copy.");
 }
+/* THE COPY LANDS ON THE SIDE YOU ARE STANDING ON, mirrored in depth and tipped so its studs face
+   you - Glen's answer, 2026-08-19, to what a paste should mean when it is made from the other side.
+   Copy a wing on the front, walk round to the back and paste, and the copy arrives on the BACK as
+   the wing that belongs there, rather than as a twin sitting behind the body where it cannot be seen.
+
+   A part already on the builder's side is left exactly as it is - there is nowhere to bring it - and
+   so is one straddling the midline, which is on neither side. That is what makes this safe to do on
+   every paste rather than only when the view is turned: pasting on the front a part that lives on
+   the front changes nothing, which is the behaviour that was already there.
+
+   THE MIRROR IS OF THE SPAN, NOT OF `base`. `base` marks the face a part is mounted BY, and which
+   face that is depends on the way the part is tipped: a studs-forward part is mounted by its REAR
+   face and grows towards the viewer, a studs-away part by its FRONT face and grows away. So the
+   span is worked out first, reflected about the midline, and the mounting face read off whichever
+   end the part will then be mounted by. Reflecting `base` alone would put the copy a thickness out,
+   and by different amounts for different parts.
+   Only in a standing figure: a relief has one side, and nothing in it is tipped. */
+function faceToViewer(b){
+  if(mode!=="standing") return;
+  const t = thickToward(b)/STUD, d = depthOf(b);
+  const rear = d - (facedAway(b) ? t : 0), front = d + (facedAway(b) ? 0 : t);
+  const mine = viewBack ? -1 : 1;                     /* the half of the figure the builder is in */
+  if((rear+front)/2 * mine >= 0) return;              /* already on this side, or across the middle */
+  if(faced(b)) b.turn = facedAway(b) ? "face" : "back";   /* tipped: turn it over to face the builder */
+  const nd = (faced(b) && b.turn==="back") ? -rear : -front;
+  b.base = nd - halfOf(b);                            /* the half step is kept; base carries the rest */
+}
 function pasteBrick(){
   if(!clipBrick){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
   /* ONE STUD TO THE RIGHT AS SEEN, which is a column LOWER once you have walked round to the back:
@@ -3536,6 +3563,7 @@ function pasteBrick(){
      the builder is standing, and a copy that fans out backwards is the same mistake in a new place. */
   const step = (viewBack ? -PASTE_STEP : PASTE_STEP) * (++pasteN);
   const nb={...clipBrick, p:{...clipBrick.p}, col:clipBrick.col + step};
+  faceToViewer(nb);                        /* brought to the side the builder is standing on */
   bricks.push(nb); selBrick=nb; say("");   /* cleared, as placing a brick clears it - the copy has been used */
   draw(); commit();                      /* now, not on the usual delay: rapid pastes undo one at a time */
 }
