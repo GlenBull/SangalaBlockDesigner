@@ -96,14 +96,14 @@ def compose(outer, inner):
 def side_studs(path, w, xf=IDENT, depth=0, seen=(), out=None):
     """Where a part carries studs on a FACE rather than on top, in the plan view's own units.
 
-    A SNOT brick's side studs are the whole reason it is in a design - the wings hang on them - and
+    A side-stud brick's studs are the whole reason it is in a design - the wings hang on them - and
     the standing view is a profile, so those studs point straight at the viewer and belong on the
     drawing. Nothing in a .parts entry said they existed, so 2434 arrived as a plain block and Glen
     had to open the 3D view to see what it was for (2026-08-17: "I see the studs on the side in the
     3D view but not in the 2d view").
 
     MEASURED, NOT READ OFF THE NAME. "with Studs on Sides" says nothing about how many or where, and
-    the four SNOT parts in the crane's library carry 8, 4, 2 and 1 of them. An LDraw stud primitive
+    the four side-stud parts in the crane's library carry 8, 4, 2 and 1 of them. An LDraw stud primitive
     is a cylinder along its own +Y, so a type-1 reference maps that axis to the matrix's middle
     column; where the image of +Y is horizontal rather than vertical, the stud is on a face. The
     matrix may also SCALE (stud4 arrives 11x tall), so it is the dominant direction that decides,
@@ -333,7 +333,7 @@ def build(rows):
                 "w": max(1, w), "d": max(1, dd), "h": max(1, h), "shape": shape}
         # Only where the footprint was left as it was measured. A slope's w and d are SWAPPED above
         # to turn the ramp across the screen, and a stud position measured in the part's own frame
-        # would then be stated against the wrong edge - so a sloped SNOT part, if one is ever
+        # would then be stated against the wrong edge - so a sloped side-stud part, if one is ever
         # ordered, says nothing rather than something misplaced.
         if shape == "rect":
             face = side_studs(path, raw_w)

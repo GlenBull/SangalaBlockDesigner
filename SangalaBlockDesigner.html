@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.099 -->
+<!-- SANGALA_VERSION: 2026-08-19.103 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -50,7 +50,10 @@
   .ltitle{font-size:.8rem;color:#eaf1f8;text-align:center;margin:.1rem 0 .1rem}
   .ltbtn{width:52px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;
     background:linear-gradient(#fffdf7,#e8dcc2);border:2px solid #c9b48c;box-shadow:0 2px 3px rgba(0,0,0,.22);color:#7a3b12;font-size:1.35rem;line-height:1}
-  .ltbtn small{font-size:.52rem;color:#7a3b12}
+  .ltbtn small{font-size:.52rem;color:#7a3b12;line-height:1.05;text-align:center}
+  /* A button carrying words instead of a glyph: the label takes the room the glyph would have had,
+     at a size meant to be read rather than glanced at. */
+  .ltbtn.wordonly{font-size:.72rem;font-weight:600}
   .ltbtn:hover{background:linear-gradient(#ffffff,#f0e7d3)}
   .ltbtn.on{background:linear-gradient(#bfe3ff,#8fcaf5);border-color:#3f8fd0;box-shadow:inset 0 1px 0 #fff,0 0 0 2px rgba(63,143,208,.45),0 2px 3px rgba(0,0,0,.28)}
   .ltbtn:disabled{opacity:.38;cursor:default;box-shadow:none}
@@ -242,11 +245,25 @@
     <!-- The SPONGE is Sangala Mosaic's erase mark. Same action, same icon, across the family -
          this had a broom, which is a different picture for the same thing. -->
     <button class="ltbtn" id="tErase" title="Erase: click a brick to take it off the design (Ctrl+Z undoes)">&#129533;<small>Erase</small></button>
-    <button class="ltbtn" id="tFlip" title="Flip: face the chosen slope the other way">&#128260;<small>Flip</small></button>
-    <!-- Turn lays a part on the SIDE of the figure, studs towards you - the eye, and the flat plate
-         that makes a wing. Beside Flip because it is the same kind of control: it says how the NEXT
-         part goes down, and stays on until it is pressed again. -->
-    <button class="ltbtn" id="tFace" title="Turn: lay the part on the side of the figure, studs towards you">&#9635;<small>Turn</small></button>
+    <!-- LEFT AND RIGHT ARROWS, because that is the axis it mirrors about. It wore the circling-arrows
+         rotate mark, which says the one thing it does not do (Glen, 2026-08-19: "what is now called
+         flip has a rotate symbol - not what it is doing at all"). Named for the axis, as Sangala
+         Studio's own Align menu names it, so a student meets one word in both applications. -->
+    <button class="ltbtn" id="tFlip" title="Flip Horizontal: mirror the part left to right, so a slope faces the other way">&#8596;<small>Flip Horizontal</small></button>
+    <!-- FLIP VERTICAL, and it was called Turn until 2026-08-19. Turn said nothing about which way,
+         and every plainer name collided with something: Flip is this pair, Front and Back are which
+         side of the figure you stand on, and "studs out" says only what a stud already is. Glen
+         settled it by naming the icon rather than the action - "flip vertical should have up and
+         down arrows (i.e., what turn is currently doing)" - and that name is Sangala Studio's, which
+         has carried Flip Horizontal and Flip Vertical all along.
+         THE SAVED DATA IS UNCHANGED. A part still records turn:"face", and every .block file written
+         before today opens exactly as it did: this is what the button is called, not what it does.
+         IT TIPS FORWARD, and the tooltip says so rather than naming where the part lands. Glen,
+         2026-08-19: "normally you tip a physical object on a table forward, not back - for example,
+         tipping a queen over to signal game over in chess." Describing the result as landing on its
+         back invites the reader to picture the part going over backwards, which is neither the
+         motion nor how anyone tips anything. -->
+    <button class="ltbtn" id="tFace" title="Flip Vertical: tip the part forward, so its studs face you">&#8597;<small>Flip Vertical</small></button>
     <!-- Rotate spins a TURNED part a quarter turn counterclockwise, so a wedge laid on the side of
          the figure can point where the wing needs it to. It does nothing to an upright part: a plan
          is the only view a quarter turn means anything in. -->
@@ -259,14 +276,19 @@
     <!-- WHICH SIDE YOU ARE STANDING ON. Last in the column, and set apart from everything above it,
          because those buttons all say how the NEXT part goes down and this one changes nothing about
          the design at all - it turns the figure round so the far side can be worked on.
+         NO ICON, and that is deliberate (Glen, 2026-08-19): "I don't think it needs an icon at all
+         because the meaning of the words is unambiguous. an icon just muddies the waters." It had
+         borrowed the flip-horizontal mark, which belongs to the button four places above it and said
+         the wrong thing here. The word is set at reading size instead of the small caption size the
+         other buttons use, because with no glyph over it there is nothing else to read.
          IT NAMES THE SIDE YOU ARE LOOKING AT rather than the side you would go to (Glen, 2026-08-18:
          "The button should show the current view; clicking it should toggle it to the other side").
          So it reads Front while you face the front, and Back once you have turned round - a reading,
          like the Selected line, not an instruction. It also lights while you are round the back,
          because a builder who has forgotten which way the figure faces will place parts on the wrong
          side of it, and the Toolbar is where they are already looking. -->
-    <button class="ltbtn" id="tSide" style="margin-top:.5rem"
-            title="Which side of the figure you are standing on. Click to walk round to the other side - nothing in the design is changed">&#8644;<small id="tSideName">Front</small></button>
+    <button class="ltbtn wordonly" id="tSide" style="margin-top:.5rem"
+            title="The side of the figure you are standing on. Click to walk around to the other side - nothing in the design is changed"><span id="tSideName">Front</span></button>
   </div>
 
   <!-- (3) WORKSPACE -->
@@ -1128,7 +1150,7 @@ const CONE_TIP = 0.5;     /* top radius, as a fraction of the base radius */
 const CONE_BORE = 0.62;   /* the opening, as a fraction of the TOP radius */
 const CONE_DEPTH = 0.45;  /* how far the opening sinks, as a fraction of the height */
 /* A STUD SEEN END-ON, drawn in one place because it now has two callers: the studs of a part whose
-   connectors face the viewer (relief, and a turned part), and the studs on the SIDE of a SNOT brick
+   connectors face the viewer (relief, and a turned part), and the studs on the SIDE of a side-stud brick
    in the upright view. The mark has to be identical - the same thing seen the same way - and two
    copies of it would not stay that way.
    A stud is a little cylinder, so it is lit on one side and shaded on the other: two arcs inside its
@@ -1218,7 +1240,7 @@ function drawBrick(b,ghost){
   }
   /* STUDS ON A FACE, which a profile view sees END-ON - so they are drawn as the ring, the mark this
      application already uses for a connector pointing at the viewer. Glen, 2026-08-17, on 2434: "I
-     see the studs on the side in the 3D view but not in the 2d view." They are the reason a SNOT
+     see the studs on the side in the 3D view but not in the 2d view." They are the reason a side-stud
      brick is in the design at all - the wings hang on them - so a drawing that omits them says the
      part is a plain block.
      WHERE they are is measured in the library, not guessed here: `side` carries one [across, down]
