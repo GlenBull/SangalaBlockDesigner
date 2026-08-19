@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.114 -->
+<!-- SANGALA_VERSION: 2026-08-19.115 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1006,7 +1006,7 @@ function spin(pts, pw, pd, r){
   for(let k=0;k<((r|0)&3);k++){ const V=W; pts=pts.map(q=>[q[1], V-q[0]]); W = (k&1) ? pw : pd; }
   return pts;
 }
-function shape(p,col,row,fl,face,rot){
+function shape(p,col,row,fl,face,rot,away){
   const oL=overLeft(p,fl), oR=overRight(p,fl);
   const r=(rot|0)&3;                              /* about the face it rests on - see rotOf */
   const x=mx((col-oL)*STUD), y=mx(row*vUnit());
@@ -1016,6 +1016,27 @@ function shape(p,col,row,fl,face,rot){
   const w=mx(((r&1 ? (p.d||1) : p.w)+oL+oR)*STUD);
   const h=face ? mx((r&1 ? p.w : (p.d||1))*STUD) : mx(rowsOf(p)*vUnit());
   ctx.beginPath();
+  /* THE PART'S OWN OUTLINE FIRST, wherever the library can supply one - see silOf. Only a part whose
+     silhouette fills its own box falls through to the rounded rectangle below, and only the cone and
+     the round brick are held back from asking, their shapes having been settled against a photograph.
+     DRAWN AT THE SIZE THE PART IS, not stretched to fill the cells it was placed on: centred across
+     the band exactly as the 3D view centres the mesh in it, and hung from the top of the band when
+     the part is upright, because that is where its origin sits. So a piece that reaches past its own
+     footprint - a side-stud brick's studs, an inverted slope's overhang - reaches past it here too. */
+  const upright = mode==="standing" && !face;
+  const po = (p.shape==="cone" || p.shape==="round") ? null : planOutline(p, upright, away, fl, r);
+  if(po && !po.sil.full){
+    const S=po.sil, sc=mx(LDU), uc=(S.u0+S.u1)/2, vc=(S.v0+S.v1)/2, xc=x+w/2, yc=y+h/2;
+    S.loops.forEach(l=>{
+      l.forEach((q,i)=>{
+        const X = xc + (po.mu ? uc-q[0] : q[0]-uc)*sc;
+        const Y = upright ? y + q[1]*sc : yc + (po.mv ? vc-q[1] : q[1]-vc)*sc;
+        i ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y);
+      });
+      ctx.closePath();
+    });
+    return {x,y,w,h};
+  }
   /* STANDING is a SIDE view, so a part shows its elevation, not its plan (Glen: "the slope and
      cone are shown correctly in the 3D view but incorrectly in the 2D view"). From the side a
      slope is a wedge, a cone is a trapezoid, and a round brick is a plain rectangle - a cylinder
@@ -1195,7 +1216,7 @@ function drawBrick(b,ghost){
   /* `dp` is the rows of STUDS the part shows, and for a turned one that is its DEPTH in studs - not
      rowsOf, which is its height in plates. A 1 x 3 brick is three plates tall, so it drew three rows
      of studs where the part has one (Glen, 2026-08-17). */
-  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, fc=faced(b), rt=rotOf(b);
+  const p=b.p, c=COLORS[b.colorIdx], fl=b.flip, fc=faced(b), rt=rotOf(b), aw=facedAway(b);
   /* the plan's two sides, in the order the SCREEN takes them, which a quarter turn swaps */
   const acr=acrossOf(b), dwn=deepOf2(b), dp=fc ? dwn : rowsOf(p);
   /* the BODY, which for an inverted slope reaches past the stud it rests on */
@@ -1213,16 +1234,16 @@ function drawBrick(b,ghost){
      black brick read as a mass: nothing said it was an object sitting on something. */
   const off=Math.max(1, mx(0.7)+depthOf(b)*mx(0.22));
   ctx.save(); ctx.globalAlpha=(ghost?.12:.22); ctx.translate(off,off);
-  shape(p,b.col,b.row,fl,fc,rt); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
+  shape(p,b.col,b.row,fl,fc,rt,aw); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
 
-  shape(p,b.col,b.row,fl,fc,rt);
+  shape(p,b.col,b.row,fl,fc,rt,aw);
   ctx.fillStyle=c.hex; ctx.fill();
   /* an inner bevel: the same outline stroked wide and CLIPPED to the brick, so only its inside
      half shows - the lit top edge of the moulding, which a single flat fill has no room for */
-  ctx.save(); shape(p,b.col,b.row,fl,fc,rt); ctx.clip();
+  ctx.save(); shape(p,b.col,b.row,fl,fc,rt,aw); ctx.clip();
   ctx.strokeStyle=T.bevel; ctx.lineWidth=Math.max(2, mx(0.7));
-  shape(p,b.col,b.row,fl,fc,rt); ctx.stroke(); ctx.restore();
-  shape(p,b.col,b.row,fl,fc,rt);
+  shape(p,b.col,b.row,fl,fc,rt,aw); ctx.stroke(); ctx.restore();
+  shape(p,b.col,b.row,fl,fc,rt,aw);
   ctx.strokeStyle=edge; ctx.lineWidth=1.3; ctx.stroke();
   /* One stud per stud cell, on the 8 mm pitch. Studio's own two exceptions come with the
      convention: a sloped row carries no stud, and a cone has none where a round brick has one. */
@@ -1287,8 +1308,17 @@ function drawBrick(b,ghost){
        This is the plan making, by mirroring, the same correspondence the 3D views make by orbiting. */
     const mark = (mode==="standing" && faced(b) && facedAway(b)!==viewBack) ? socketRing : studRing;
     if(p.top && p.top.length){
-      spin(p.top.map(q=>[q[0],q[1]]), p.w, p.d||1, rt).forEach(q=>
-        mark(x+mx(STUD)*q[0], y+mx(STUD)*q[1], r, studFace, studEdge, hi, sh));
+      /* THE MARKS RIDE WITH THE OUTLINE, and both of these are what the outline does - see
+         planOutline, which takes them from the yaw the 3D view already works out.
+           - FLIPPING A PART LYING ON ITS FACE IS A HALF TURN IN THE PLANE OF THE PAGE, which is two
+             of the quarter turns, and not a mirror: a mirrored wedge is a part that does not exist,
+             and LEGO's handed wedges carry their own design numbers.
+           - A PART TIPPED STUDS-AWAY has turned half a circle about its own long axis, so the
+             drawing's second axis runs the other way and its studs come with it.
+         Without these the studs of a flipped or far-side wedge stood off the taper they belong to -
+         which only showed once the outline itself was measured. */
+      spin(p.top.map(q=>[q[0],q[1]]), p.w, p.d||1, rt + (fl?2:0)).forEach(q=>
+        mark(x+mx(STUD)*q[0], y+mx(STUD)*(aw ? dp-q[1] : q[1]), r, studFace, studEdge, hi, sh));
     } else
     for(let ry=0;ry<dp;ry++){
       /* the sloped row falls away, so it carries no stud - an inverted slope keeps them all */
@@ -1307,7 +1337,7 @@ function drawBrick(b,ghost){
     }
   }
   if(ghost){ ctx.globalAlpha=1; ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=2;
-             shape(p,b.col,b.row,fl,fc,rt); ctx.stroke(); }
+             shape(p,b.col,b.row,fl,fc,rt,aw); ctx.stroke(); }
   ctx.globalAlpha=1;
 }
 
@@ -1367,7 +1397,7 @@ function draw(){
   if(selBrick){
     ctx.save();
     ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
-    shape(selBrick.p, selBrick.col, selBrick.row, selBrick.flip, faced(selBrick), rotOf(selBrick)); ctx.stroke();
+    shape(selBrick.p, selBrick.col, selBrick.row, selBrick.flip, faced(selBrick), rotOf(selBrick), facedAway(selBrick)); ctx.stroke();
     ctx.restore();
   }
   if(hover && tool==="place") drawBrick(hover,true);
@@ -2231,6 +2261,11 @@ function ldrLoad(id){
   return null;
 }
 function ldrArrived(){
+  /* THE WORKSPACE REDRAWS TOO, because its outlines are now taken from the same geometry: until the
+     part arrives it is drawn from the shape written here by hand, and this is the moment the real
+     one replaces it. It is also what starts the fetch on a page where nothing 3D has been opened -
+     the plan asks for a part the first time it draws one. */
+  draw();
   if(view3D){ pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); renderPreview(); }
   else { miniStamp=""; syncMini(); }   /* the real part has replaced the stand-in box: the inset is drawn from the same triangles */
 }
@@ -2274,6 +2309,194 @@ function partYaw(p, box){
   if(!box) return 0;
   const wLD = Math.round((box[3]-box[0])/20), dLD = Math.round((box[5]-box[2])/20);
   return (wLD === (p.d||1) && dLD === p.w && wLD !== dLD) ? 90 : 0;
+}
+
+/* ---------- THE OUTLINE THE WORKSPACE DRAWS, TAKEN FROM THE PART ITSELF ----------
+   Every shape on the workspace used to come from a polygon written here by hand - a rectangle for a
+   brick, a trapezoid for a wedge - while the 3D view beside it drew the part's real geometry. So a
+   wedge came out as a generic taper and the flat section at the wide end of 43712 did not show at
+   all (Glen, 2026-08-19, and it is his finding). ONE SILHOUETTE PER PART NUMBER, taken from the mesh
+   the 3D view has already loaded, fixes every part rather than that one wedge - and the two pictures
+   are then the same part seen two ways rather than two drawings that have to be kept in step.
+
+   HOW THE SILHOUETTE IS FOUND. Rasterize the projected triangles, then walk the boundary of the
+   filled cells and simplify it. Unioning polygons would be the exact answer and is not worth its
+   own bugs: a part's triangles overlap (a back face lies under a front face), its underside is
+   hollow, and a curved edge is a fan of slivers - all of which rasterize the same way, so no part
+   is a special case. The grid is 160 cells along the part's longer side, which is finer than the
+   workspace ever draws it, and the staircase is straightened by Douglas-Peucker afterwards.
+
+   THREE THINGS THE PLAN WANTS THAT THE MESH DOES NOT SAY:
+     - THE STUDS ARE NOT PART OF THE OUTLINE. They stand at negative y, above the origin plane, and
+       the workspace draws them as its own marks - a ring seen end-on, a proud bump from the side.
+       Clamping y at 0 folds them flat onto the top face, where they fall inside the body and
+       disappear from the silhouette without any test for what a stud is.
+     - A PART WHOSE OUTLINE FILLS ITS OWN BOX IS STILL DRAWN AS THE ROUNDED RECTANGLE it always was.
+       That rounding is a drawing convention, not a measurement, and a brick that lost it would look
+       cut out with scissors beside the ones that kept it. `full` is the test, and it is measured
+       rather than listed, so it needs no register of which parts are rectangles.
+     - THE CONE AND THE ROUND BRICK KEEP THEIR OWN SHAPES. 4589's numbers were settled against a
+       PHOTOGRAPH of the brick over the LDraw file, which draws a collar the real part does not have
+       (Glen, 2026-08-15); a measured silhouette would put that collar back. */
+const ldrSil = Object.create(null);    /* "id|iu|iv" -> the outline in LDU, or false when there is none */
+const SIL_GRID = 160;                  /* cells along the longer side of the part's box */
+const SIL_TOL = 1.2;                   /* how far a simplified edge may stray, in cells */
+
+function silDP(pts, tol){              /* Douglas-Peucker: the straight runs of a staircase collapse */
+  if(pts.length < 3) return pts.slice();
+  const a = pts[0], b = pts[pts.length-1], dx = b[0]-a[0], dy = b[1]-a[1];
+  const n = Math.sqrt(dx*dx + dy*dy);
+  let worst = -1, at = 0;
+  for(let i = 1; i < pts.length-1; i++){
+    const q = pts[i];
+    const d = n ? Math.abs(dx*(a[1]-q[1]) - dy*(a[0]-q[0]))/n
+                : Math.sqrt((q[0]-a[0])*(q[0]-a[0]) + (q[1]-a[1])*(q[1]-a[1]));
+    if(d > worst){ worst = d; at = i; }
+  }
+  if(worst <= tol) return [a, b];
+  return silDP(pts.slice(0, at+1), tol).slice(0, -1).concat(silDP(pts.slice(at), tol));
+}
+/* A CLOSED loop has no ends to hold, so it is cut at its two furthest-apart points first - otherwise
+   the corner the walk happened to start at is the one point simplification can never remove. */
+function silSimplify(loop, tol){
+  if(loop.length < 4) return loop;
+  let far = 0, best = -1;
+  for(let i = 1; i < loop.length; i++){
+    const d = (loop[i][0]-loop[0][0])**2 + (loop[i][1]-loop[0][1])**2;
+    if(d > best){ best = d; far = i; }
+  }
+  return silDP(loop.slice(0, far+1), tol).slice(0, -1)
+    .concat(silDP(loop.slice(far).concat([loop[0]]), tol).slice(0, -1));
+}
+function silArea(loop){
+  let a = 0;
+  for(let i = 0; i < loop.length; i++){
+    const p = loop[i], q = loop[(i+1) % loop.length];
+    a += p[0]*q[1] - q[0]*p[1];
+  }
+  return a/2;
+}
+
+/* The silhouette of one part on one pair of its own axes, measured once and kept. `iu` and `iv` are
+   which of the part's axes run across the drawing and down it; the SIGNS are not asked for here,
+   because a mirror is free once the outline is in hand and would only double the work. */
+function silOf(id, iu, iv){
+  const key = id + "|" + iu + iv;
+  if(key in ldrSil) return ldrSil[key];
+  const m = ldrLoad(id);
+  if(!m) return null;                            /* still on its way, or there is no bridge to ask */
+  const tri = m.tris;
+  const at = (q,i) => i===1 ? (q[1] > 0 ? q[1] : 0) : q[i];     /* the studs fold onto the top face */
+  let u0=1e9, u1=-1e9, v0=1e9, v1=-1e9;
+  for(let i = 0; i < tri.length; i++) for(let k = 0; k < 3; k++){
+    const u = at(tri[i][k], iu), v = at(tri[i][k], iv);
+    if(u < u0) u0 = u; if(u > u1) u1 = u;
+    if(v < v0) v0 = v; if(v > v1) v1 = v;
+  }
+  if(!(u1 > u0) || !(v1 > v0)) return ldrSil[key] = false;      /* seen edge-on: it has no outline */
+  const s = SIL_GRID/Math.max(u1-u0, v1-v0);
+  const W = Math.max(2, Math.round((u1-u0)*s)) + 2;             /* a one-cell margin all round, so */
+  const H = Math.max(2, Math.round((v1-v0)*s)) + 2;             /* every loop closes inside the grid */
+  /* A CELL IS FILLED IF ITS CENTRE FALLS INSIDE ANY TRIANGLE - one scanline per row the triangle
+     actually reaches, so the work is the area covered and nothing more. Handing the whole part to a
+     canvas as one path and reading the pixels back is fewer lines and was the first way this was
+     written; it cost 3.4 SECONDS on the 8 x 16 plate, whose 48,700 triangles become 146,000 edges
+     that a fill has to sort against every scanline. This does the same plate in a few milliseconds.
+     Overlap does not matter here, which is the other reason to rasterize: a back face lying under a
+     front face just marks the same cells twice, where a canvas fill counts windings and would have
+     cancelled the two and punched a hole through the middle of the part. */
+  const on = new Uint8Array(W*H);
+  for(let i = 0; i < tri.length; i++){
+    const t = tri[i];
+    const ax = (at(t[0],iu)-u0)*s + 1, ay = (at(t[0],iv)-v0)*s + 1;
+    const bx = (at(t[1],iu)-u0)*s + 1, by = (at(t[1],iv)-v0)*s + 1;
+    const cx = (at(t[2],iu)-u0)*s + 1, cy = (at(t[2],iv)-v0)*s + 1;
+    if((bx-ax)*(cy-ay) - (cx-ax)*(by-ay) === 0) continue;             /* edge-on: it covers nothing */
+    let r0 = Math.ceil(Math.min(ay,by,cy) - 0.5), r1 = Math.floor(Math.max(ay,by,cy) - 0.5);
+    if(r0 < 0) r0 = 0; if(r1 > H-1) r1 = H-1;
+    for(let row = r0; row <= r1; row++){
+      const y = row + 0.5;
+      let lo = 1e9, hi = -1e9;
+      for(let e = 0; e < 3; e++){
+        const px0 = e===0?ax:e===1?bx:cx, py0 = e===0?ay:e===1?by:cy;
+        const px1 = e===0?bx:e===1?cx:ax, py1 = e===0?by:e===1?cy:ay;
+        if((py0 <= y) === (py1 <= y)) continue;
+        const q = px0 + (y-py0)*(px1-px0)/(py1-py0);
+        if(q < lo) lo = q; if(q > hi) hi = q;
+      }
+      if(hi < lo) continue;
+      let a = Math.ceil(lo - 0.5), b = Math.floor(hi - 0.5);
+      if(a < 0) a = 0; if(b > W-1) b = W-1;
+      if(a <= b) on.fill(1, row*W + a, row*W + b + 1);
+    }
+  }
+  /* THE BOUNDARY, as the sides of filled cells that face an empty one, each directed so the filled
+     cell is on its right. Chained, that gives the outer edge one way round and any hole the other,
+     which is what a nonzero fill needs - it falls out of the rule instead of being sorted out after. */
+  const out = new Map(), kp = (x,y) => x + y*(W+1);
+  const add = (x0,y0,x1,y1) => { const k = kp(x0,y0), a = out.get(k);
+                                 if(a) a.push(kp(x1,y1)); else out.set(k, [kp(x1,y1)]); };
+  for(let y = 0; y < H; y++) for(let x = 0; x < W; x++){
+    if(!on[y*W+x]) continue;
+    if(y === 0   || !on[(y-1)*W+x]) add(x, y, x+1, y);
+    if(x === W-1 || !on[y*W+x+1])   add(x+1, y, x+1, y+1);
+    if(y === H-1 || !on[(y+1)*W+x]) add(x+1, y+1, x, y+1);
+    if(x === 0   || !on[y*W+x-1])   add(x, y+1, x, y);
+  }
+  const loops = [];
+  while(out.size){
+    const start = out.keys().next().value;
+    const walk = [start];
+    let here = start;
+    for(;;){
+      const a = out.get(here);
+      if(!a) break;
+      const to = a.pop();
+      if(!a.length) out.delete(here);
+      here = to;
+      if(here === start) break;
+      walk.push(here);
+      if(walk.length > 40000) break;
+    }
+    if(walk.length > 3) loops.push(silSimplify(walk.map(k => [k % (W+1), (k/(W+1))|0]), SIL_TOL));
+  }
+  if(!loops.length) return ldrSil[key] = false;
+  /* back into the part's own units, so the workspace can draw it at the size the part IS - the plan
+     is not stretched to fill the cells it was placed on, any more than the 3D view is */
+  const big = Math.max.apply(null, loops.map(l => Math.abs(silArea(l))));
+  const keep = loops.filter(l => Math.abs(silArea(l)) >= big*0.02)
+                    .map(l => l.map(q => [u0 + (q[0]-1)/s, v0 + (q[1]-1)/s]));
+  let area = 0;
+  keep.forEach(l => { area += Math.abs(silArea(l)); });
+  return ldrSil[key] = {loops:keep, u0, u1, v0, v1,
+                        full: keep.length === 1 && area >= (u1-u0)*(v1-v0)*0.98};
+}
+
+/* WHICH TWO OF THE PART'S OWN AXES THE DRAWING IS LOOKING ALONG, worked out from the SAME yaw the
+   3D view uses, so the two cannot disagree about which way a wedge points.
+     - upright, the drawing is an elevation: the part's own y runs down the screen, and its x or its
+       z runs across it, whichever way the yaw has turned it;
+     - laid on its face, the drawing is the plan: the two axes are x and z, the studs come at the
+       viewer along -y, and a part TIPPED THE OTHER WAY turns half a circle about its own long axis,
+       which reverses the second of them - the taper of a far wing points the opposite way, as it
+       does on the table.
+   RELIEF TAKES THE SAME MAPPING AS A TIPPED PART, not relief's own 3D matrix, which mirrors (it has
+   a determinant of -1 and is left alone because changing it would alter every relief design at
+   once). The plan's own convention is the one the library measured the stud positions in - across
+   from the left edge, down from the far end - so the outline is put in step with the studs drawn on
+   it rather than with a matrix the plan never used. */
+function planOutline(p, st, away, fl, rot){
+  if(!p || !p.id) return null;
+  const m = ldrLoad(p.id);
+  if(!m) return null;
+  const yaw = partYaw(p, m.box) + (fl ? 180 : 0) + 90*(rot|0);
+  const c = Math.round(Math.cos(yaw*Math.PI/180)), s = Math.round(Math.sin(yaw*Math.PI/180));
+  const iu = c ? 0 : 2, su = st ? (c || s) : (c || -s);
+  const iv = st ? 1 : (c ? 2 : 0);
+  const sv = st ? 1 : (away ? 1 : -1)*(c || s);
+  const sil = silOf(p.id, iu, iv);
+  if(!sil) return null;
+  return {sil, mu: su < 0, mv: sv < 0};
 }
 
 /* Put the part where the page has placed it. The footprint is centred on the cell the brick sits on
