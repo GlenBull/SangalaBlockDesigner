@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.130 -->
+<!-- SANGALA_VERSION: 2026-08-19.132 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3465,7 +3465,24 @@ window.addEventListener("mouseup",()=>{
   const md=moveDrag; moveDrag=null; cv.style.cursor="default";
   const b=bricks[md.i];
   if(!md.moved){ return; }                       /* a press that never moved is a selection, not a move */
-  bricks.splice(md.i,1); settle(b); bricks.push(b);
+  /* A MOVE ACROSS THE PLAN DOES NOT CHANGE THE DEPTH. It used to run settle(), which lands a part
+     clear of whatever is in its new columns - so sliding a brick one stud sideways could carry it
+     layers forward, and dragging it OFF the design onto the cork set its layer to 0 and forgot where
+     it had been. Glen, 2026-08-19, on the wing: "it does not survive a move off the body to get
+     access to copy the blue brick and then back again." He was right, and it is not the paste: the
+     wing loaded in the correct place and the MOVE is what displaced it. Measured beforehand - a
+     sideways drag took the blue plate from layer 2 to 3.2 and the green body brick from 0-2 to
+     3.2-5.2, out of the bird entirely.
+     Settling belongs to PLACEMENT, where a part has no depth yet. A part already in the design has
+     one, the designer chose it, and Depth is its own control now - so the drag keeps it.
+     PARKING IS NOT PLACING, EITHER. The first cure kept the depth of a sideways nudge but still
+     settled a part arriving from the cork, on the reasoning that a candidate has no depth to keep.
+     That put the wing back at layer 2.8 after its trip to the cork and away again, which is the
+     very round trip Glen described - the staging area is where he PUTS a part to get at what is
+     under it, so a part that goes out and comes back must come back unchanged. A move is a move.
+     A part that has never been in the design gets its depth from where it was first put down, which
+     is layer 0 on the cork, and the Depth control is how it is then set. */
+  bricks.splice(md.i,1); bricks.push(b);
   suppressClick=true;                            /* the click this drag ends on must not place or erase */
   draw(); bom(); commit();
   /* SAY NOTHING. Glen, 2026-08-17: "you don't need to tell the designer that they moved the brick;
