@@ -390,6 +390,30 @@
    "color": "White",
    "colorCode": 15,
    "qty": 2
+  },
+  {
+   "id": "14716",
+   "name": "Brick 1 x 1 x 3",
+   "kind": "brick",
+   "w": 1,
+   "d": 1,
+   "h": 9,
+   "shape": "rect",
+   "color": "Black",
+   "colorCode": 0,
+   "qty": 2
+  },
+  {
+   "id": "92438",
+   "name": "Plate 8 x 16",
+   "kind": "plate",
+   "w": 16,
+   "d": 8,
+   "h": 1,
+   "shape": "rect",
+   "color": "Green",
+   "colorCode": 2,
+   "qty": 1
   }
  ]
 }
