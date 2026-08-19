@@ -26,7 +26,8 @@ d.body("The window has four regions, and they carry the same names in all three 
        before_list=True)
 d.item("Menu Bar. ", "Across the top: Open, Save and Snapshot, with Settings beside them, and 3D View "
                      "and About at the right.")
-d.item("Toolbar. ", "Down the left, headed Tools: Select, Part, Erase, Flip, Turn and Rotate, with a "
+d.item("Toolbar. ", "Down the left, headed Tools: Select, Part, Erase, Flip Horizontal, Flip Vertical "
+                    "and Rotate, with a "
                     "button at the foot naming the side of the figure the builder is standing on, Front "
                     "or Back.")
 d.item("Workspace. ", "The middle, where the design is built. The plate sits on a cork surface.")
@@ -114,18 +115,22 @@ d.body("Whether a brick is parked is decided by where it sits rather than by a s
        "at all counts as being on it.")
 
 # ---------------------------------------------------------------- 10
-d.heading("10. Flipping a Slope")
-d.body("A slope faces one way. The Flip tool turns the chosen part to face the other. It is a turn and not "
-       "a mirror image, because a mirrored slope would be a part that does not exist and could not be "
-       "ordered.")
+d.heading("10. Flip Horizontal")
+d.body("Flip Horizontal selects the mirror image of a part, left to right, so that a slope faces the other "
+       "way. A slope is symmetrical, so its mirror image is the same part turned round and one design "
+       "number serves both hands.")
+d.body("Not every part is symmetrical. LEGO makes left and right versions of many wedges, each with its "
+       "own design number, and for those the mirror image is a separate part to order. The application "
+       "does not yet make that substitution: it mirrors the drawing and keeps the number, so a design "
+       "using both hands should be checked against its parts list before ordering.")
 
 # ---------------------------------------------------------------- 11
-d.heading("11. Turning a Part onto Its Side")
-d.body("A part may be laid on the side of the figure, with its studs toward the viewer, instead of standing "
-       "upright. The Turn tool does this, and it stays on until it is pressed again, so several parts may be "
-       "laid the same way in succession. It is how an eye is set into a head and how a flat plate becomes a "
-       "wing.")
-d.body("Rotate turns a part already laid on its side through a quarter turn counterclockwise, about the face "
+d.heading("11. Flip Vertical and Rotate")
+d.body("Flip Vertical tips a part forward, the way a chess piece is tipped over on a board, so that it comes "
+       "to rest against the face of the figure with its studs toward the builder rather than pointing "
+       "upward. It stays on until it is pressed again, so several parts may be set down the same way in "
+       "succession. It is how an eye is set into a head and how a flat plate becomes a wing.")
+d.body("Rotate turns a part already tipped forward through a quarter turn counterclockwise, about the face "
        "it is resting on, so that a wedge may point where the shape needs it to. It does nothing to an "
        "upright part: a quarter turn means something only in a view where the part presents a face.")
 
@@ -236,9 +241,9 @@ d.table("Table 1. Where Each Task Is Done",
          ["Choose a color", "Control panel, Color"],
          ["Move a brick", "Toolbar, Select"],
          ["Remove a brick", "Toolbar, Erase (Ctrl-Z undoes)"],
-         ["Turn a slope around", "Toolbar, Flip"],
-         ["Lay a part on its side", "Toolbar, Turn"],
-         ["Point a part laid on its side", "Toolbar, Rotate"],
+         ["Face a slope the other way", "Toolbar, Flip Horizontal"],
+         ["Tip a part forward, studs toward you", "Toolbar, Flip Vertical"],
+         ["Point a tipped part", "Toolbar, Rotate"],
          ["Move a brick toward the front or the back", "Control panel, Depth"],
          ["Build on the far side of the figure", "Toolbar, Front / Back"],
          ["Watch the design in three dimensions while building", "Control panel, Mini 3D Viewer"],
@@ -259,8 +264,8 @@ d.body("Installation is covered by its own document, Installing Sangala Blocks, 
        "started from an icon. It requires no administrator rights, no driver and no internet connection "
        "once it has been copied.")
 d.body("One part of the installation matters to the snapshots described in Section 17. The renderer that "
-       "draws them, and the parts library it draws from, travel inside the same folder as the application. "
-       "If the Snapshot button is not offered, the application has been started by opening its page "
-       "directly rather than from its own icon; started from the icon, it supplies the renderer itself.")
+       "draws them, and the parts library it draws from, travel in the same folder as the application. If "
+       "the Snapshot button is not offered, the application was started by opening its page directly "
+       "rather than from its icon; started from the icon, it supplies the renderer itself.")
 
 print(d.save(OUT, "User Guide"))

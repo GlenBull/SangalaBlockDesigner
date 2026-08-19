@@ -93,7 +93,7 @@ d.body("The page is one file: markup, style and script together, with no externa
        "workspace and the control panel; those are the names used throughout the family, and the word "
        "rail appears nowhere.")
 d.body("The design is held as an array of bricks, each carrying its part, its color index, its column and "
-       "row, its base, its half step, whether it is flipped, whether it has been turned onto its side and "
+       "row, its base, its half step, whether it is mirrored, whether it has been tipped forward and "
        "through how many quarter turns. Undo and redo work by serializing that array, and the same "
        "serialization is what a .block file holds.")
 d.body("Three canvases are used: the plan view the design is built on; a second, hidden until 3D View is "
@@ -146,7 +146,7 @@ d.item("Drawing Order. ", "Depth dominates, then height. Anything in front cover
                           "or the far side would be drawn last and hide what it was turned to reveal.")
 d.item("What a Part Rests On. ", "A part settles clear of where the brick below it actually is, half step "
                                  "and all, rather than clear of the layer that brick nominally occupies.")
-d.item("Turning a Part. ", "A part laid on its side is as thick as it is high and as tall as it is deep. "
+d.item("Tipping a Part. ", "A part tipped forward is as thick as it is high and as tall as it is deep. "
                            "Its own two other dimensions are swapped onto its face, and swapped again by a "
                            "quarter turn.")
 d.body("The builder moves a part through this axis with the Depth control in the panel, whose two arrows "
@@ -314,8 +314,9 @@ d.table("Table 3. Terms Used in This Manual",
          ["Relief", "A design built up from a backdrop, seen face on"],
          ["Standing", "A design stacked in courses, seen from the side"],
          ["Stud", "The 8 mm module everything is measured in"],
-         ["Turned", "Laid on the side of the figure with its studs toward the viewer, rather than "
-                    "standing upright"]],
+         ["Tipped", "Brought to rest against the face of the figure, studs toward the viewer, rather "
+                   "than standing upright. Set by Flip Vertical; still recorded in a saved design as "
+                   "the field named turn, which the rename did not touch"]],
         weights=[24, 76])
 
 d.heading("Appendix A. Other Platforms")
