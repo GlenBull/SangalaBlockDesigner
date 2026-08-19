@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.127 -->
+<!-- SANGALA_VERSION: 2026-08-19.130 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3278,10 +3278,21 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
      the layers run negative - which is exactly the signed depth Glen described when he named the
      midline (Layer 0 between Layer 1 and Layer -1). Nothing about the stored design changes; a brick
      added from the back simply sits behind the ones already placed. */
+  /* IT ASKS FOR THE HOST'S SURFACE, NOT ITS MOUNTING FACE, and it answers with the face the new part
+     will be mounted BY. depthOf is a mounting face, and for a studs-back part that is its FRONT - so
+     reading it as a rear surface put the resting place one whole thickness out for every studs-back
+     host, and returning a surface as a base put it one thickness out again for a studs-back part.
+     That is how the crane's back wing came to sit at layer -2.2 resting on nothing: placed from the
+     far side, it should have come to rest against the back of the crest slopes at -1.
+     For a design with nothing tipped studs-back these are the same numbers as before, exactly:
+     rearB is depthOf and frontB is depthOf+thickB for every studs-forward part. */
   if(viewBack){
-    let back=0;
-    bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) back=Math.min(back, depthOf(b) - thickB(nb)); });
-    return back;
+    /* Seeded at the part's own thickness, which is the FRONT face of a first course sitting against
+       the backdrop at zero - so an empty column still lands the part at base 0, exactly as it did
+       when this counted from the mounting face, and a design begun from the far side is unchanged. */
+    let front=thickB(nb);
+    bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) front=Math.min(front, rearB(b)); });
+    return Math.round((front - (facedAway(nb) ? 0 : thickB(nb)))*1000)/1000;
   }
   /* CLEAR OF WHERE THE BRICK ACTUALLY IS, half step and all. This read `b.base`, which is the layer
      a part is counted in and NOT where it sits: a part half-stepped onto the midline is half a stud
@@ -3289,8 +3300,8 @@ function restingBase(nb){        /* the layer it would take: just clear of whate
      The whole of Glen's crane head is half-stepped onto the midline, so every piece he added to it
      had to be jogged out by hand afterwards, which is how the eye came to be adrift behind the head
      (2026-08-18). depthOf is where it is; base is only what it is called. */
-  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, depthOf(b)+thickB(b)); });
-  return Math.round(base*1000)/1000;
+  bricks.forEach(b=>{ if(!parked(b) && overlaps(nb,b)) base=Math.max(base, frontB(b)); });
+  return Math.round((base + (facedAway(nb) ? thickB(nb) : 0))*1000)/1000;
 }
 /* A BRICK COMES OUT FROM ANYWHERE, not only off the top (Glen, 2026-08-16: "I would like to be
    able to drag bricks in and out of the design no matter where they are located"). What stood here
@@ -3654,7 +3665,12 @@ function faceToViewer(b, mirror){
   if((rear+front)/2 * (viewBack ? -1 : 1) >= 0) return;   /* on this side, or across the middle */
   const m = mirror===undefined ? mirrorPlane(b) : mirror;
   if(faced(b)) b.turn = viewBack ? "back" : "face";       /* tipped: its studs face the builder */
-  b.base = facedAway(b) ? m-rear : m-front;               /* the face it is now mounted by */
+  /* THE HALF STEP HAS TO COME BACK OUT. The reflected surface is a DEPTH, and `base` is not a depth
+     - depthOf adds the half step to it - so writing the surface straight into base counted the half
+     twice and left the copy half a stud forward, inside its own host. It showed on nothing I tested
+     first, because the blue plate carries no half step; the whole of the crane's HEAD does, so the
+     part it went wrong on was the eye - the one piece Glen has never been able to get to sit down. */
+  b.base = (facedAway(b) ? m-rear : m-front) - halfOf(b);
 }
 function pasteBrick(){
   if(!clipBrick){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
