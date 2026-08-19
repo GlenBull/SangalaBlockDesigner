@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.123 -->
+<!-- SANGALA_VERSION: 2026-08-19.127 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2657,7 +2657,18 @@ function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
     bz0=Math.min(bz0,q[2]); bz1=Math.max(bz1,q[2]);
   }
   const tx = (x0+x1)/2 - (bx0+bx1)/2;
-  const ty = st ? (y0+y1)/2 - (by0+by1)/2 : y0;        /* relief: the body's top face is the far one */
+  /* A STUDS-BACK PART IS ANCHORED BY ITS OTHER END, because its matrix runs the part's own depth the
+     other way. y0 is the near end of the band for a part whose studs face the viewer and the FAR end
+     for one whose studs face away, so anchoring both at y0 grew a studs-back part forward out of its
+     band and INTO the body it should be sitting on the back of - by exactly its own thickness.
+     THIS IS THE .104 FAULT, HALF-CURED: the correction was made to y0/y1 above and the real-geometry
+     path was left anchored at y0, so the box stand-in placed the part correctly and the LDraw mesh
+     did not. It therefore showed only once the bridge had delivered the part - never in the first
+     second of a load, and never with the bridge shut - which is why it outlived the fix.
+     Measured on Crane 9 before the change: the back wing drew 9.6 mm forward of the plan and a
+     studs-back plate 3.2 mm forward, each by its own thickness, while every studs-forward part
+     agreed with the plan exactly. */
+  const ty = st ? (y0+y1)/2 - (by0+by1)/2 : (facedAway(b) ? y1 : y0);
   const tz = st ? z1 : (z0+z1)/2 - (bz0+bz1)/2;        /* standing: the body's top face is at z1 */
   /* Y-down becoming z-up mirrors the part, so the winding turns with it */
   const turn = ldrDet(A) < 0;
@@ -3221,11 +3232,16 @@ function thickToward(b){
    Two parts mounted on the same face and of equal thickness order exactly as they did before, which
    is every ordinary brick in a course - the difference only shows where one part reaches past
    another, which is the case that was wrong. */
+/* THE TWO SURFACES, ASKED FOR BY NAME. Which surface `base` marks depends on how the part is tipped
+   - a studs-forward part is mounted by its REAR face and grows towards the viewer, a studs-back part
+   by its FRONT face and grows away - and writing that arithmetic out again at each site is how the
+   two views came to disagree in the first place. There is one copy of it now, and nearFace, the
+   drawing order and the paste all read it. thickToward(b)/(standing?STUD:PLATE) is thickB(b)
+   exactly, in both modes and all three turn states, checked against every part of the crane. */
+const rearB  = b => depthOf(b) - (facedAway(b) ? thickB(b) : 0);
+const frontB = b => depthOf(b) + (facedAway(b) ? 0 : thickB(b));
 function nearFace(b){
-  const t = thickToward(b) / (mode==="standing" ? STUD : PLATE);
-  const front = depthOf(b) + (facedAway(b) ? 0 : t);   /* its surface towards the front of the figure */
-  const back  = depthOf(b) - (facedAway(b) ? t : 0);   /* and the one towards the back */
-  return viewBack ? -back : front;                     /* walk round and the far surface becomes the near one */
+  return viewBack ? -rearB(b) : frontB(b);   /* walk round and the far surface becomes the near one */
 }
 const quarter = b => (rotOf(b) & 1) === 1;                /* an odd turn swaps the plan's two sides */
 const acrossOf= b => quarter(b) ? (b.p.d||1) : b.p.w;     /* studs across the screen */
@@ -3555,13 +3571,20 @@ window.addEventListener("keydown",(e)=>{
    every other respect - same row, same layer, same colour, same turn, same flip, same quarter turn.
    A twin at the original's own depth is what "another one of these" means; settling it onto whatever
    happens to be under the new column would move it in the one direction hardest to see. */
-let clipBrick=null, pasteN=0;
+let clipBrick=null, clipMirror=0, pasteN=0;
 const PASTE_STEP=1;                      /* studs to the right per paste - on the grid, and visible */
 function copyBrick(){
   const b=selNow();
   if(!b){ say("Select a brick first, then Ctrl+C."); return; }
   clipBrick={p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row, flip:b.flip,
              base:b.base, turn:b.turn, rot:b.rot, half:b.half};
+  /* THE MIRROR IS TAKEN WHEN THE PART IS COPIED, not when it is pasted, and it is held BESIDE the
+     clipboard rather than in it so nothing about it can reach a brick record or a saved file.
+     Read at paste time it would find the first copy: pasting a body brick twice from the far side
+     marched it backwards through the figure a course at a time, because copy one came to rest flush
+     against the original and so became copy two's host. On the near side a run of pastes marches
+     along the row and never moves in depth, and this is what makes the far side match. */
+  clipMirror = mirrorPlane(b);
   pasteN=0;
   /* THE STATUS LINE SPEAKS HERE AND NOT ON THE PASTE, which is the rule this application already
      follows: it says what the designer cannot see. Copying changes nothing on the plate, so without a
@@ -3569,38 +3592,69 @@ function copyBrick(){
      Selected block naming it - which says it better than a sentence would. */
   say("Copied the "+b.p.name+" - Ctrl+V pastes a copy.");
 }
-/* THE COPY IS SETTLED, NOT MIRRORED - it lands the way the Part tool lands a brick, from the side
-   you are standing on. Glen's answer to what a paste should mean from the other side was "a copy on
-   the side you are standing on, mirrored in depth and tipped so its studs face you", and I built the
-   mirror literally: reflect the span about the midline. That is right ONLY when the body the part is
-   mounted on is itself centred on the midline, and the crane's is not. Its side-stud brick spans
-   layers 0 to 2, entirely on the front. So a plate resting on that brick's front face at 2.0 to 2.4
-   mirrored to -2.4 to -2.0 - two layers BEHIND the brick, hanging in space - where placement would
-   have put it on the brick's back face at -0.4 to 0.
+/* THE COPY IS MIRRORED ABOUT WHAT IT IS MOUNTED ON - not about the midline, and not settled against
+   the whole figure. Two attempts stand behind this line and each was measured wrong on Glen's own
+   crane, so both are written down rather than left to be tried again.
 
-   Glen, 2026-08-19: "the behavior should be the same on the front side and on the back side. It works
-   on the front side but not on the back side... I would like it to work the same way on the back
-   side." So the copy now asks restingBase, which is the same function the Part tool asks, and which
-   is already symmetric: from the front a part comes to rest just clear of the FRONT face of what is
-   there, from the back just clear of its REAR face.
+   .120 reflected the span about the MIDLINE. That is right only when the body the part is mounted on
+   is itself centred there, and the crane's is not: its side-stud brick spans layers 0 to 2, entirely
+   on the front, so a plate resting on that brick's front face at 2.0-2.4 mirrored to -2.4 to -2.0,
+   two layers behind the brick and hanging in space.
 
-   THE ONE CORRECTION IS THE MOUNTING CONVENTION. `base` marks the face a part is mounted BY: a
-   studs-forward part is mounted by its REAR face and grows towards the viewer, a studs-away part by
-   its FRONT face and grows away. restingBase answers for a studs-forward part, so a copy turned to
-   face a builder standing at the back is moved on by its own thickness. Without that it settles a
-   thickness too far back, which is the same class of error as the mirror it replaces.
-   Only in a standing figure: a relief has one side, and nothing in it is tipped. */
-function faceToViewer(b){
+   .123 asked restingBase instead, on the reasoning that the Part tool's own function is already
+   symmetric - from the front a part comes to rest clear of the FRONT face of what is there, from the
+   back clear of its REAR face. It is symmetric, and it is still not what a paste means: it settles a
+   part clear of EVERYTHING in its cells. Measured on Crane 9, the copy landed at -2.6 to -2.2, behind
+   the whole bird and inside the floating back wing, because that wing shares its columns eight layers
+   away. Glen: "after paste, the blue brick is sunk into the green brick, same as before."
+
+   THE MIRROR IS THE PART'S OWN HOST. A pasted copy means "another one of these, on the side I am
+   standing on", so what must be preserved is the part's RELATIONSHIP to the brick it is mounted on -
+   not its distance from the midline, and not its distance from the back of the figure. Reflect the
+   span about the mid-plane of that brick and a plate on the front studs lands on the back studs,
+   which is where a builder would put it. A part mounted on nothing has no such brick, and then the
+   midline is the only mirror there is: the crane's two legs and its two crest slopes are already
+   exact midline mirrors of each other, and a paste reproduces each from the other.
+
+   Glen, 2026-08-19: "the behavior should be the same on the front side and on the back side."
+   It is, and the reason it is now is that NEITHER SIDE SETTLES. The near side is an exact twin; the
+   far side is that twin's mirror image. Only in a standing figure: a relief has one side, and
+   nothing in it is tipped. */
+function mountedOn(b){          /* the brick b's mounting face is flush against; largest overlap wins */
+  let best=null, ba=0;
+  bricks.forEach(h=>{ if(h===b || parked(h) || !overlaps(b,h)) return;
+    /* ONLY THE FACE `base` NAMES COUNTS. A part resting ON something is mounted by it; a part that
+       merely has something resting on IT is not. Accepting contact either way sent the crane's own
+       body brick forward off the front of the bird, mirrored about the wing lying against it. */
+    const touch = facedAway(b) ? Math.abs(rearB(h)-frontB(b))<1e-6 : Math.abs(frontB(h)-rearB(b))<1e-6;
+    if(!touch) return;
+    const A=foot(b), B=foot(h);
+    const a = Math.max(0, Math.min(A.x1,B.x1)-Math.max(A.x0,B.x0))
+            * Math.max(0, Math.min(A.y1,B.y1)-Math.max(A.y0,B.y0));
+    if(a>ba || (a===ba && best && thickB(h)>thickB(best))){ best=h; ba=a; } });
+  return best;
+}
+/* DETAIL SITS ON DETAIL, and the mirror is the body underneath it all. The crane carries a blue plate
+   on the side-stud brick and a yellow plate on the blue one; mirroring the yellow about the blue
+   would drive it into the body, because the blue plate has no free back. Following the chain through
+   TIPPED hosts to the first upright brick mirrors the whole stack together, so the two plates come
+   round in order and land in the order they were built. */
+function mirrorHost(b){
+  let h = mountedOn(b);
+  for(let i=0; h && faced(h) && i<8; i++){ const up = mountedOn(h); if(!up) break; h = up; }
+  return h;
+}
+/* The plane to reflect about, doubled - so a span [r,f] maps to [m-f, m-r] with no halving. */
+const mirrorPlane = b => { const h = mirrorHost(b); return h ? rearB(h)+frontB(h) : 0; };
+function faceToViewer(b, mirror){
   if(mode!=="standing") return;
-  /* A PART ALREADY ON THE BUILDER'S SIDE IS AN EXACT TWIN and is not touched - that is the front-side
-     behaviour, which works and which Glen asked to have matched, not changed. Settling it here would
-     stack the copy in front of the original instead of beside it. */
-  const t = thickToward(b)/STUD, d = depthOf(b);
-  const rear = d - (facedAway(b) ? t : 0), front = d + (facedAway(b) ? 0 : t);
+  /* A PART ALREADY ON THE BUILDER'S SIDE IS AN EXACT TWIN and is not touched - that is the near-side
+     behaviour, which works and which Glen asked to have matched, not changed. */
+  const rear = rearB(b), front = frontB(b);
   if((rear+front)/2 * (viewBack ? -1 : 1) >= 0) return;   /* on this side, or across the middle */
+  const m = mirror===undefined ? mirrorPlane(b) : mirror;
   if(faced(b)) b.turn = viewBack ? "back" : "face";       /* tipped: its studs face the builder */
-  const rest = restingBase(b);
-  b.base = (faced(b) && b.turn==="back") ? rest + thickB(b) : rest;
+  b.base = facedAway(b) ? m-rear : m-front;               /* the face it is now mounted by */
 }
 function pasteBrick(){
   if(!clipBrick){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
@@ -3610,7 +3664,7 @@ function pasteBrick(){
      the builder is standing, and a copy that fans out backwards is the same mistake in a new place. */
   const step = (viewBack ? -PASTE_STEP : PASTE_STEP) * (++pasteN);
   const nb={...clipBrick, p:{...clipBrick.p}, col:clipBrick.col + step};
-  faceToViewer(nb);                        /* brought to the side the builder is standing on */
+  faceToViewer(nb, clipMirror);            /* brought to the side the builder is standing on */
   bricks.push(nb); selBrick=nb; say("");   /* cleared, as placing a brick clears it - the copy has been used */
   draw(); commit();                      /* now, not on the usual delay: rapid pastes undo one at a time */
 }
@@ -3976,10 +4030,19 @@ function toLdr(){
          is 8. The underside is the box's own maximum y (studs run along -Y), and after the turn that
          becomes the face against the figure. */
       const yBot = box ? box[4] : h*LDU_PLATE;
+      /* AND WHICH END OF ITSELF IT MOUNTS BY TURNS WITH THE ATTITUDE. The two matrices differ in
+         their third row - +1 for studs forward, -1 for studs away - so the part's own body runs the
+         opposite way in z, and one placement cannot serve both. Subtracting yBot in both put a
+         studs-away part TWO of its own thicknesses in front of its layer: measured on Crane 9, the
+         back wing exported 48 LDU (19.2 mm) forward and a studs-back plate 16 LDU (6.4 mm), while
+         every studs-forward part landed exactly on its plan span.
+         This is the .104 mounting-face correction reaching its third consumer. The plan had it, the
+         3D view had it in the box stand-in only, and the export had it nowhere. */
+      const zMount = -depthOf(b)*LDU_STUD + (facedAway(b) ? yBot : -yBot);
       /* The correction is the box centre carried through M, subtracted from the placement. M's third
          row has no x or z term in either attitude, so the depth needs none - as it never did. */
       out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(bx - (M[0]*gx + M[2]*gz))+" "+ldNum(cy - (M[3]*gx + M[5]*gz))+
-               " "+ldNum(-depthOf(b)*LDU_STUD - yBot)+" "+
+               " "+ldNum(zMount)+" "+
                M.map(ldNum).join(" ")+" "+p.id+".dat");
       return;
     }
