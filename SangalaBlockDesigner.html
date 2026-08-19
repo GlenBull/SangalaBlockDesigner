@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.116 -->
+<!-- SANGALA_VERSION: 2026-08-19.117 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1384,8 +1384,8 @@ function draw(){
      cover the very bricks it was turned round to reveal. */
   const away = viewBack ? -1 : 1;
   const order=bricks.slice().sort(mode==="standing"
-    ? (a,b)=>away*(depthOf(a)-depthOf(b)) || ((b.row||0)-(a.row||0))
-    : (a,b)=>away*(depthOf(a)-depthOf(b)));
+    ? (a,b)=>(nearFace(a)-nearFace(b)) || away*(depthOf(a)-depthOf(b)) || ((b.row||0)-(a.row||0))
+    : (a,b)=>(nearFace(a)-nearFace(b)) || away*(depthOf(a)-depthOf(b)));
   order.forEach(b=>drawBrick(b,false));
   /* THE SELECTED BRICK IS OUTLINED, because a selection you cannot see is not a selection - and
      Delete would then be a keystroke that takes off a part the builder cannot identify. Drawn after
@@ -1404,7 +1404,8 @@ function draw(){
   ctx.restore();
   ctx.restore();
   bom();
-  syncMini();     /* the inset shows the same design from another angle, so it follows every redraw - cheaply, see the stamp */
+  sync3D();       /* whichever 3D picture is up shows the same design from another angle, so it follows every
+                     redraw - cheaply, because both are guarded by the stamp */
 }
 
 /* ---------- left toolbar flyout: Studio's #partmenu pattern ---------- */
@@ -1638,6 +1639,7 @@ function selPiece(){
    view is where you study the model, the inset is a fixed reference you glance at. It opens at the
    three-quarter angle a LEGO instruction is drawn at. */
 let miniYaw=-0.45, miniPitch=0.22, miniZoom=1, miniBase=1, miniCenter=[0,0,0], miniDrag=null, miniStamp="";
+let pvStamp="";   // the full 3D View's own copy of the same stamp - see geoStamp and syncView3D
 let boxDrag=null;   /* carrying the whole window by its bar, which is a different gesture from turning the model inside it */
 /* CLOSED WHEN THE APPLICATION OPENS (Glen, 2026-08-18: "The default should load with the 3D
    mini-viewer turned off"). It is a window you call for while working on depth, not part of the
@@ -2035,6 +2037,36 @@ function renderMini(){
    would rasterize the whole figure because a pointer moved three pixels. So the design is reduced to
    a short string and the inset redraws only when that string changes: a part placed, moved, turned,
    coloured or deleted, the mode, the side you are standing on, or which brick is selected. */
+/* WHAT THE DESIGN IS, AS A SHORT STRING: a part placed, moved, turned, tipped, coloured or deleted,
+   the mode, the side you are standing on, the frame's scale and the page. Both 3D pictures compare
+   against it, so both rebuild on the same events and neither can be left showing an older design. */
+function geoStamp(){
+  return mode+"|"+viewBack+"|"+frameScale+"|"+pageKind+"|"+bricks.filter(b=>!parked(b)).map(b=>
+      b.p.id+","+b.col+","+b.row+","+b.base+","+(b.half||0)+","+(b.turn?1:0)+","+(b.rot||0)+","+(b.flip?1:0)+","+b.colorIdx).join(";");
+}
+/* KEEP WHICHEVER 3D PICTURE IS UP CURRENT - one call, made by draw(), so an edit cannot reach one
+   view and miss the other. Glen, 2026-08-19: "In the 3D view, the depth controls had no effect.
+   However, in the mini 3D viewer, the adjustments to depth are reflected."
+   The reason was that draw() ended by calling syncMini, and syncMini returns at once while the full
+   3D View is up. Every control in the panel - Depth, Rotate, Flip, colour, Delete - acts on the
+   selected brick and then calls draw(), so with the 3D View up NONE of them showed. Only Undo and
+   Front / Back carried a refresh of their own, which is why those two worked and nothing else did.
+   Written once here instead of at each of those controls: the next control added would have had to
+   remember, and this one is not the kind of thing anybody remembers. */
+function sync3D(){ if(view3D) syncView3D(); else syncMini(); }
+/* The full 3D View, rebuilt only when the design has actually changed - the same guard the inset has
+   always had. `refit` re-frames the camera, which is right when the view is opened or the figure is
+   turned round, and wrong for an edit: re-fitting under the hand would move the model while it is
+   being worked on. */
+function syncView3D(refit){
+  const geo=geoStamp();
+  if(geo!==pvStamp || refit){
+    pvStamp=geo;
+    pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()}));
+    if(refit) pvBounds();
+  }
+  renderPreview();
+}
 function syncMini(){
   const mb=$("minibox");
   /* Turned off, or the full 3D View is up - in which case a picture of it in its own corner says
@@ -2042,10 +2074,8 @@ function syncMini(){
   if(view3D || !insetOn){ mb.style.display="none"; return; }
   const wasHidden = mb.style.display==="none";
   mb.style.display="";
-  const live=bricks.filter(b=>!parked(b));         /* a candidate parked on the cork is not in the model, so not in 3D either */
   const sel=selPiece();                            /* the same count the ring is drawn from - see selPiece */
-  const geo=mode+"|"+viewBack+"|"+frameScale+"|"+pageKind+"|"+live.map(b=>
-      b.p.id+","+b.col+","+b.row+","+b.base+","+(b.half||0)+","+(b.turn?1:0)+","+(b.rot||0)+","+(b.flip?1:0)+","+b.colorIdx).join(";");
+  const geo=geoStamp();
   const resized=sizeMini();
   if(geo===miniStamp && sel===pvSel && !resized && !wasHidden) return;
   /* THE SELECTION IS HELD APART FROM THE GEOMETRY, because choosing a different brick moves nothing:
@@ -2285,13 +2315,15 @@ function ldrLoad(id){
   return null;
 }
 function ldrArrived(){
+  /* The stand-in box has been replaced by the real part, and the design string has not changed - so
+     both stamps are cleared by hand, or the guard would decide nothing needs rebuilding. */
+  miniStamp=""; pvStamp="";
   /* THE WORKSPACE REDRAWS TOO, because its outlines are now taken from the same geometry: until the
      part arrives it is drawn from the shape written here by hand, and this is the moment the real
      one replaces it. It is also what starts the fetch on a page where nothing 3D has been opened -
-     the plan asks for a part the first time it draws one. */
+     the plan asks for a part the first time it draws one. draw() ends by bringing whichever 3D
+     picture is up up to date, so nothing more is needed here. */
   draw();
-  if(view3D){ pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); renderPreview(); }
-  else { miniStamp=""; syncMini(); }   /* the real part has replaced the stand-in box: the inset is drawn from the same triangles */
 }
 
 /* WHICH WAY A PART MUST TURN to lie the way the page has placed it. Two rules, and the order
@@ -2647,7 +2679,7 @@ function bricksToTris(){
        midline rather than on top of the green brick" - measured at 11.2 mm inside the body).
        So a studs-away part grows the other way, away from the viewer, from the same mounting face. */
     const yMount = -depthOf(b) * (mode==="standing" ? STUD : PLATE);
-    const thk = (fc ? (p.h||1)*PLATE : (mode==="standing" ? deepOf2(b)*STUD : (p.h||1)*PLATE));
+    const thk = thickToward(b);            /* the same measure the workspace orders its drawing by */
     const y1 = facedAway(b) ? yMount + thk : yMount;
     const y0 = y1 - thk;
     if(mode==="standing"){
@@ -2882,7 +2914,7 @@ $("bView3D").onclick=()=>{
   $("pv").style.display = view3D ? "" : "none";
   if(view3D){
     setTool("select");
-    sizePvToCv(); pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); pvBounds(); renderPreview();
+    sizePvToCv(); syncView3D(true);        /* built and framed: the view is being opened */
     say("");
   } else { say(""); draw(); }
 };
@@ -2940,7 +2972,7 @@ $("tSide").onclick =()=>{ viewBack=!viewBack;
   if(viewBack) backAxis=figureAxis();      /* the figure turns about its own centre, fixed at the moment it turns */
   miniYaw += Math.PI; pvYaw += Math.PI;
   hover=null; syncSide(); draw();
-  if(view3D){ pvBounds(); renderPreview(); } else { miniStamp=""; syncMini(); }
+  if(view3D) syncView3D(true); else { miniStamp=""; syncMini(); }   /* the figure has turned: re-frame */
   say("");};
 syncSide();
 
@@ -3130,6 +3162,30 @@ const rotOf   = b => b ? ((b.rot|0) & 3) : 0;
    while it was a flag opens exactly as it was written. */
 const halfOf  = b => b && b.half===true ? 0.5 : ((b && +b.half) || 0);
 const depthOf = b => (b.base||0) + halfOf(b);
+/* HOW THICK THE PART IS ALONG THE LINE OF SIGHT, in millimetres. Asked in two places that must not
+   disagree - the 3D build, which grows the mesh by it from the mounting face, and the workspace,
+   which needs it to know which part is in front of which. */
+function thickToward(b){
+  const p = b.p;
+  return faced(b) ? (p.h||1)*PLATE : (mode==="standing" ? deepOf2(b)*STUD : (p.h||1)*PLATE);
+}
+/* WHERE THE PART'S NEAREST SURFACE IS, in layers, from where the viewer is standing.
+   `base` marks the face a part is MOUNTED BY, and that is not the face you see: a part reaches
+   towards you by its own thickness from there (or away from you, if it is tipped studs-back). The
+   workspace used to order its drawing by the mounting face alone, so a wing whose hollow reaches
+   forward OVER a stepped plate was drawn underneath it, while the 3D view - which has a depth buffer
+   and so compares the surfaces themselves - showed it correctly in front. Glen, 2026-08-19: "the 3D
+   mini-viewer shows the white plate fitting perfectly over the blue and yellow stepped plates, but
+   the 2d view shows the white wing as being beneath the yellow plate... both can't be correct."
+   Two parts mounted on the same face and of equal thickness order exactly as they did before, which
+   is every ordinary brick in a course - the difference only shows where one part reaches past
+   another, which is the case that was wrong. */
+function nearFace(b){
+  const t = thickToward(b) / (mode==="standing" ? STUD : PLATE);
+  const front = depthOf(b) + (facedAway(b) ? 0 : t);   /* its surface towards the front of the figure */
+  const back  = depthOf(b) - (facedAway(b) ? t : 0);   /* and the one towards the back */
+  return viewBack ? -back : front;                     /* walk round and the far surface becomes the near one */
+}
 const quarter = b => (rotOf(b) & 1) === 1;                /* an odd turn swaps the plan's two sides */
 const acrossOf= b => quarter(b) ? (b.p.d||1) : b.p.w;     /* studs across the screen */
 const deepOf2 = b => quarter(b) ? b.p.w : (b.p.d||1);     /* studs down it, before the row grid */
@@ -3413,8 +3469,7 @@ function restoreState(st){
      menu still disagrees with is the next defect */
   setPageSize(pageKind); $("pagesize").value=pageKind;
   $("selMode").value=mode; $("frScale").value=Math.round(frameScale*100);
-  hover=null; buildFrameTop(); draw();
-  if(view3D){ pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()})); renderPreview(); }
+  hover=null; buildFrameTop(); draw();      /* which brings whichever 3D picture is up up to date */
 }
 function undo(){
   if(histTimer){ clearTimeout(histTimer); histTimer=null; commit(); }   // flush a settling change so it is on the stack
