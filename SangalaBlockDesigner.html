@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.103 -->
+<!-- SANGALA_VERSION: 2026-08-19.114 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -708,7 +708,10 @@ let part = {kind:"brick", w:3, d:2, id:"3002", n:"2x3"};   // the part the Toolb
 let selCol = 3, flip = false;
 /* Turn: the next part goes down on the SIDE of the figure, studs towards you. Beside `flip`
    because it is the same kind of state - how the next placement is laid, not a mode. */
-let faceNext = false;
+/* The attitude the NEXT part is laid in: null for studs up, or the string a tipped part records.
+   It holds the string rather than a flag because there are two tipped attitudes now, and which one
+   the button means depends on the side the builder is standing on. */
+let faceNext = null;
 /* THE QUARTER TURNS A PART HAS BEEN GIVEN IN THE PLANE IT IS DRAWN IN, 0 to 3, counterclockwise.
    Glen, 2026-08-17, building the crane's wing: "i have functions named flip and turn, but neither
    will rotate it counterclockwise to position it for use as a wing." Flip mirrors and Turn lays a
@@ -1166,6 +1169,20 @@ function studRing(sx,sy,r,studFace,studEdge,hi,sh){
   ctx.beginPath(); ctx.arc(sx,sy,r,0,6.2832);
   ctx.strokeStyle=studEdge; ctx.lineWidth=1; ctx.stroke();
 }
+/* THE SAME CIRCLE, LIT FROM THE OTHER SIDE. A stud is drawn with its highlight up on the left and
+   its shadow down on the right, which is what makes it read as standing proud; exchange the two and
+   the identical mark reads as a recess. That is exactly the difference between looking at a part's
+   studs and looking into its underside, so the underside needs no new drawing - only the light moved.
+   Glen, 2026-08-19, on a part drawn with nothing at all: "it is hollow underneath with studs on top.
+   How can it look bare from the back?" It cannot, and it no longer does. */
+function socketRing(sx,sy,r,studFace,studEdge,hi,sh){
+  studRing(sx,sy,r,studFace,studEdge,sh,hi);          /* the light moved: highlight below, shadow above */
+  /* AND SHADED, because the light alone is too quiet to read at working size - which I could see in
+     the render before Glen had to. A recess is darker than the face around it whatever colour the
+     part is, so the wash is black at low alpha rather than a second colour to keep in step. */
+  ctx.beginPath(); ctx.arc(sx,sy,r*0.72,0,6.2832);
+  ctx.fillStyle="rgba(0,0,0,.20)"; ctx.fill();
+}
 function drawBrick(b,ghost){
   /* A BRICK IS DRAWN THE WAY STUDIO DRAWS A PART, in Studio's own three marks: the colour as the
      fill, a GRAY outline (#8a8a8a) which is Studio's mark for a part rather than a cut line, and
@@ -1262,9 +1279,16 @@ function drawBrick(b,ghost){
        part's own geometry. 6069 has two, side by side at its wide end; the grid below would give it
        sixteen and put four of them outside its own outline (Glen, 2026-08-17). They take the same
        quarter turn the outline does. */
+    /* WHICH FACE YOU ARE LOOKING AT depends on where you stand, not on the part alone: walk round
+       with Front / Back and the far wing becomes the near one. A tipped part whose attitude agrees
+       with the side being viewed from shows its STUDS; one that disagrees shows its UNDERSIDE, in
+       the same positions, drawn as recesses. Nothing is omitted either way - a part is never blank -
+       and the pair is what tells the near wing from the far one in the plan, where nothing else can.
+       This is the plan making, by mirroring, the same correspondence the 3D views make by orbiting. */
+    const mark = (mode==="standing" && faced(b) && facedAway(b)!==viewBack) ? socketRing : studRing;
     if(p.top && p.top.length){
       spin(p.top.map(q=>[q[0],q[1]]), p.w, p.d||1, rt).forEach(q=>
-        studRing(x+mx(STUD)*q[0], y+mx(STUD)*q[1], r, studFace, studEdge, hi, sh));
+        mark(x+mx(STUD)*q[0], y+mx(STUD)*q[1], r, studFace, studEdge, hi, sh));
     } else
     for(let ry=0;ry<dp;ry++){
       /* the sloped row falls away, so it carries no stud - an inverted slope keeps them all */
@@ -1278,7 +1302,7 @@ function drawBrick(b,ghost){
            Only while the part sits square: once it has been given a quarter turn the ramp no longer
            runs along the columns, and striking one out would take the studs off the wrong edge. */
         if(fc && !rt && p.shape==="slope" && (fl ? cx===acr-1 : cx===0)) continue;
-        studRing(x+mx(STUD)*(cx+.5), y+mx(STUD)*(ry+.5), r, studFace, studEdge, hi, sh);
+        mark(x+mx(STUD)*(cx+.5), y+mx(STUD)*(ry+.5), r, studFace, studEdge, hi, sh);
       }
     }
   }
@@ -2288,8 +2312,21 @@ function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
      along -y) point at you. The quarter turns are then a plain rotation in the screen plane.
      RELIEF IS LEFT EXACTLY AS IT WAS. Its own mapping has been in use since the mode was built and is
      not what Glen is looking at; changing it here would alter every relief design at once. */
+  /* THE FAR SIDE'S ATTITUDE is the near one turned half a circle about ITS OWN LONG AXIS - the
+     scene's x, which runs across the screen. That maps y to -y and z to -z and leaves x alone, so
+     the studs (along the part's -y) come to point AWAY from the viewer and THE TAPER GOES ON
+     POINTING THE SAME WAY. Turning it about the FIGURE's vertical instead also puts the studs where
+     they belong, which is why the depth looked right, but it reverses x - and Glen saw exactly that:
+     "the tapered part faces the tail in the 2d view and faces the head in the 3D view." Flipping z
+     along with y is invisible on a wedge tapered symmetrically about its long axis, which these are.
+     It is a rotation, determinant +1, not a reflection: a reflected wedge is a part that does not
+     exist, and a reflection here is what once drew the wing wide at the bottom.
+     DERIVED HERE, SETTLED BY RENDERING. This matrix has been got wrong on paper twice before; the
+     test is the 3D view and the LDraw export agreeing with the plan, not this comment. */
   const A = st  ? [c*LDU, 0, s*LDU,  s*LDU, 0, -c*LDU,  0, -LDU, 0]
-          : fc  ? [c*LDU, 0, -s*LDU,  0, LDU, 0,  s*LDU, 0, c*LDU]
+          : fc  ? (facedAway(b)
+                   ? [ c*LDU, 0, -s*LDU,  0, -LDU, 0,  -s*LDU, 0, -c*LDU]
+                   : [ c*LDU, 0, -s*LDU,  0,  LDU, 0,   s*LDU, 0,  c*LDU])
                 : [c*LDU, 0, s*LDU,  0, LDU, 0,  s*LDU, 0, -c*LDU];
   const put = q => [A[0]*q[0]+A[1]*q[1]+A[2]*q[2], A[3]*q[0]+A[4]*q[1]+A[5]*q[2], A[6]*q[0]+A[7]*q[1]+A[8]*q[2]];
   let bx0=1e9,by0=1e9,bz0=1e9,bx1=-1e9,by1=-1e9,bz1=-1e9;
@@ -2354,8 +2391,18 @@ function bricksToTris(){
        figure, plates coming towards the viewer for a relief. Standing used to be pinned to 0 here,
        which is what made the figure one course deep. At base 0 this is still exactly 0, so every
        design saved before today opens unchanged. */
-    const y1 = -depthOf(b) * (mode==="standing" ? STUD : PLATE);
-    const y0 = y1 - (fc ? (p.h||1)*PLATE : (mode==="standing" ? deepOf2(b)*STUD : (p.h||1)*PLATE));
+    /* WHICH WAY THE THICKNESS RUNS FOLLOWS THE ATTITUDE. `base` marks the face the part is mounted
+       by, and everything else has always grown from it TOWARDS the viewer - which is right for a
+       part whose studs face the front, and wrong for one whose studs face the back. Given the same
+       direction, a studs-to-the-back wing grew forward INTO the body it should have been sitting
+       on the back of, and came to rest at the midline (Glen, 2026-08-19: "2D view correctly shows
+       wing on back side on surface of the green brick", and "the brick is being placed at the
+       midline rather than on top of the green brick" - measured at 11.2 mm inside the body).
+       So a studs-away part grows the other way, away from the viewer, from the same mounting face. */
+    const yMount = -depthOf(b) * (mode==="standing" ? STUD : PLATE);
+    const thk = (fc ? (p.h||1)*PLATE : (mode==="standing" ? deepOf2(b)*STUD : (p.h||1)*PLATE));
+    const y1 = facedAway(b) ? yMount + thk : yMount;
+    const y0 = y1 - thk;
     if(mode==="standing"){
       /* Upright: a box of the part's own height, with its studs standing on top. A slope loses
          the corner at its fallen end, along the LENGTH, which is what you see from the side.
@@ -2508,11 +2555,17 @@ $("tFlip").onclick  =()=>{
    It does NOT re-settle the brick: turning changes the cells it claims, and settle() would compare
    the brick against itself and push it a layer forward. It stays in the layer it is in.
    No message either way: the button stays lit, which is the state. */
-function syncFace(){ const b=selNow(); $("tFace").classList.toggle("on", b ? b.turn==="face" : faceNext); }
+/* THE BUTTON KEEPS ONE MEANING - tip it toward me - AND THE STORED VALUE FOLLOWS THE SIDE YOU ARE
+   ON. From the front that is studs to the front; from the far side it is studs to the back, which is
+   what a wing on that side needs and what could not be expressed until today. So the builder never
+   thinks about which value is being written: they walk round and tip it, exactly as they would with
+   the part in their hand. */
+const tipHere = () => viewBack ? "back" : "face";
+function syncFace(){ const b=selNow(); $("tFace").classList.toggle("on", b ? faced(b) : !!faceNext); }
 $("tFace").onclick  =()=>{
   const b = selNow();
-  if(b){ b.turn = b.turn==="face" ? undefined : "face"; commit(); }
-  else faceNext = !faceNext;
+  if(b){ b.turn = faced(b) ? undefined : tipHere(); commit(); }
+  else faceNext = faceNext ? null : tipHere();
   syncFace(); draw();
 };
 /* ROTATE FOLLOWS TURN AND FLIP: it acts on the brick you have selected so the result is on the plan
@@ -2626,9 +2679,22 @@ function syncSide(){
    The message line speaks only when it knows something the designer cannot see, and this is not that
    - the button itself now reads Back and is lit, which IS the state, so the message was narrating an
    action back to the person who had just taken it. */
+/* THE 3D VIEWS WALK ROUND WITH YOU. Turning to the far side mirrors the workspace, and the two 3D
+   pictures used to stay exactly where they were - so the plan showed the bird from behind while the
+   viewer still showed it from the front, and every part disagreed between them. Glen, 2026-08-19:
+   "the 3D view depicts the wing on the back side as the opposite of what it should be... the 2D view
+   and 3D view don't match."
+   Half a turn of the camera is the whole of it. Standing on the other side of a model IS the far
+   view, so the correspondence the plan makes by mirroring, the 3D makes by orbiting - no geometry is
+   touched, and the design still holds still while the viewer moves round it, which is what the
+   button has always promised. Both cameras turn, so opening the full 3D View from the far side also
+   shows the far side. Toggling back adds another half turn and lands where it started. */
 $("tSide").onclick =()=>{ viewBack=!viewBack;
   if(viewBack) backAxis=figureAxis();      /* the figure turns about its own centre, fixed at the moment it turns */
-  hover=null; syncSide(); draw(); say("");};
+  miniYaw += Math.PI; pvYaw += Math.PI;
+  hover=null; syncSide(); draw();
+  if(view3D){ pvBounds(); renderPreview(); } else { miniStamp=""; syncMini(); }
+  say("");};
 syncSide();
 
 /* ---------- magnify: wheel zoom (toward cursor), buttons, pan (middle-mouse / Space+drag) ----------
@@ -2764,7 +2830,7 @@ const thick = p => mode==="standing" ? (p.d||1) : (p.h||1);
    studs across its plan and 3 PLATES through - 1.2 studs - and this reported 4, so anything settling
    against it was pushed more than three times too far out and the wing claimed layers it was nowhere
    near (Glen, 2026-08-18: "they are not shown in the correct layer in the 3D view").
-   The fraction is honest rather than tidy: a plate lying on its side is 0.4 of a stud and the layer
+   The fraction is exact rather than tidy: a plate lying on its side is 0.4 of a stud and the layer
    grid is studs, exactly as the ROW grid cannot hold a turned part either. `base` has taken
    fractions since the half step, so the arithmetic already carries it. */
 const thickB = b => mode!=="standing" ? (b.p.h||1)
@@ -2781,7 +2847,20 @@ const thickB = b => mode!=="standing" ? (b.p.h||1)
    round plate on its side is 8 mm tall - two and a half rows. It is drawn at its true size and sits
    where it is put (Glen's call, 2026-08-17); only the CELLS it claims round up, because overlap has
    to be counted in whole cells. */
-const faced   = b => mode==="standing" && b && b.turn==="face";
+/* A TIPPED PART RECORDS WHERE ITS STUDS POINT, not merely that it is tipped. This was designed on
+   2026-08-16 - "turn named by WHERE THE STUDS POINT: up, front, back" - and only the one value was
+   ever built, so every tipped part pointed its studs at the front. A wing needs its studs pointing
+   INWARD, at the body, which is toward the front on the near side and toward the back on the far
+   side; with one value the far wing had nowhere to put them but outward and showed its underside
+   (Glen, 2026-08-19: "the 3D view depicts the wing on the back side as the opposite of what it
+   should be").
+   "face" is kept as the word for studs toward the front, so every .block written before today opens
+   exactly as it was saved; "back" is the new one. Absent still means studs up.
+   `faced` stays the test for TIPPED AT ALL, because the footprint, the thickness and the cells a
+   part claims are identical either way - which is what keeps this change out of the deepest
+   consumer. Only the direction the studs point differs, and `facedAway` is the test for that. */
+const faced     = b => mode==="standing" && b && (b.turn==="face" || b.turn==="back");
+const facedAway = b => mode==="standing" && b && b.turn==="back";
 /* ONE FUNCTION OWNS THE QUARTER TURN, and everything that draws, places, builds or exports the part
    asks it - the workspace, the cells it claims, the 3D view and the LDraw export alike. A rotation
    known to the drawing and not to the placement is a piece drawn one way and put down another,
@@ -3029,7 +3108,7 @@ cv.addEventListener("mousemove",e=>{
   if(panDrag || moveDrag) return;                          /* panning or moving, not building */
   if(view3D){ if(hover){hover=null;draw();} return; }      /* looking, not building */
   if(tool!=="place"){ if(hover){hover=null;draw();} return; }
-  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext}); draw();
+  const c=cell(e); hover=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext||undefined,rot:rotNext}); draw();
 });
 cv.addEventListener("mouseleave",()=>{hover=null;draw();});
 cv.addEventListener("click",e=>{
@@ -3041,7 +3120,7 @@ cv.addEventListener("click",e=>{
     bricks.splice(i,1); draw(); commit(); return;
   }
   if(tool!=="place") return;
-  const nb=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext?"face":undefined,rot:rotNext});
+  const nb=settle({p:cur(),colorIdx:selCol,col:anchor(c,cur(),rotNext),row:c.row,flip:flip,turn:faceNext||undefined,rot:rotNext});
   bricks.push(nb);
   /* THE BRICK JUST PLACED BECOMES THE SELECTED ONE, which is what makes placing and moving read the
      same: after either, the block above names the brick and gives its layer, and the message line
@@ -3232,7 +3311,7 @@ async function saveBlob(blob,suggestedName,desc,ext,adopt){
   return saveChoice(suggestedName.replace(/\.[A-Za-z0-9]+$/,""),
                     [{ext:ext,desc:desc,build:async()=>blob}], adopt);
 }
-function download(name,text,mime){   // kept for anything that is genuinely a download rather than a save
+function download(name,text,mime){   // kept for anything that is a download rather than a save
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([text],{type:mime||"application/json"}));
   a.download=name; a.click();
@@ -3459,6 +3538,20 @@ function toLdr(){
          swap the plan and the 3D view make. Verified by rendering, not by this arithmetic - the
          turned-part matrix has been derived wrongly on paper twice. */
       const rq = rotOf(b), rc = [1,0,-1,0][rq], rs = [0,1,0,-1][rq];
+      /* ONE MATRIX, WRITTEN ONCE AND USED TWICE. The nine numbers below used to be typed into the
+         output line while the centring correction beside them was derived by hand from the same rc
+         and rs - two statements of one fact, which is how a turn drifts between what is written and
+         where it is put. They now come from this array, so a change to the attitude cannot reach one
+         and miss the other.
+         STUDS AWAY IS THE NEAR ATTITUDE TURNED HALF A CIRCLE ABOUT THE PART'S OWN LONG AXIS, which
+         here is x: y to -y, z to -z, x untouched. Its studs - which run along its -y - come to point
+         along +z, away from the viewer, where the near wing's point along -z, AND THE TAPER GOES ON
+         POINTING THE SAME WAY. Turning it about the FIGURE's vertical instead puts the studs in the
+         same place but reverses x, which pointed the wing at the head instead of the tail. The 3D
+         view carries the identical correction; the two are checked against each other by rendering.
+         Determinant +1 either way: a reflected wedge is a part that does not exist. */
+      const M = facedAway(b) ? [ rc,0, rs, -rs,0, rc,  0,-1,0]
+                             : [ rc,0, rs,  rs,0,-rc,  0, 1,0];
       const dFace = rq&1 ? p.w : d;                                   /* what hangs down, once turned */
       const cy = -(plateRows - b.row)*LDU_PLATE + dFace*LDU_STUD/2;   /* down from the row it hangs on */
       /* IT MOUNTS BY ITS UNDERSIDE, so that face sits ON the layer plane - it is not centred in a
@@ -3467,9 +3560,11 @@ function toLdr(){
          is 8. The underside is the box's own maximum y (studs run along -Y), and after the turn that
          becomes the face against the figure. */
       const yBot = box ? box[4] : h*LDU_PLATE;
-      out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(bx - (gx*rc + gz*rs))+" "+ldNum(cy + (-gx*rs + gz*rc))+
+      /* The correction is the box centre carried through M, subtracted from the placement. M's third
+         row has no x or z term in either attitude, so the depth needs none - as it never did. */
+      out.push("1 "+COLORS[b.colorIdx].code+" "+ldNum(bx - (M[0]*gx + M[2]*gz))+" "+ldNum(cy - (M[3]*gx + M[5]*gz))+
                " "+ldNum(-depthOf(b)*LDU_STUD - yBot)+" "+
-               ldNum(rc)+" 0 "+ldNum(rs)+" "+ldNum(rs)+" 0 "+ldNum(-rc)+" 0 1 0 "+p.id+".dat");
+               M.map(ldNum).join(" ")+" "+p.id+".dat");
       return;
     }
     const x = bx - (gx*c + gz*s), z = bz - (-gx*s + gz*c);
@@ -4158,7 +4253,7 @@ cv.addEventListener("drop", e=>{
      the SELECTED row's color; a part carries its own. */
   const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
   const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
-  const nb = settle({p:p, colorIdx:ci, col:anchor(c,p,rotNext), row:c.row, flip:flip, turn:faceNext?"face":undefined, rot:rotNext});
+  const nb = settle({p:p, colorIdx:ci, col:anchor(c,p,rotNext), row:c.row, flip:flip, turn:faceNext||undefined, rot:rotNext});
   bricks.push(nb);
   selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
