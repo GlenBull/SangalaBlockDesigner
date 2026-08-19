@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-18.097 -->
+<!-- SANGALA_VERSION: 2026-08-19.099 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -718,7 +718,29 @@ let tool = "select", showGuide = true, showGrid = true;
    a design would have to decide which way every sloped part now points, and that is exactly the kind
    of decision that has cost this project days. */
 let viewBack = false;
-const COLS = () => Math.round(modelW/STUD);        /* the plate's width in studs, the mirror's axis */
+const COLS = () => Math.round(modelW/STUD);        /* the plate's width in studs */
+/* THE AXIS THE FIGURE TURNS ABOUT, in mm: a point x on screen maps to backAxis - x while the far
+   side is showing. It used to be the PLATE's centre, which is right only for a figure that happens
+   to be centred on its plate - Glen, 2026-08-19: "the front back button should use the center of
+   the figure as the pivot point." A crane standing left of centre swung across the workspace when
+   it was turned round, and had to be hunted for.
+   IT IS CAPTURED WHEN THE TURN IS MADE, not recomputed on every redraw. A figure's extent changes
+   as bricks are added to it, so an axis derived afresh each frame would drift while building and
+   the whole design would creep sideways under the hand that was building it. Held instead, the turn
+   is also exactly reversible: the same axis carries the figure back.
+   Parts parked on the cork are left out - they are candidates, not the figure. An empty design has
+   no centre of its own and turns about the plate, as everything did before. */
+let backAxis = 0;
+function figureAxis(){
+  let lo=Infinity, hi=-Infinity;
+  bricks.forEach(b=>{ if(parked(b)) return;
+    const x0=b.col, x1=b.col+acrossOf(b);
+    if(x0<lo) lo=x0;
+    if(x1>hi) hi=x1; });
+  /* lo+hi is a whole number of studs, so the axis falls on a stud or a half stud and a mirrored
+     column is still a whole column - which is what keeps cell() landing on the grid. */
+  return (lo>hi ? COLS() : lo+hi) * STUD;
+}
 /* TWO WAYS TO BUILD, and the frame serves both - it is the same silhouette either way.
    STANDING is the figure in the photographs: bricks stacked in courses, studs up, gravity from
    the ground, and the model a stud or two thick. The screen's vertical axis is therefore PLATES,
@@ -1265,7 +1287,7 @@ function draw(){
   /* SEEN FROM THE OTHER SIDE, the whole design is mirrored across the plate - the lattice, the frame
      and every brick together, so nothing can drift out of step with anything else. One transform,
      laid over the placement that everything already shares. */
-  if(viewBack){ ctx.translate(mx(COLS()*STUD), 0); ctx.scale(-1,1); }
+  if(viewBack){ ctx.translate(mx(backAxis), 0); ctx.scale(-1,1); }
   if(showGrid) drawGrid();
   if(showGuide) drawGuide();
   /* BACK TO FRONT, so a brick covers the one it rests on - AND WHAT "BACK" MEANS DEPENDS ON THE
@@ -2578,9 +2600,13 @@ function syncSide(){
   $("tSide").classList.toggle("on", viewBack);
   $("tSideName").textContent = viewBack ? "Back" : "Front";
 }
-$("tSide").onclick =()=>{ viewBack=!viewBack; hover=null; syncSide(); draw();
-  say(viewBack ? "Looking at the far side of the figure. Bricks you place now stack towards you, which is away from the front."
-               : "");};
+/* IT SAYS NOTHING. Three lines of explanation stood here and Glen's verdict was one word: "verbose".
+   The message line speaks only when it knows something the designer cannot see, and this is not that
+   - the button itself now reads Back and is lit, which IS the state, so the message was narrating an
+   action back to the person who had just taken it. */
+$("tSide").onclick =()=>{ viewBack=!viewBack;
+  if(viewBack) backAxis=figureAxis();      /* the figure turns about its own centre, fixed at the moment it turns */
+  hover=null; syncSide(); draw(); say("");};
 syncSide();
 
 /* ---------- magnify: wheel zoom (toward cursor), buttons, pan (middle-mouse / Space+drag) ----------
@@ -2642,7 +2668,7 @@ function cell(e){
      mirrored one; a part placed on it still reaches to the RIGHT on screen, which is leftwards in the
      design, so the anchor moves by the part's own width. Without that a wide brick landed with its
      far end under the pointer and its body somewhere else entirely. */
-  if(viewBack) x = COLS()*STUD - x;
+  if(viewBack) x = backAxis - x;
   return {col:Math.floor(x/STUD), row:Math.floor(y/vUnit()), mirrored:viewBack};
 }
 
