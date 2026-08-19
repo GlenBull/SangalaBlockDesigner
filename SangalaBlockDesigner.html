@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.120 -->
+<!-- SANGALA_VERSION: 2026-08-19.121 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1261,9 +1261,34 @@ function drawBrick(b,ghost){
     const sw=mx(4.8), sHt=Math.max(1.2, mx(1.8)), sR=Math.min(mx(0.5), sHt/2, sw/2);
     /* upright, a measured part shows a stud only over the columns that carry one */
     const topCols = (p.top && p.top.length) ? p.top.map(q=>Math.floor(q[0])) : null;
+    /* A STUD SITS WHERE THE PART ACTUALLY REACHES ITS OWN TOP - ASK THE SHAPE, DO NOT ASSUME.
+       This used to strike out one column, the fallen end of a slope, which is right for a 45-degree
+       slope and wrong for every other angle. 4286 is a 33-DEGREE slope three studs wide: its ramp
+       falls across TWO of them and only the last third of its top is flat. So a stud was drawn on
+       the middle column, out over the ramp, standing in the air.
+       IT LOOKED CORRECT UNTIL THE OUTLINE BECAME TRUTHFUL. The hand-drawn slope this replaced fell
+       exactly one stud as well, so the drawing and the stud rule were wrong in the same direction
+       and agreed with each other. Measuring the outline from the part exposed the rule that had
+       always been wrong - which is why Glen saw a fault "fixed weeks ago" come back on 2026-08-19.
+       The test is the part's own drawn outline: put a point just below the top of the band at the
+       column's centre and ask whether it is inside. That needs no rule per shape - it holds for a
+       slope at any angle, for an inverted slope (whose top IS flat, so it keeps every stud), and for
+       anything measured later. */
+    /* THE POINT MUST BE IN CANVAS COORDINATES, THE PATH IS IN THE CURRENT ONES. isPointInPath tests
+       a path that has been through the transform against a point that has NOT, so under draw()'s
+       translate a design-space point lands hundreds of pixels away and every test says no - which
+       took the studs off every part, plain bricks included. Map the point through the same matrix.
+       Verified by LOOKING: the console lies here, because from the console the transform has already
+       been restored and design coordinates happen to be canvas coordinates. */
+    shape(p,b.col,b.row,fl,fc,rt,aw);
+    const M = ctx.getTransform();
+    const onTop = (px,py) => ctx.isPointInPath(M.a*px + M.c*py + M.e, M.b*px + M.d*py + M.f);
+    const tops = [];
+    for(let cx=0;cx<bcols;cx++)
+      tops.push(onTop(x+mx(STUD)*(cx+.5), y+Math.max(1.5, sHt*0.35)));
     for(let cx=0;cx<bcols;cx++){
       if(topCols && topCols.indexOf(cx-oL)<0) continue;                    /* studs sit on the BODY, overhang included */
-      if(p.shape==="slope" && (fl ? cx===bcols-1 : cx===0)) continue;   /* the fallen end has none */
+      if(!tops[cx]) continue;                                              /* the fallen part of a ramp carries none */
       const px2=x+mx(STUD)*(cx+.5), sL=px2-sw/2, sRt=px2+sw/2, sT=y-sHt;
       ctx.beginPath();
       ctx.moveTo(sL, y);
