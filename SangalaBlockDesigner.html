@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.118 -->
+<!-- SANGALA_VERSION: 2026-08-19.119 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3530,7 +3530,12 @@ function copyBrick(){
 }
 function pasteBrick(){
   if(!clipBrick){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
-  const nb={...clipBrick, p:{...clipBrick.p}, col:clipBrick.col + PASTE_STEP*(++pasteN)};
+  /* ONE STUD TO THE RIGHT AS SEEN, which is a column LOWER once you have walked round to the back:
+     the workspace mirrors there, so stepping the column up marches the copy off to the left, away
+     from the hand that pasted it. Every other thing this application draws is presented from where
+     the builder is standing, and a copy that fans out backwards is the same mistake in a new place. */
+  const step = (viewBack ? -PASTE_STEP : PASTE_STEP) * (++pasteN);
+  const nb={...clipBrick, p:{...clipBrick.p}, col:clipBrick.col + step};
   bricks.push(nb); selBrick=nb; say("");   /* cleared, as placing a brick clears it - the copy has been used */
   draw(); commit();                      /* now, not on the usual delay: rapid pastes undo one at a time */
 }
