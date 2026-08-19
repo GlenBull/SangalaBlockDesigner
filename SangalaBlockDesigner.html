@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.115 -->
+<!-- SANGALA_VERSION: 2026-08-19.116 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1617,7 +1617,23 @@ function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRe
 let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvPlate=false, pvZbuf=null, pvGuide=null;
 let pvGhost=null;   // loose holes, drawn as the shape they would remove
 let pvPart=null, pvIdBuf=null, pvNrm=null, pvEdge=null;   // which PIECE each triangle belongs to, the piece under each pixel, the surface normal there, and the line weight drawn over it - see the outline pass
-let pvSel=0;   // the piece the workspace has selected, 1-based as pvIdBuf counts them; 0 = none. See the selection pass in renderPreview
+let pvSel=0;   // the piece the workspace has selected, 1-based as pvIdBuf counts them; 0 = none. Set by renderPreview from selPiece() on every frame - never stored between them
+/* THE ONE ANSWER TO "WHICH PIECE IS SELECTED", for every picture that draws in 3D. bricksToTris
+   numbers the pieces by walking `bricks` and skipping the ones parked on the cork, so the count has
+   to be made the same way, in the same order - a parked candidate is not in the model and takes no
+   number. Written as a function rather than a value because a value has to be kept up to date by
+   whoever changes the selection, and the one place that did it could not run in either of the two
+   states the 3D View is used in. */
+function selPiece(){
+  if(!selBrick) return 0;
+  let n = 0;
+  for(let i = 0; i < bricks.length; i++){
+    if(parked(bricks[i])) continue;
+    n++;
+    if(bricks[i] === selBrick) return n;
+  }
+  return 0;                                  /* selected, but parked - it is not in the model to ring */
+}
 /* THE INSET'S CAMERA, held apart from the 3D View's so turning one never turns the other - the full
    view is where you study the model, the inset is a fixed reference you glance at. It opens at the
    three-quarter angle a LEGO instruction is drawn at. */
@@ -1673,6 +1689,15 @@ function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=
    The BUILD PLATE is never drawn in the inset: it is 180 mm of bed around a figure a few studs wide,
    and framing the whole of it would shrink the design to a speck. */
 function renderPreview(o){
+  /* WHICH PIECE WEARS THE RING IS ASKED HERE, EVERY FRAME, AND NOWHERE ELSE. It used to be assigned
+     only by syncMini, which does nothing while the full 3D View is up or the inset is closed - so
+     the 3D View drew whatever piece number the inset had left behind, and the two views said
+     different bricks were selected. Glen, 2026-08-19, on Crane 8: "In the 2D view the white wing is
+     clearly selected. The 3D view shows the blue plate selected... both cannot be right."
+     A REMEMBERED COPY OF THE SELECTION IS THE FAULT ITSELF, so there is no longer one to keep in
+     step: every 3D picture is drawn by this function, and it reads the selection the workspace holds
+     at the moment it draws. */
+  pvSel = selPiece();
   const pv=(o&&o.cv)||$("pv"), g=pv.getContext("2d",{willReadFrequently:true}), W=pv.width, H=pv.height;   // the z-buffer reads back every frame - hint the browser so getImageData is fast
   const plate = o ? false : pvPlate;
   const bg=g.createLinearGradient(0,0,0,H); bg.addColorStop(0,"#dfe7ef"); bg.addColorStop(1,"#c3cedb");
@@ -2018,7 +2043,7 @@ function syncMini(){
   const wasHidden = mb.style.display==="none";
   mb.style.display="";
   const live=bricks.filter(b=>!parked(b));         /* a candidate parked on the cork is not in the model, so not in 3D either */
-  const sel=selBrick ? live.indexOf(selBrick)+1 : 0;   /* pvSetTris numbers the pieces in this same order, 1-based */
+  const sel=selPiece();                            /* the same count the ring is drawn from - see selPiece */
   const geo=mode+"|"+viewBack+"|"+frameScale+"|"+pageKind+"|"+live.map(b=>
       b.p.id+","+b.col+","+b.row+","+b.base+","+(b.half||0)+","+(b.turn?1:0)+","+(b.rot||0)+","+(b.flip?1:0)+","+b.colorIdx).join(";");
   const resized=sizeMini();
@@ -2031,8 +2056,7 @@ function syncMini(){
     pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()}));
     const fit=pvBounds($("pvmini")); miniCenter=fit.center; miniBase=fit.base;   /* re-framed as the figure grows; the angle you left it at is kept */
   }
-  pvSel=sel;
-  renderMini();
+  renderMini();          /* which sets pvSel itself, from selPiece - nothing here keeps a second copy */
 }
 (function(){ const mn=$("pvmini");
   /* Its own handlers, on the canvas itself: the workspace's zoom and pan listeners are bound to #cv,
