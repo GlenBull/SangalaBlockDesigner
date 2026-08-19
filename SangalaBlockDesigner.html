@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.117 -->
+<!-- SANGALA_VERSION: 2026-08-19.118 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3504,13 +3504,47 @@ window.addEventListener("keydown",(e)=>{
   draw(); bom(); commit();
   say("");   /* the brick visibly goes; and Ctrl-Z is Ctrl-Z */
 });
-window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-Y redo (Cmd on a Mac)
+/* ---------- Copy and paste (Ctrl-C / Ctrl-V) ----------
+   STUDIO'S, function for function (SangalaStudio.html copySel/pasteClip), because Studio settled this
+   and the family's answer is the family's answer: a copy carries everything about the part, repeated
+   pastes fan out instead of stacking, the new copy becomes the selection, and each paste commits at
+   once so a run of them undoes one at a time.
+   WHAT DIFFERS IS THE STEP. Studio offsets a shape by 5 mm because it lays out in free space; a brick
+   lives on the stud grid, so a copy steps one STUD to the right and stays exactly where it was in
+   every other respect - same row, same layer, same colour, same turn, same flip, same quarter turn.
+   A twin at the original's own depth is what "another one of these" means; settling it onto whatever
+   happens to be under the new column would move it in the one direction hardest to see. */
+let clipBrick=null, pasteN=0;
+const PASTE_STEP=1;                      /* studs to the right per paste - on the grid, and visible */
+function copyBrick(){
+  const b=selNow();
+  if(!b){ say("Select a brick first, then Ctrl+C."); return; }
+  clipBrick={p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row, flip:b.flip,
+             base:b.base, turn:b.turn, rot:b.rot, half:b.half};
+  pasteN=0;
+  /* THE STATUS LINE SPEAKS HERE AND NOT ON THE PASTE, which is the rule this application already
+     follows: it says what the designer cannot see. Copying changes nothing on the plate, so without a
+     word there is no way to know it worked; a paste puts a brick down, selected and outlined, with the
+     Selected block naming it - which says it better than a sentence would. */
+  say("Copied the "+b.p.name+" - Ctrl+V pastes a copy.");
+}
+function pasteBrick(){
+  if(!clipBrick){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
+  const nb={...clipBrick, p:{...clipBrick.p}, col:clipBrick.col + PASTE_STEP*(++pasteN)};
+  bricks.push(nb); selBrick=nb; say("");   /* cleared, as placing a brick clears it - the copy has been used */
+  draw(); commit();                      /* now, not on the usual delay: rapid pastes undo one at a time */
+}
+window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-Y redo; Ctrl-C / Ctrl-V copy a brick (Cmd on a Mac)
   if(!(e.ctrlKey||e.metaKey) || e.altKey) return;
   const tg=(e.target&&e.target.tagName||"").toLowerCase();
-  if(tg==="input"||tg==="textarea"||tg==="select") return;   // let a focused field keep its own text undo
+  if(tg==="input"||tg==="textarea"||tg==="select") return;   // let a focused field keep its own text undo / copy / paste
   const k=(e.key||"").toLowerCase();
   if(k==="z" && !e.shiftKey){ e.preventDefault(); undo(); return; }
   if(k==="y" || (k==="z" && e.shiftKey)){ e.preventDefault(); redo(); return; }
+  /* The 3D View puts the tools down while it is up, as Delete does - it is a way of looking. */
+  if(k==="c"){ if(String(window.getSelection?window.getSelection():"")) return;   // text is highlighted -> that is what was meant
+    e.preventDefault(); if(!view3D) copyBrick(); return; }
+  if(k==="v"){ e.preventDefault(); if(!view3D) pasteBrick(); return; }
 });
 
 /* ---------- files ----------
