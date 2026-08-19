@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.121 -->
+<!-- SANGALA_VERSION: 2026-08-19.122 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1069,20 +1069,36 @@ function shape(p,col,row,fl,face,rot,away){
          from the drawing instead of from the part, against a man holding the part. `mx` is px per
          mm on BOTH axes, so 45 degrees in millimetres is 45 on screen; clamped to w for a part too
          short to finish its fall within its own length. */
-      const run=Math.min(w, mx(STUD));
-      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w-run,y); ctx.lineTo(x+w,y+run);
+      /* THE RAMP IS NOT ONE STUD LONG ON EVERY SLOPE, and this drawing used to assume it was. It is
+         one stud on a 45-degree slope, which is catalogued 2 x N - one stud flat, one fallen - and
+         that is the only case the assumption fits. 4286 is a 33-DEGREE slope catalogued 3 x 1: its
+         ramp reaches across TWO studs to fall the same height, which is what makes it shallower.
+         So the ramp's REACH comes from the part's own name, the way partYaw already reads it, while
+         its FALL stays one stud, which is what leaves the lip at the bottom.
+         This is what the builder sees for the second or so before the library's geometry arrives,
+         and it mattered more than a stand-in usually would: the stud test asks this shape, so a
+         drawing that fell too early put a stud out over the ramp until the real part replaced it
+         (Glen, 2026-08-19, watching Crane 9 load). Now the stand-in and the measured part agree. */
+      const pairs=(p.name||"").match(/\d+\s*x\s*\d+/g);
+      const span=pairs ? parseInt(pairs[pairs.length-1],10) : 2;
+      const runX=Math.min(w, mx(STUD)*Math.max(1, span-1)), runY=Math.min(h, mx(STUD));
+      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w-runX,y); ctx.lineTo(x+w,y+runY);
               ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
-      else  { ctx.moveTo(x,y+run); ctx.lineTo(x+run,y); ctx.lineTo(x+w,y);
+      else  { ctx.moveTo(x,y+runY); ctx.lineTo(x+runX,y); ctx.lineTo(x+w,y);
               ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); }
     } else if(p.shape==="invslope"){
       /* the slope above, reflected in y - see the note there. The top stays flat across both studs
          and the UNDERSIDE is what falls away, so the lip hangs from the roof instead of standing
          on the base, and the one stud of flat bottom is the stud the part rests on. */
-      const run=Math.min(w, mx(STUD));
-      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h-run);
-              ctx.lineTo(x+w-run,y+h); ctx.lineTo(x,y+h); }
+      /* the ramp's reach is read from the name here too - see the slope above. An inverted 45 is
+         catalogued 2 x N and so reaches one stud, which is what this drew before and still draws. */
+      const pairs=(p.name||"").match(/\d+\s*x\s*\d+/g);
+      const span=pairs ? parseInt(pairs[pairs.length-1],10) : 2;
+      const runX=Math.min(w, mx(STUD)*Math.max(1, span-1)), runY=Math.min(h, mx(STUD));
+      if(fl){ ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h-runY);
+              ctx.lineTo(x+w-runX,y+h); ctx.lineTo(x,y+h); }
       else  { ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+h);
-              ctx.lineTo(x+run,y+h); ctx.lineTo(x,y+h-run); }
+              ctx.lineTo(x+runX,y+h); ctx.lineTo(x,y+h-runY); }
     } else if(p.shape==="cone"){
       const t=w*CONE_TIP;                              /* the same half the 3D view tapers to */
       ctx.moveTo(x,y+h); ctx.lineTo(x+(w-t)/2,y); ctx.lineTo(x+(w+t)/2,y); ctx.lineTo(x+w,y+h);
