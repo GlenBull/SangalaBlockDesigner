@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.153 -->
+<!-- SANGALA_VERSION: 2026-08-20.154 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -227,7 +227,7 @@
   <div class="tools">
     <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, a design you saved (.block), or a parts library (.library)"><span class="glyph">&#128194;</span><small>Open</small></button>
     <button class="tbtn" id="bSave" title="Save your design (.block)"><span class="glyph">&#128190;</span><small>Save</small></button>
-    <button class="tbtn" id="bSnap" title="Snapshot: keep a picture of the build as it stands now, drawn the way LEGO documentation draws it"><span class="glyph">&#128247;</span><small>Snapshot</small></button>
+    <button class="tbtn" id="bSnap" title="Snapshot: keep a picture of the build as it stands now - rendered, or the plan as you see it"><span class="glyph">&#128247;</span><small>Snapshot</small></button>
     <button class="tbtn" id="bSettings" title="Setup: what the workspace shows &mdash; click to show or hide"><span class="glyph">&#9881;&#65039;</span><small>Settings</small></button>
   </div>
   <div class="spacer"></div>
@@ -547,6 +547,20 @@
      multiple save buttons throughout the interface." Studio's Save opens a menu (Save as SVG /
      Save project) and Mosaic's opens one (Project / Image / Tile List); this is the same menu,
      so everything this application writes is reached from the one place. -->
+<!-- SNAPSHOT ASKS WHICH KIND OF PICTURE (Glen, 2026-08-20: "we need some type of option to choose
+     the type of snapshot made at the time that it is made"). The two are not interchangeable and
+     each is better at something the other cannot do:
+       * the THREE-DIMENSIONAL one shows what the model looks like, and is the only one that can
+         show depth - the two eyes of the crane sit in the same square of the plan and differ only
+         in which side of the head they are on;
+       * the PLAN is the view the builder is working in, so where a piece goes is unambiguous and
+         nothing hides behind anything, which is what makes it the better picture for "put this
+         piece here".
+     Same menu pattern as Save, on the button it belongs to. -->
+<div id="snapMenu" class="popmenu" style="display:none">
+  <button id="snap3D" title="A rendered picture of the model, drawn the way LEGO documentation draws it">Three-Dimensional <small>rendered</small></button>
+  <button id="snapPlan" title="The workspace as you see it, cropped to the build - the better picture for showing where a piece goes">Plan View <small>as you see it</small></button>
+</div>
 <div id="saveMenu" class="popmenu" style="display:none">
   <button id="saveDesign" title="Save the whole design so you can keep building later">Design <small>.block</small></button>
   <!-- ONE item, and the FORMAT IS CHOSEN IN THE SAVE DIALOG, from its own "Save as type" list -
@@ -4694,7 +4708,60 @@ $("svRemove").onclick=()=>{
   closeSnap(); drawSnapStrip();
   say("Snapshot "+(i+1)+" removed. "+snaps.length+" in the queue.");
 };
-$("bSnap").onclick=async()=>{
+function closeSnapMenu(){ $("snapMenu").style.display="none"; }
+$("bSnap").onclick=(e)=>{
+  e.stopPropagation();
+  if($("snapMenu").style.display==="block"){ closeSnapMenu(); return; }
+  if(bricks.filter(b=>!parked(b)).length===0){ say("Nothing to photograph yet - place a brick first."); return; }
+  const r=$("bSnap").getBoundingClientRect();
+  $("snapMenu").style.left=Math.round(r.left)+"px";
+  $("snapMenu").style.top=Math.round(r.bottom+5)+"px";
+  /* THE PLAN NEEDS NO RENDERER, so it stays available on a machine where the three-dimensional one
+     cannot run. Until now the whole button went dead there, and a builder who could not start
+     LDView could take no picture at all. */
+  $("snap3D").disabled=!bridgeOK;
+  $("snap3D").title=bridgeOK ? "A rendered picture of the model, drawn the way LEGO documentation draws it"
+                             : "Needs LDView and the LDraw parts folder beside the program";
+  $("snapMenu").style.display="block";
+};
+document.addEventListener("click",(e)=>{
+  if($("snapMenu").style.display==="block" && !$("snapMenu").contains(e.target)
+     && !$("bSnap").contains(e.target)) closeSnapMenu();
+});
+/* THE PLAN, CROPPED TO THE BUILD. The canvas is already drawn; this takes the part of it the bricks
+   occupy, with a cell of margin so nothing touches the edge. The mapping is cell()'s own, run
+   forwards: a design millimetre lands at view.pan + (mm + MX + place) * PX, and the far-side mirror
+   is undone the same way cell() undoes it. */
+function planShot(){
+  const bs=bricks.filter(b=>!parked(b));
+  if(!bs.length) return null;
+  let c0=1e9,c1=-1e9,r0=1e9,r1=-1e9;
+  bs.forEach(b=>{ const f=foot(b);
+    if(f.x0<c0)c0=f.x0; if(f.x1>c1)c1=f.x1; if(f.y0<r0)r0=f.y0; if(f.y1>r1)r1=f.y1; });
+  const M=1;
+  c0-=M; c1+=M; r0-=M; r1+=M;
+  let x0=c0*STUD, x1=c1*STUD;
+  if(viewBack){ const a=backAxis-x1, b=backAxis-x0; x0=a; x1=b; }
+  const px=x=>view.panX+(x+MX+placeX)*PX, py=y=>view.panY+(y+MY+placeY)*PX;
+  const ax=px(x0), bx=px(x1), ay=py(r0*vUnit()), by=py(r1*vUnit());
+  const sx=Math.max(0,Math.floor(Math.min(ax,bx))), sy=Math.max(0,Math.floor(Math.min(ay,by)));
+  const sw=Math.min(cv.width-sx, Math.ceil(Math.abs(bx-ax))), sh=Math.min(cv.height-sy, Math.ceil(Math.abs(by-ay)));
+  if(!(sw>1&&sh>1)) return null;
+  const t=document.createElement("canvas"); t.width=sw; t.height=sh;
+  t.getContext("2d").drawImage(cv, sx, sy, sw, sh, 0, 0, sw, sh);
+  return t;
+}
+$("snapPlan").onclick=()=>{
+  closeSnapMenu();
+  const t=planShot();
+  if(!t){ say("Nothing to photograph yet - place a brick first."); return; }
+  t.toBlob(blob=>{ if(!blob){ say("The plan could not be photographed."); return; }
+    snaps.push({blob:blob, url:URL.createObjectURL(blob)});
+    drawSnapStrip();
+    say("Snapshot "+snaps.length+" kept."); }, "image/png");
+};
+$("snap3D").onclick=async()=>{
+  closeSnapMenu();
   if(bricks.filter(b=>!parked(b)).length===0){ say("Nothing to photograph yet - place a brick first."); return; }
   say("Rendering the snapshot...");
   try{
@@ -5090,11 +5157,11 @@ $("saveSnaps").onclick=async()=>{
       $("bSnap").title="Snapshot needs LDView and the LDraw parts folder beside the program.";
     }
   }catch(e){ bridgeOK=false; }
-  if(!bridgeOK){
-    $("bSnap").disabled=true; $("bSnap").style.opacity=".45";
-    if(!$("bSnap").title.startsWith("Snapshot needs"))
-      $("bSnap").title="Snapshot needs Sangala Blocks to be started from its own icon.";
-  }
+  /* THE BUTTON STAYS ALIVE. Only the rendered kind needs the bridge; the plan is drawn by the page
+     itself, so a machine that cannot start LDView can still photograph the build. The menu disables
+     the item rather than the button, and says why on the item. */
+  if(!bridgeOK && !$("bSnap").title.startsWith("Snapshot needs"))
+    $("bSnap").title="Snapshot: keep a picture of the build as it stands now - rendered, or the plan as you see it";
   drawSnapStrip();
 })();
 
