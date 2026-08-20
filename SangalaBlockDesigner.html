@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.136 -->
+<!-- SANGALA_VERSION: 2026-08-20.137 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -415,6 +415,16 @@
         <button id="bDepth" class="depthbtn" style="flex:none;text-align:center;line-height:1.05"
                 title="Show or hide the mini 3D viewer, the small window on the workspace. The menu bar's 3D View is the other thing: it turns the whole board 3D">Mini 3D<br>Viewer</button>
         </span>
+      </div>
+      <!-- GROUP AND UNGROUP, Studio's pair and Studio's glyphs, so the two applications read alike.
+           The row is hidden until two or more bricks are selected, because with one there is nothing
+           to bind and nothing to peel; and only one of the two buttons is ever shown, since a set is
+           either already a group or it is not. -->
+      <div id="groupsrow" style="margin-top:.4rem;display:none">
+        <button class="depthbtn" id="bGroup" style="width:100%"
+                title="Bind the selected bricks so they select and move as one">&#9638; Group</button>
+        <button class="depthbtn" id="bUngroup" style="width:100%;display:none"
+                title="Take the outermost group apart; any group inside it stays">&#9636; Ungroup</button>
       </div>
     </div>
     <!-- The message line. It speaks ONLY when it knows something the designer cannot see - a brick
@@ -1439,13 +1449,17 @@ function draw(){
      to mark a brick the pointer is deciding about. A selection whose brick has left the design -
      erased, undone, opened away - is dropped here rather than left dangling. */
   if(selBrick && bricks.indexOf(selBrick)<0) selBrick=null;
+  if(selMulti.length) selMulti=selMulti.filter(b=>bricks.indexOf(b)>=0);   /* the same rule, for the bundle */
   drawSelection();                     /* the panel block follows the selection, wherever it changed */
-  if(selBrick){
+  /* EVERY MEMBER IS OUTLINED, not just one. A bundle that marks a single brick is a bundle the
+     builder cannot see the extent of, and Delete follows the selection. */
+  const selShow = selMulti.length ? selMulti : (selBrick ? [selBrick] : []);
+  selShow.forEach(b=>{
     ctx.save();
     ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
-    shape(selBrick.p, selBrick.col, selBrick.row, selBrick.flip, faced(selBrick), rotOf(selBrick), facedAway(selBrick)); ctx.stroke();
+    shape(b.p, b.col, b.row, b.flip, faced(b), rotOf(b), facedAway(b)); ctx.stroke();
     ctx.restore();
-  }
+  });
   if(hover && tool==="place") drawBrick(hover,true);
   ctx.restore();
   ctx.restore();
@@ -2966,6 +2980,31 @@ function jogHalf(dir){
 /* Up is towards you, down is away - the same two moves the Toolbar's half-step buttons made, and
    the same jogHalf that carried them, so a part steps through a whole layer in two presses exactly
    as it did before. */
+/* GROUP BINDS THE SELECTION; UNGROUP PEELS ONE LEVEL. Studio's groupSel/ungroupSel, function for
+   function, with two deliberate differences: commit() is called here because this application's undo
+   is a snapshot taken on change and a builder must be able to take a grouping back, and draw() alone
+   replaces Studio's three refreshers because draw() already calls drawSelection() and sync3D(). */
+function groupIds(){ return selMulti.length>=2 ? selMulti.slice() : []; }
+function groupSel(){                 /* NEST: the new id goes on the OUTSIDE, so Ungroup peels this step */
+  const set=groupIds();
+  if(set.length<2){ say("Shift+click a second brick first, then Group."); return; }
+  groupSeq++;
+  set.forEach(b=>{ const p=gpathOf(b).slice(); p.unshift(groupSeq); b.gpath=p; b.group=groupSeq; });
+  selMulti=set; selBrick=null;
+  draw(); commit();
+  say("Grouped "+set.length+" bricks — they select and move as one. Ungroup separates them.");
+}
+function ungroupSel(){               /* PEEL one level; a group inside this one survives */
+  const set=groupIds().length ? groupIds() : (selNow() ? [selNow()] : []);
+  let out=0;
+  set.forEach(b=>{ const p=gpathOf(b).slice();
+    if(p.length){ p.shift(); b.gpath=p.length?p:undefined; b.group=p.length?p[0]:undefined; out++; } });
+  selMulti=[]; selBrick=null;
+  draw(); commit();
+  say(out ? "Ungrouped "+out+" bricks." : "");
+}
+$("bGroup").onclick=groupSel;
+$("bUngroup").onclick=ungroupSel;
 $("spUp").onclick =()=>jogHalf(0.5);
 $("spDn").onclick =()=>jogHalf(-0.5);
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
@@ -3418,9 +3457,23 @@ const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
 /* Fills the Selected block, or hides it when nothing is. Driven from draw(), which is the one place
    that knows the selection is still real - a brick can leave the design by being erased, undone or
    opened away, and the block must not go on describing it. */
+function syncGroup(){
+  const n=selMulti.length;
+  $("groupsrow").style.display = n>=2 ? "block" : "none";
+  const g = isGroupSel();
+  $("bGroup").style.display   = g ? "none" : "";
+  $("bUngroup").style.display = g ? "" : "none";
+}
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
-  syncFace(); syncFlip(); syncRot(); syncHalf();   /* the four follow the selection */
+  syncFace(); syncFlip(); syncRot(); syncHalf(); syncGroup();   /* the five follow the selection */
+  /* A BUNDLE READS AS A COUNT. With several bricks selected there is no one part to name, and no one
+     answer for Depth, Flip or Rotate either - so those controls go dark, which is Studio's behaviour
+     for a multi-selection. Jogging a whole group's depth is its own decision, not part of the port. */
+  if(selMulti.length){
+    $("selName").textContent = (isGroupSel() ? "Group of " : "") + selMulti.length + " bricks";
+    return;
+  }
   if(!on){ $("selName").textContent=""; return; }   /* the row stays for the Inset toggle; the reading goes */
   /* THE NAME ALONE, because the spinner beside it now carries the layer and one fact shown twice is
      one fact that can disagree with itself. Relief keeps its reading here: it has no spinner, since
@@ -3445,12 +3498,53 @@ let moveDrag=null;
    that the object is still IN the design either, so draw() drops a selection whose brick has gone -
    erased, undone, or opened away. */
 let selBrick=null;
+/* GROUPING IS STUDIO'S, PORTED (Glen, 2026-08-20: "mosaic and studio both have the capability to
+   select blocks and group them - head, body, wing, etc. I would like to transfer that capabilty to
+   blocks, doing it in the same way as studio"). A group is a BUNDLE: its members stay separate
+   bricks, each still its own piece in the parts list and the export, and Ungroup takes them apart
+   again. Nothing about geometry changes - Studio keeps merging and carving in a different tool
+   entirely, and this application has no such tool to confuse it with.
+   IT NESTS, so Ungroup peels ONE level (Studio's gpath = [outermost..innermost], and `group` is
+   gpath[0] because almost everything reads the flat field). A group of a group therefore comes
+   apart in the order it was built.
+   THE SET IS HELD AS BRICK OBJECTS, not indices and not ids, for the same reason selBrick is one: a
+   drag lifts a brick out of the array and pushes it back, so an index goes stale under the hand
+   holding it. A brick has no id at all, and needs none - membership is `same group id`.
+   STUDIO'S selId2 IS NOT PORTED. It is the second operand for Combine, which this application does
+   not have, so Shift+click simply adds to the set. */
+let selMulti=[];            /* the bundle selection: brick OBJECTS */
+let groupSeq=0;             /* group ids; bricks sharing a group select and move as one */
+const gpathOf = b => (b && b.gpath && b.gpath.length) ? b.gpath : ((b && b.group!=null) ? [b.group] : []);
+const wholeGroup = b => (b && b.group!=null) ? bricks.filter(z=>z.group===b.group) : (b ? [b] : []);
+const selectedBricks = () => selMulti.length ? selMulti.slice() : (selNow() ? [selNow()] : []);
+const isGroupSel = () => { if(selMulti.length<2) return false;
+  const g=selMulti[0].group; return g!=null && selMulti.every(b=>b.group===g); };
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
-  if(i<0){ if(selBrick){ selBrick=null; draw(); say(""); } return; }   /* empty ground clears it */
+  if(i<0){ if(e.shiftKey) return;                                      /* Shift on bare ground keeps the set */
+           if(selBrick||selMulti.length){ selBrick=null; selMulti=[]; draw(); say(""); } return; }
   const b=bricks[i];
+  /* SHIFT+CLICK ADDS, which is how a group is built and how one grows (Studio: select a group,
+     Shift+click a new shape to ADD it, then Group). It adds the clicked brick's WHOLE outermost
+     group, so a group and a loose brick become one Group-able set. It builds the set and does not
+     start a move: a Shift+drag would otherwise move whatever was just added. */
+  if(e.shiftKey){
+    const set = selMulti.length ? selMulti.slice() : wholeGroup(selNow());
+    wholeGroup(b).forEach(x=>{ if(set.indexOf(x)<0) set.push(x); });
+    selMulti=set; selBrick=null; draw();
+    say(set.length+" bricks selected — Group binds them.");
+    e.preventDefault(); return;
+  }
+  /* A CLICK ON ANY MEMBER TAKES THE WHOLE GROUP, and the drag that follows carries all of it. */
+  if(b.group!=null){
+    const g=wholeGroup(b);
+    if(!(selMulti.length===g.length && g.every(x=>selMulti.indexOf(x)>=0))){ selMulti=g; selBrick=null; }
+    draw();
+    moveDrag={members:g, lead:b, dcol:c.col-b.col, drow:c.row-b.row, moved:false};
+    cv.style.cursor="grabbing"; e.preventDefault(); return;
+  }
   /* DRAW IT AT ONCE. Setting the selection without repainting left the outline invisible until some
      unrelated redraw happened along, so the part was selected and did not look it - Delete worked on
      a brick carrying no mark (Glen, 2026-08-16). A selection is a thing you can SEE or it is nothing. */
@@ -3464,22 +3558,29 @@ cv.addEventListener("mousedown",(e)=>{
      the color in the color picker." The palette is the one place the current color is stated, so a
      selected brick whose color it does not show leaves two answers on the screen at once - and the
      next brick placed would take the palette's rather than the one the builder is looking at. */
-  if(selBrick!==b){ selBrick=b; if(b.colorIdx>=0 && b.colorIdx!==selCol){ selCol=b.colorIdx; swatches(); } draw(); }
-  moveDrag={i:i, dcol:c.col-b.col, drow:c.row-b.row, from:{col:b.col,row:b.row,base:b.base}, moved:false};
+  if(selBrick!==b || selMulti.length){ selBrick=b; selMulti=[];
+    if(b.colorIdx>=0 && b.colorIdx!==selCol){ selCol=b.colorIdx; swatches(); } draw(); }
+  /* MEMBERS, NEVER AN INDEX. The drop lifts them out of the array and pushes them back, so an index
+     stored here would point at a different brick by the second drag. `from` went with it: nothing
+     ever read it. */
+  moveDrag={members:[b], lead:b, dcol:c.col-b.col, drow:c.row-b.row, moved:false};
   cv.style.cursor="grabbing";
   e.preventDefault();
 });
 window.addEventListener("mousemove",(e)=>{
   if(!moveDrag) return;
-  const c=cell(e), b=bricks[moveDrag.i];
+  /* ONE DELTA FOR THE WHOLE SET, measured against the brick actually under the hand. Moving each
+     member to the pointer would collapse the group onto one cell. */
+  const c=cell(e), L=moveDrag.lead;
   const col=c.col-moveDrag.dcol, row=c.row-moveDrag.drow;
-  if(col===b.col && row===b.row) return;
-  b.col=col; b.row=row; moveDrag.moved=true; draw();
+  if(col===L.col && row===L.row) return;
+  const dc=col-L.col, dr=row-L.row;
+  moveDrag.members.forEach(x=>{ x.col+=dc; x.row+=dr; });
+  moveDrag.moved=true; draw();
 });
 window.addEventListener("mouseup",()=>{
   if(!moveDrag) return;
   const md=moveDrag; moveDrag=null; cv.style.cursor="default";
-  const b=bricks[md.i];
   if(!md.moved){ return; }                       /* a press that never moved is a selection, not a move */
   /* A MOVE ACROSS THE PLAN DOES NOT CHANGE THE DEPTH. It used to run settle(), which lands a part
      clear of whatever is in its new columns - so sliding a brick one stud sideways could carry it
@@ -3498,14 +3599,25 @@ window.addEventListener("mouseup",()=>{
      under it, so a part that goes out and comes back must come back unchanged. A move is a move.
      A part that has never been in the design gets its depth from where it was first put down, which
      is layer 0 on the cork, and the Depth control is how it is then set. */
-  bricks.splice(md.i,1); bricks.push(b);
+  /* ONE LIFT AND ONE PUSH FOR THE WHOLE SET, in the order the members already had. That order is
+     not cosmetic: the draw sort is stable and falls back to it for ties, which is what stops a stud
+     showing through the brick in front, and selPiece() numbers the 3D pieces by walking this array. */
+  const set=new Set(md.members);
+  const run=bricks.filter(x=>set.has(x));
+  bricks=bricks.filter(x=>!set.has(x)).concat(run);
   suppressClick=true;                            /* the click this drag ends on must not place or erase */
   draw(); bom(); commit();
   /* SAY NOTHING. Glen, 2026-08-17: "you don't need to tell the designer that they moved the brick;
      they know that." The block above already names the brick and gives its layer, which is the one
      thing the application knows and they might not. Parking still speaks, because "it is not counted
      in the parts list" is a consequence they cannot see. */
-  say(parked(b) ? b.p.name+" parked on the cork — it is not counted in the parts list." : "");
+  /* Parking is per brick, derived from where each one sits, so a group can legitimately come to
+     rest half on the cork. The line says which case it is rather than reporting one member's. */
+  const pk=md.members.filter(parked).length, tot=md.members.length;
+  say(!pk ? ""
+      : tot===1 ? md.members[0].p.name+" parked on the cork — it is not counted in the parts list."
+      : pk===tot ? tot+" bricks parked on the cork — they are not counted in the parts list."
+      : pk+" of "+tot+" bricks are parked on the cork — those are not counted in the parts list.");
 });
 
 cv.addEventListener("mousemove",e=>{
@@ -3540,11 +3652,15 @@ cv.addEventListener("click",e=>{
    bricks, guideRaw, frameScale, the placement, the mode and the page - everything a builder can
    change and would expect back. */
 function serializeState(){
+  /* groupSeq TRAVELS WITH THE SNAPSHOT, or a Group made after an Undo would mint an id a restored
+     brick already holds, and two sets that were never bound would move as one. */
   return { mode:mode, pageKind:pageKind, frameScale:frameScale, placeX:placeX, placeY:placeY,
+    groupSeq:groupSeq,
     guide: guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0],q[1]]),
                                    holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))})),
     bricks: bricks.map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
-                             flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half })) };
+                             flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
+                             group:b.group, gpath:b.gpath?b.gpath.slice():undefined })) };
 }
 function commit(){ if(histBusy) return; const s=JSON.stringify(serializeState());   // push a snapshot unless it matches the current top
   if(hist.length && hist[hist.length-1]===s) return;                                 // no change -> no push, and the redo chain survives
@@ -3564,8 +3680,13 @@ function restoreState(st){
      this dropped it on the way in - so one Ctrl-Z stood every turned part upright again, silently and
      without touching anything else. That is the builder's work undone by the undo, which is the one
      thing undo may not do. A wing is turned onto the face; an eye is too. */
+  /* AND THE GROUPING COMES BACK WITH THEM. This map is a whitelist: a field it does not name is a
+     field one Ctrl-Z quietly destroys, which is exactly how `turn` was lost. */
+  groupSeq = st.groupSeq || 0;
   bricks=(st.bricks||[]).map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
-                                   flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half }));
+                                   flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
+                                   group:b.group, gpath:b.gpath?b.gpath.slice():undefined }));
+  selBrick=null; selMulti=[];              /* the old objects are gone; nothing may point at them */
   /* the controls follow the state, the way Studio's refreshEditPanel does - a restored mode that the
      menu still disagrees with is the next defect */
   setPageSize(pageKind); $("pagesize").value=pageKind;
@@ -3598,6 +3719,15 @@ window.addEventListener("keydown",(e)=>{
   const tg=(e.target&&e.target.tagName||"").toLowerCase();
   if(tg==="input"||tg==="textarea"||tg==="select"||(e.target&&e.target.isContentEditable)) return;
   if(view3D) return;                                   /* looking, not building */
+  /* DELETE FOLLOWS THE SELECTION, so a group goes as one. The Erase tool is the other thing: it is
+     aimed with the pointer and takes the single brick under it, group or no group. */
+  if(selMulti.length){
+    const n=selMulti.length, set=new Set(selMulti);
+    bricks=bricks.filter(b=>!set.has(b));
+    selMulti=[]; selBrick=null;
+    e.preventDefault(); draw(); bom(); commit(); say("Deleted "+n+" bricks.");
+    return;
+  }
   const i = selBrick ? bricks.indexOf(selBrick) : -1;
   if(i<0) return;
   bricks.splice(i,1); selBrick=null;
