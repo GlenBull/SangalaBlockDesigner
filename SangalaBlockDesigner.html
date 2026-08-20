@@ -3631,7 +3631,7 @@ function copyBrick(){
    crane, so both are written down rather than left to be tried again.
 
    .120 reflected the span about the MIDLINE. That is right only when the body the part is mounted on
-   is itself centred there, and the crane's is not: its side-stud brick spans layers 0 to 2, entirely
+   is itself centered there, and the crane's is not: its side-stud brick spans layers 0 to 2, entirely
    on the front, so a plate resting on that brick's front face at 2.0-2.4 mirrored to -2.4 to -2.0,
    two layers behind the brick and hanging in space.
 
@@ -3684,7 +3684,7 @@ const mirrorPlane = (b, skip) => { const h = mirrorHost(b, skip); return h ? rea
 function faceToViewer(b, mirror){
   if(mode!=="standing") return;
   /* A PART ALREADY ON THE BUILDER'S SIDE IS AN EXACT TWIN and is not touched - that is the near-side
-     behaviour, which works and which Glen asked to have matched, not changed. */
+     behavior, which works and which Glen asked to have matched, not changed. */
   const rear = rearB(b), front = frontB(b);
   if((rear+front)/2 * (viewBack ? -1 : 1) >= 0) return;   /* on this side, or across the middle */
   const m = mirror===undefined ? mirrorPlane(b) : mirror;
