@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.134 -->
+<!-- SANGALA_VERSION: 2026-08-20.135 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -223,7 +223,7 @@
 <header class="denim">
   <div class="logo"><b class="marker">Sangala Blocks</b><small>Block Design Tool</small></div>
   <div class="tools">
-    <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, a design you saved (.block), or a parts library (.parts)"><span class="glyph">&#128194;</span><small>Open</small></button>
+    <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, a design you saved (.block), or a parts library (.library)"><span class="glyph">&#128194;</span><small>Open</small></button>
     <button class="tbtn" id="bSave" title="Save your design (.block)"><span class="glyph">&#128190;</span><small>Save</small></button>
     <button class="tbtn" id="bSnap" title="Snapshot: keep a picture of the build as it stands now, drawn the way LEGO documentation draws it"><span class="glyph">&#128247;</span><small>Snapshot</small></button>
     <button class="tbtn" id="bSettings" title="Setup: what the workspace shows &mdash; click to show or hide"><span class="glyph">&#9881;&#65039;</span><small>Settings</small></button>
@@ -541,6 +541,11 @@
        Should this be under the Save menu?"). Mosaic had already settled it: its menu is Project /
        Image / Tile List, with the bill of materials as a Save item. This is the same three. -->
   <button id="savePartsList" title="Save the parts list - a list to read (.txt) or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .xml</small></button>
+  <!-- A LIBRARY CAN NOW BE WRITTEN, NOT ONLY READ. Until today one arrived from tools/parts_library.py
+       and there was no way back out, so a catalog assembled by opening two libraries could not be kept.
+       It saves what the Library panel holds - everything loaded, merged - so the file that goes out
+       with a set of kit plans is the catalog the design was actually built from. -->
+  <button id="saveLibrary" title="Save the parts library as it now stands, so it can be shared or reopened">Library <small>.library</small></button>
 </div>
 <div id="partmenu" class="menu" style="position:fixed;z-index:31;display:none">
   <button data-kind="brick">&#129521; Brick</button>
@@ -552,7 +557,7 @@
   <button data-kind="wedge">&#9699; Wedge Plate</button>
 </div>
 
-<input type="file" id="fOpen" accept=".block,.model,.parts,.json" style="display:none">
+<input type="file" id="fOpen" accept=".block,.model,.library,.parts,.json" style="display:none">
 
 <div class="modal" id="snapview">
   <div class="card" style="max-width:none;width:auto">
@@ -3766,6 +3771,20 @@ function setDocName(n, fromFile){
   });
 })();
 function docFileName(ext){ return (docName || "sangala-blocks") + ext; }
+/* A LIBRARY IS A CATALOG OF SHAPES, so what is written out carries no color and no quantity - the
+   same rule the panel and the .parts files follow (Glen, 2026-08-20: "The library should not record
+   color. Since it is a library of parts, once you pick a part, you can choose any color that you
+   want. Don't record quantity or color for parts in the library."). An older library that arrived
+   carrying either is therefore cleaned by being saved, which is the point rather than a side effect.
+   The name is the library's own if it came from a file, and the design's otherwise, so a catalog
+   assembled while building the crane is called the crane's. */
+function libFileName(ext){ return (libraries[0] || docName || "sangala-blocks") + ext; }
+function libraryJSON(){
+  const drop = {color:1, colorCode:1, qty:1};
+  const parts = libParts.map(p=>{ const q={}; for(const k in p) if(!(k in drop)) q[k]=p[k]; return q; });
+  return JSON.stringify({sangala:"library", version:1,
+                         name:(libraries[0] || docName || "Library"), parts:parts}, null, 1);
+}
 /* Read the file back and confirm the bytes landed. Choosing a name in the Save dialog CREATES the
    file immediately, at zero bytes; the contents only arrive when close() completes. If anything
    interrupts the write in between, the result is a real, findable, EMPTY file - and the application
@@ -3894,6 +3913,7 @@ $("bSave").onclick=(e)=>{
   $("saveMenu").style.top=Math.round(r.bottom+5)+"px";
   $("saveSnaps").disabled=!snaps.length;         /* nothing photographed, nothing to export */
   $("savePartsList").disabled=!bricks.filter(b=>!parked(b)).length;   /* an empty plate lists nothing */
+  $("saveLibrary").disabled=!libParts.length;    /* no library loaded, nothing to write out */
   $("saveMenu").style.display="block";
 };
 document.addEventListener("click",(e)=>{
@@ -3938,6 +3958,13 @@ function partsListXml(){
   }).join("");
   return {xml:"<INVENTORY>\n"+items+"</INVENTORY>\n", skipped:skipped};
 }
+$("saveLibrary").onclick=async()=>{
+  closeSaveMenu();
+  if($("saveLibrary").disabled) return;
+  const name=await saveBlob(new Blob([libraryJSON()],{type:"application/json"}),
+                            libFileName(".library"), "Sangala Blocks parts library", ".library", false);
+  if(name) say("Saved as "+name+" - "+libGroups.length+(libGroups.length===1?" part.":" parts."));
+};
 $("savePartsList").onclick=async()=>{
   /* The parts list is a file the student keeps, so it chooses its place like the design does. The
      total counts the DESIGN, not candidates parked on the cork - the same rule the panel follows. */
@@ -4821,7 +4848,10 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     /* A LIBRARY IS NOT A PROJECT, so it is routed BEFORE the file names anything. Naming was done
        here first, which would have renamed the crane being built after the parts loaded to build
        it - the same fault as a parts list renaming its design, corrected once already. */
-    if(d.sangala==="parts") return loadParts(d, f.name);                        /* a .parts library */
+    /* EITHER MARKER OPENS. A library is written as ".library" now, which is the word a student meets
+       at both ends, and its marker says "library" to match. Every .parts file already made still
+       opens: the format did not change, only what it is called. */
+    if(d.sangala==="library" || d.sangala==="parts") return loadParts(d, f.name);
     setDocName(f.name, true);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
     if(d.sangala!=="block") throw new Error("not a Block Designer, Studio or parts file");
