@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.138 -->
+<!-- SANGALA_VERSION: 2026-08-20.139 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1460,6 +1460,17 @@ function draw(){
     shape(b.p, b.col, b.row, b.flip, faced(b), rotOf(b), facedAway(b)); ctx.stroke();
     ctx.restore();
   });
+  /* THE BOX, in the blue this application marks a selection in, dashed so it reads as a gesture in
+     progress rather than a shape being placed. Studio 1074-1077. */
+  if(marquee){
+    const x0=mx(Math.min(marquee.c0,marquee.c1)*STUD), y0=mx(Math.min(marquee.r0,marquee.r1)*vUnit());
+    const x1=mx((Math.max(marquee.c0,marquee.c1)+1)*STUD), y1=mx((Math.max(marquee.r0,marquee.r1)+1)*vUnit());
+    ctx.save();
+    ctx.fillStyle="rgba(26,95,180,.08)"; ctx.strokeStyle="#1a5fb4";
+    ctx.lineWidth=Math.max(1, mx(0.4)); ctx.setLineDash([mx(1.6), mx(1.2)]);
+    ctx.fillRect(x0,y0,x1-x0,y1-y0); ctx.strokeRect(x0,y0,x1-x0,y1-y0);
+    ctx.restore();
+  }
   if(hover && tool==="place") drawBrick(hover,true);
   ctx.restore();
   ctx.restore();
@@ -3506,6 +3517,11 @@ function drawSelection(){
    The brick is lifted OUT of the array before settling, or it would find itself in its own columns
    and come to rest on top of itself - it would never move down again. */
 let moveDrag=null;
+/* THE SWEEP, Studio's rubber-band (Glen, 2026-08-20: "you have not enabled the ability to sweep out
+   a group of blocks yet"). Held in CELL coordinates rather than millimetres, because a brick lives
+   on the stud grid and cell() has already unwound the pan, the zoom and the far-side mirror - so the
+   box snaps to the lattice the bricks sit on, and the test for what it caught is whole cells. */
+let marquee=null;
 /* THE SELECTED BRICK, held as the OBJECT rather than an index, because indices move under it: a
    drag lifts the brick out of the array and pushes it back on the end, and Undo rebuilds the array
    entirely. Anything holding a number would end up pointing at a different brick. Nothing checks
@@ -3559,7 +3575,11 @@ cv.addEventListener("mousedown",(e)=>{
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
   if(i<0){ if(e.shiftKey) return;                                      /* Shift on bare ground keeps the set */
-           if(selBrick||selMulti.length){ selBrick=null; selMulti=[]; draw(); say(""); } return; }
+           /* BARE GROUND STARTS A SWEEP. The selection is not cleared here: a sweep that catches
+              nothing clears it on mouseup, and a press that never moves is treated as the click it
+              is. Clearing now would make the box flash over an already-empty panel. */
+           marquee={c0:c.col, r0:c.row, c1:c.col, r1:c.row};
+           e.preventDefault(); return; }
   const b=bricks[i];
   /* SHIFT+CLICK ADDS, which is how a group is built and how one grows (Studio: select a group,
      Shift+click a new shape to ADD it, then Group). It adds the clicked brick's WHOLE outermost
@@ -3603,6 +3623,9 @@ cv.addEventListener("mousedown",(e)=>{
   e.preventDefault();
 });
 window.addEventListener("mousemove",(e)=>{
+  if(marquee){ const c=cell(e);
+    if(c.col!==marquee.c1 || c.row!==marquee.r1){ marquee.c1=c.col; marquee.r1=c.row; draw(); }
+    return; }
   if(!moveDrag) return;
   /* ONE DELTA FOR THE WHOLE SET, measured against the brick actually under the hand. Moving each
      member to the pointer would collapse the group onto one cell. */
@@ -3614,6 +3637,26 @@ window.addEventListener("mousemove",(e)=>{
   moveDrag.moved=true; draw();
 });
 window.addEventListener("mouseup",()=>{
+  if(marquee){
+    const lo={c:Math.min(marquee.c0,marquee.c1), r:Math.min(marquee.r0,marquee.r1)};
+    const hi={c:Math.max(marquee.c0,marquee.c1), r:Math.max(marquee.r0,marquee.r1)};
+    const swept = (hi.c>lo.c || hi.r>lo.r);      /* a press that never moved is a click, not a sweep */
+    marquee=null;
+    if(swept){
+      /* FULLY INSIDE, not merely touched - Studio's rule. A sweep that took everything it grazed
+         would catch the brick behind the one being reached for, which is the commonest thing a
+         builder sweeps past. The footprint is half-open, so the far edges compare against +1. */
+      const got=bricks.filter(b=>{ const f=foot(b);
+        return f.x0>=lo.c && f.x1<=hi.c+1 && f.y0>=lo.r && f.y1<=hi.r+1; });
+      selMulti = got.length>1 ? got : [];
+      selBrick = got.length===1 ? got[0] : null;
+      suppressClick=true;                        /* the click this sweep ends on must not place */
+      draw();
+      say(!got.length ? "" : got.length===1 ? ""
+          : got.length+" bricks selected — Group binds them.");
+    } else if(selBrick||selMulti.length){ selBrick=null; selMulti=[]; draw(); say(""); }
+    return;
+  }
   if(!moveDrag) return;
   const md=moveDrag; moveDrag=null; cv.style.cursor="default";
   if(!md.moved){ return; }                       /* a press that never moved is a selection, not a move */
