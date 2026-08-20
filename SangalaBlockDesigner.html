@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.142 -->
+<!-- SANGALA_VERSION: 2026-08-20.144 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3049,7 +3049,8 @@ function groupSel(){                 /* NEST: the new id goes on the OUTSIDE, so
   const set=groupIds();
   if(set.length<2){ say("Shift+click a second brick first, then Group."); return; }
   groupSeq++;
-  set.forEach(b=>{ const p=gpathOf(b).slice(); p.unshift(groupSeq); b.gpath=p; b.group=groupSeq; });
+  set.forEach(b=>{ const p=gpathOf(b).slice(); p.unshift(groupSeq); b.gpath=p; b.group=groupSeq;
+    const nm=gnamesOf(b).slice(); nm.unshift(undefined); b.gnames=nm; b.gname=undefined; });
   selMulti=set; selBrick=null;
   draw(); commit();
   say("Grouped "+set.length+" bricks — they select and move as one. Ungroup separates them.");
@@ -3059,7 +3060,8 @@ function ungroupSel(){               /* PEEL one level; a group inside this one 
   let out=0;
   set.forEach(b=>{ const p=gpathOf(b).slice();
     if(p.length){ p.shift(); b.gpath=p.length?p:undefined; b.group=p.length?p[0]:undefined;
-                  if(!p.length) b.gname=undefined;      /* out of every group: the name goes with it */
+                  const g=gnamesOf(b).slice(); g.shift();       /* the name peels with its level */
+                  b.gnames=g.length?g:undefined; b.gname=undefined;
                   out++; } });
   selMulti=[]; selBrick=null;
   draw(); commit();
@@ -3611,7 +3613,13 @@ const isGroupSel = () => { if(selMulti.length<2) return false;
    object of a set rather than into a table of group ids, so the name travels with the brick through
    every copy, save and undo without a second structure to keep in step. Members of one group always
    agree, because naming writes to all of them at once. */
-const gnameOf = b => (b && b.gname) ? b.gname : "";
+/* A NAME BELONGS TO A LEVEL, not to a brick, so the names run PARALLEL TO gpath - gnames[0] is the
+   outermost group's name, gnames[1] the one inside it. Held on the brick as a single field it could
+   only ever carry one: naming an outer group "Head" wrote over the "Crown" the inner group already
+   had, and reopening the file found Crown gone. Grouping nests, so naming has to nest with it. */
+const gnamesOf = b => (b && b.gnames && b.gnames.length) ? b.gnames
+                    : ((b && b.gname) ? [b.gname] : []);      /* a file written before this carries one flat name */
+const gnameOf = b => gnamesOf(b)[0] || "";
 function nameGroup(){
   const set = selMulti.length ? selMulti.slice() : (selNow() ? [selNow()] : []);
   if(!set.length) return;
@@ -3620,7 +3628,11 @@ function nameGroup(){
   const v = prompt("Name this group (head, body, wing …)", gnameOf(set[0]));
   if(v==null) return;                       /* Cancel leaves it exactly as it was */
   const nm = v.trim();
-  set.forEach(b=>{ if(nm) b.gname=nm; else b.gname=undefined; });
+  /* THE LEVEL THE PANEL IS SHOWING is the outermost, so that is the one named. An inner group keeps
+     the name it was given: the two are different entries in the same list. */
+  set.forEach(b=>{ const g=gnamesOf(b).slice();
+    if(!g.length) g.push(undefined);
+    g[0] = nm || undefined; b.gnames=g; b.gname=undefined; });
   /* AND THE PARTS LIST OPENS, because naming a group reorganizes that list and an action whose
      result sits behind a fold is an action the builder cannot see happen (Glen, 2026-08-20: "when a
      part is named, the parts list should open, if it is not already open, to make the action
@@ -3797,7 +3809,8 @@ function serializeState(){
                                    holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))})),
     bricks: bricks.map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
                              flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
-                             group:b.group, gpath:b.gpath?b.gpath.slice():undefined, gname:b.gname })) };
+                             group:b.group, gpath:b.gpath?b.gpath.slice():undefined,
+                             gnames:b.gnames?b.gnames.slice():undefined })) };
 }
 function commit(){ if(histBusy) return; const s=JSON.stringify(serializeState());   // push a snapshot unless it matches the current top
   if(hist.length && hist[hist.length-1]===s) return;                                 // no change -> no push, and the redo chain survives
@@ -3822,7 +3835,8 @@ function restoreState(st){
   groupSeq = st.groupSeq || 0;
   bricks=(st.bricks||[]).map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
                                    flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
-                                   group:b.group, gpath:b.gpath?b.gpath.slice():undefined, gname:b.gname }));
+                                   group:b.group, gpath:b.gpath?b.gpath.slice():undefined,
+                                   gnames:b.gnames?b.gnames.slice():undefined }));
   selBrick=null; selMulti=[];              /* the old objects are gone; nothing may point at them */
   /* the controls follow the state, the way Studio's refreshEditPanel does - a restored mode that the
      menu still disagrees with is the next defect */
@@ -4179,7 +4193,16 @@ function designJSON(){ return (
                            /* and only when the part has studs on a face, or fewer on top than
                               cells to put them in - which few do */
                            ...(b.p.side&&b.p.side.length?{side:b.p.side}:{}),
-                           ...(b.p.top&&b.p.top.length?{top:b.p.top}:{})}))},null,1)); }
+                           ...(b.p.top&&b.p.top.length?{top:b.p.top}:{}),
+                           /* THE GROUPING, and only for a brick that is in one - so a design with no
+                              groups writes exactly the file it wrote before this existed. The whole
+                              nesting path travels, outermost first, because Ungroup peels one level
+                              and a design that reopened flattened would lose the steps it was built
+                              in. The name rides with it: it is written on every member, which is
+                              Studio's arrangement and what lets it survive a copy or an undo with no
+                              second structure to keep in step. */
+                           ...(b.gpath&&b.gpath.length?{gpath:b.gpath.slice()}:{}),
+                           ...(gnamesOf(b).some(x=>x)?{gnames:gnamesOf(b).map(x=>x||null)}:{})}))},null,1)); }
 /* Save opens the menu; the menu items do the saving. Cloned from Mosaic's saveMenu, including the
    disable-what-cannot-be-saved rule: Instructions is dead until a snapshot exists. */
 function closeSaveMenu(){ $("saveMenu").style.display="none"; }
@@ -5170,9 +5193,25 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
         if(ci>=0) libColor[id]=ci;
       });
     }
-    bricks=(d.bricks||[]).map(b=>({p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs,side:b.side,top:b.top},
-      colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
-      base:b.base, turn:b.turn, rot:b.rot, half:b.half}));
+    /* THE SAVED GROUP IDS ARE REMAPPED, not taken as they stand. A builder can group some bricks and
+       then Open a file, and the numbers in that file were minted in whatever session wrote it - so
+       taken literally, two sets that were never bound would move as one. One gmap for the whole load
+       mints a fresh id on first sight and reuses it thereafter, which is what preserves WHICH bricks
+       share WHICH level while making the numbers unable to collide. Studio does the same thing to the
+       data-gpath it reads out of an SVG. */
+    const gmap={};
+    bricks=(d.bricks||[]).map(b=>{
+      const gp=(b.gpath||[]).map(id=>{ if(!(id in gmap)) gmap[id]=++groupSeq; return gmap[id]; });
+      return {p:{id:b.id,name:b.name,w:b.w,d:b.d||1,h:b.h,shape:b.shape,studs:b.studs,side:b.side,top:b.top},
+        colorIdx:Math.max(0,COLORS.findIndex(c=>c.code===b.color)),col:b.col,row:b.row,flip:b.flip,
+        base:b.base, turn:b.turn, rot:b.rot, half:b.half,
+        group:gp.length?gp[0]:undefined, gpath:gp.length?gp:undefined,
+        /* names arrive as a list aligned with gpath; a file written before that carries one flat
+           name, which belongs to the only level it had */
+        gnames: (b.gnames && b.gnames.length) ? b.gnames.map(x=>x||undefined)
+              : (b.gname ? [b.gname] : undefined)};
+    });
+    selBrick=null; selMulti=[];        /* nothing may point at the bricks the last design left behind */
     /* A SAVED DESIGN IS OPENED EXACTLY AS IT WAS SAVED. There was a migration here that turned an
        older slope to lie ramp-across, and it was wrong to write: turning a 1-column slope into a
        2-column one WIDENS it, so it swallowed the column beside it - in the crest that column held
