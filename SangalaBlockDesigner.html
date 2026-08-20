@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.145 -->
+<!-- SANGALA_VERSION: 2026-08-20.146 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1682,6 +1682,15 @@ function tallySections(){
   if(loose.size) out.push({name:"", rows:sort(loose)});
   return out;
 }
+/* A SECTION FOLDS, AS A PLANE FOLDS IN STUDIO (Glen, 2026-08-20: "we should make named headings
+   collapsible so that the parts under a heading can be expanded or collapsed"). The control is
+   Studio's own - the `planetog` triangle over its plane list, same marks, same color, same size -
+   because a named heading with parts under it is the same idea in both applications and must not
+   grow a second convention. It is a VIEW control only: a folded section is still in the design, in
+   the .txt list and in the BrickLink order. The count stays in the heading, so a folded section
+   still answers how big it is - the rule the Parts panel's own heading already follows.
+   Keyed by NAME rather than by position, so building another group cannot fold a different one. */
+const secShut=new Set();
 function bom(){
   const rows=tally();
   const secs=tallySections();
@@ -1699,14 +1708,27 @@ function bom(){
     (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
     (!named
       ? rows.map(r=>rowHtml(r,false)).join("")
-      : secs.map(s2=>{
-          const n2=s2.rows.reduce((t,r)=>t+r.n,0);
-          const head="<tr><td colspan='3' style=\"padding-top:.35rem;font-weight:700;color:#5a4a34;"+
+      : secs.map((s2,i)=>{
+          const n2=s2.rows.reduce((t,r)=>t+r.n,0), shut=secShut.has(s2.name);
+          const head="<tr class='sechead' data-sec='"+i+"' title=\""+
+                     (shut?"Expand - show the parts under this heading"
+                          :"Collapse - fold this heading's parts out of the list")+
+                     "\" style=\"cursor:pointer;user-select:none\">"+
+                     "<td colspan='3' style=\"padding-top:.35rem;font-weight:700;color:#5a4a34;"+
                      "border-bottom:1px solid #d9cdb4\">"+
+                     "<span style='color:#8a7350;font-size:.8rem;margin-right:.3rem'>"+
+                     (shut?"&#9656;":"&#9662;")+"</span>"+
                      (s2.name ? s2.name.replace(/[<>]/g,"") : "Other Parts")+
                      " <span class='dn'>\u00b7 "+n2+(n2===1?" piece":" pieces")+"</span></td></tr>";
-          return head + s2.rows.map(r=>rowHtml(r,true)).join("");
+          return head + (shut ? "" : s2.rows.map(r=>rowHtml(r,true)).join(""));
         }).join(""));
+  /* The heading carries its section's INDEX and the name is read back at the click, so a group name
+     holding a quote or an angle bracket can never reach the markup. */
+  document.querySelectorAll("#bom tr.sechead").forEach(tr=>{
+    tr.onclick=()=>{ const s2=secs[+tr.dataset.sec]; if(!s2) return;
+      if(secShut.has(s2.name)) secShut.delete(s2.name); else secShut.add(s2.name);
+      bom(); };
+  });
   /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
   const park=bricks.filter(parked).length, built=bricks.length-park;
   $("partscount").textContent = built ? " · "+built+(built===1?" piece":" pieces") : "";
