@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.148 -->
+<!-- SANGALA_VERSION: 2026-08-20.149 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -213,6 +213,8 @@
 .bom td,.bom th{padding:2px 3px;border-bottom:1px solid #e0d0b0;text-align:left;color:#4a3c28}
 .bom th{color:#6b5a44;font-weight:600}
 .bom td.q{text-align:right;font-variant-numeric:tabular-nums}
+#bom tr.partrow{cursor:pointer}
+#bom tr.on{background:rgba(26,95,180,.12)}   /* Studio's SEL_BG - the same blue at the same weight */
 .dn{color:#8a7a5c;font-size:.68rem}
 .chip{display:inline-block;width:11px;height:11px;border-radius:2px;outline:1px solid #b09a72;margin-right:5px;vertical-align:-1px}
 </style>
@@ -1714,10 +1716,22 @@ function bom(){
   /* INDENTED UNDER THE HEADING, which is Studio's practice and what makes a section read as one
      thing rather than a run of rows that happen to follow a word. Only where there ARE sections: an
      unsectioned list stays flush, exactly as it has always been. */
-  const rowHtml = (r,ind) => "<tr><td"+(ind?" style='padding-left:.9rem'":"")+">"+r.p.name+
+  /* A ROW CARRIES ITS INDEX INTO `keyed` rather than the part number and color code themselves, so
+     nothing about a part can reach the markup, and the click reads the design back out of it. */
+  const sel = selMulti.length ? selMulti : (selBrick ? [selBrick] : []);
+  const keyed = [];
+  const rowHtml = (r,ind) => {
+    const k = keyed.push({id:r.p.id, code:r.col.code})-1;
+    /* THE ROW IS WASHED WHEN THE SELECTION IS EXACTLY ITS PIECES - all of them, not one of them.
+       Marking the row while a single brick of six is selected would say the list is showing what it
+       is not. It follows the selection wherever that was made, so picking a brick on the plate
+       lights its row too, the way choosing a color and choosing a brick already answer each other. */
+    const on = sel.length===r.n && sel.every(b=>b.p.id===r.p.id && COLORS[b.colorIdx].code===r.col.code);
+    return "<tr class='partrow"+(on?" on":"")+"' data-part='"+k+"'"+
+      " title='Select every piece of this part in the model'><td"+(ind?" style='padding-left:.9rem'":"")+">"+r.p.name+
       "<br><span class='dn'>Design "+r.p.id+"</span></td>"+
       "<td><span class='chip' style='background:"+r.col.hex+"'></span>"+r.col.name+"</td>"+
-      "<td class='q'>"+r.n+"</td></tr>";
+      "<td class='q'>"+r.n+"</td></tr>"; };
   /* With nothing named the table is exactly what it has always been, so a design that uses no groups
      sees no change at all. */
   document.querySelector("#bom tbody").innerHTML =
@@ -1750,6 +1764,26 @@ function bom(){
      Raise and Lower could not be borrowed from Studio, where they mean depth order and must go on
      meaning that in all three applications.
      Other Parts is not a group, so dropping onto it can only ever mean "put this one last". */
+  /* A PART IN THE LIST PICKS OUT ITS BRICKS IN THE MODEL (Glen, 2026-08-20: "when I select a part in
+     the parts list, the corresponding brick in the model should highlight"). Studio answers this same
+     click by SELECTING the part - `selectPartGroup`, down to the wording when a row covers several
+     pieces - and a selection is already drawn in #1a5fb4 on every member, so selecting IS the
+     highlight and no second mark had to be invented for it.
+     A row is a tally, so it stands for every brick of that part in that color: all of them are taken,
+     which is also what makes the count in the Qty column mean something you can act on. The parked
+     ones are left out, exactly as tally() leaves them out of the row's count. */
+  document.querySelectorAll("#bom tr.partrow").forEach(tr=>{
+    tr.onclick=()=>{
+      const k=keyed[+tr.dataset.part]; if(!k) return;
+      const mem=bricks.filter(b=>!parked(b) && b.p.id===k.id && COLORS[b.colorIdx].code===k.code);
+      if(!mem.length) return;
+      selMulti = mem.length>1 ? mem : [];        /* the marquee's own convention, so one selection */
+      selBrick = mem.length===1 ? mem[0] : null; /* cannot mean two different things */
+      draw();
+      say('"'+String(mem[0].p.name).replace(/[<>]/g,"")+'" selected'+
+          (mem.length>1 ? " - all "+mem.length+" pieces of it." : "."));
+    };
+  });
   const secRows=[...document.querySelectorAll("#bom tr.sechead")];
   const clearMarks=()=>secRows.forEach(r=>r.style.boxShadow="");
   const secAt=tr=>secs[+tr.dataset.sec];
