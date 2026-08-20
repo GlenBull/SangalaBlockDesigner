@@ -243,7 +243,43 @@ d.body("Neither side settles, which is what makes the two behave alike: a copy o
        "figure a course at a time.")
 
 # ---------------------------------------------------------------- 10
-d.heading("10. The Parts Catalog")
+d.heading("10. Groups, Names and the Parts List")
+d.body("A group binds bricks so that they select and move as one. The objects stay separate and can be "
+       "taken apart again: grouping is a bundle, not a weld.")
+d.body("Grouping nests. Each brick carries gpath, the path of group numbers it belongs to, outermost "
+       "first, and group is simply the first of them. Group puts a new number on the front of that path, "
+       "so a group can sit inside a group, and Ungroup removes the first one — peeling one level "
+       "and leaving anything inside it standing.")
+d.body("A name belongs to a level, not to a brick, so gnames runs parallel to gpath and gnames[0] is the "
+       "outermost group's name. Held as a single field it could only ever carry one name, and naming an "
+       "outer group wrote over the name an inner group already had. The name is written on every member "
+       "rather than into a table of groups, which is Sangala Studio's arrangement exactly: an attribute "
+       "travels with the brick through every copy, save and undo, with no second structure to keep in "
+       "step.")
+d.body("The parts list buckets by the outermost name. A part used in two groups therefore appears twice, "
+       "once under each name, each row counting only that group's pieces — which is what makes a row "
+       "unambiguous enough to drag. The plain tally the .txt list and the BrickLink order are built from "
+       "is not bucketed: those need one line per part and color across the whole design, since the same "
+       "brick used in a head and in a wing is one thing to buy.")
+d.body("Two pieces of state sit behind the list, and they are deliberately different in kind:", before_list=True)
+d.item("The Arrangement Is the Design's. ", "A list of names is written into the .block file, carried in "
+       "the undo snapshot, and updated when a group is renamed. It is keyed by name rather than by "
+       "position, so building another group cannot silently reorder the rest, and a group re-created with "
+       "a name the file already knows returns to its place.")
+d.item("The Fold Is the Panel's. ", "Which sections are folded away is held in the page alone and is not "
+       "saved. A folded section is still in the design, in the parts list and in the order.")
+d.body("Joining and leaving are the same two acts the buttons perform, reached by dragging a row. A row "
+       "under Other Parts dropped on a named section takes that group's number and name at the front of "
+       "its own path — which is what Group does, except that the number already exists, and that is "
+       "the whole of the difference between joining a group and making one. A row under a name dropped "
+       "into Other Parts is Ungroup's one-level peel. Other Parts is kept on the list once any group "
+       "exists, even when empty, because joining the last loose part would otherwise remove the only "
+       "place a part can be dropped to leave a group.")
+d.body("The names matter beyond this application. Sangala Studio reads a .block file, and every named "
+       "group arrives there as an element that can be given a depth and printed as one piece. What is "
+       "named here decides what can be worked with as a piece there.")
+
+d.heading("11. The Parts Catalog")
 d.body("Every part the application offers carries a real design number and a real footprint, and both are "
        "read from the LDraw library rather than typed. Two tools do that reading: tools/ldparts.py "
        "resolves a number, reports the part's own description and measures its geometry, and "
@@ -286,7 +322,7 @@ d.body("A .parts library extends that catalog at run time. tools/parts_library.p
        "from, so opening it elsewhere reports what is missing rather than quietly offering less.")
 
 # ---------------------------------------------------------------- 11
-d.heading("11. The Local Bridge")
+d.heading("12. The Local Bridge")
 d.body("SangalaBlocksServer.cs is Sangala Studio's bridge ported: a loopback TcpListener, which needs "
        "neither administrator rights nor a firewall exception, a notification-area icon, and a single "
        "instance per session — a second double-click opens the page the first is already serving rather "
@@ -310,7 +346,7 @@ d.body("The page asks /status before it offers the Snapshot button, so a missing
        "so.")
 
 # ---------------------------------------------------------------- 12
-d.heading("12. Snapshots and the LDraw Pipeline")
+d.heading("13. Snapshots and the LDraw Pipeline")
 d.body("A snapshot is produced in three steps. The page writes the design as an LDraw model, one "
        "type-1 line for each brick that is not parked, carrying its color code, a 3 x 4 transform and the "
        "part file. The bridge writes that text to a temporary file and runs LDView over it. The resulting "
@@ -332,7 +368,7 @@ d.body("The same arithmetic exists twice — in the page for snapshots, and in t
        "page's own function and running both over one design; they agree byte for byte.")
 
 # ---------------------------------------------------------------- 13
-d.heading("13. The Bundled Renderer and Parts")
+d.heading("14. The Bundled Renderer and Parts")
 d.body("LDView and the parts it needs are committed to the repository, so a clean checkout renders. "
        "LDView is 4 MB and requires nothing beside it; its license travels with it, as its terms require, "
        "along with a link to its source.")
@@ -350,7 +386,7 @@ d.body("All 2,833 primitives are therefore shipped, at a cost of 9.6 MB. tools/b
        "which is the only check that catches geometry that is missing rather than wrong.")
 
 # ---------------------------------------------------------------- 14
-d.heading("14. The Documents the Page Writes")
+d.heading("15. The Documents the Page Writes")
 d.body("The snapshots are written into a document by the page itself, with no library and no help from "
        "the bridge, so the same capability exists on every platform the page runs on. A Word file and an "
        "OpenDocument file are both archives of XML, so one archive writer serves both.")
@@ -375,7 +411,7 @@ d.body("The parts list is written here too, in two forms: plain text to read, an
        "number the list already carries.")
 
 # ---------------------------------------------------------------- 15
-d.heading("15. Verifying Changes")
+d.heading("16. Verifying Changes")
 d.body("A change to the page is tested by refreshing the browser; a change to the bridge requires a "
        "rebuild. Beyond that, three checks have proved worth the trouble:", before_list=True)
 d.item("Run the Function, Not a Copy of It. ", "Where a check needs the page's own code, the function is "
@@ -391,7 +427,7 @@ d.body("Documents generated by the scripts in tools/docs are checked with the pa
        "publication.")
 
 # ---------------------------------------------------------------- 16
-d.heading("16. Contributing")
+d.heading("17. Contributing")
 d.body("Work proceeds one change at a time: make the change, let it be tested on a real machine, then "
        "commit. Batching untested changes has cost this project time before. Commit messages record why a "
        "change was made and what remains unverified, since the reasoning is what a later reader needs and "
@@ -401,7 +437,7 @@ d.body("Collaboration is by branch and pull request within the shared repository
        "looking at Sangala Blocks belongs to Sangala Blocks.")
 
 # ---------------------------------------------------------------- 17
-d.heading("17. Glossary")
+d.heading("18. Glossary")
 d.table("Table 3. Terms Used in This Manual",
         ["Term", "Meaning"],
         [["Base", "Where a part's mounting face sits: in a relief, how many plates it stands proud of the "

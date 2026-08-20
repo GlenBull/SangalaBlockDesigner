@@ -223,6 +223,26 @@ d.body("The Parts section of the control panel lists every brick in the design �
        "number, its color and the quantity — with the total piece count in its heading. The heading folds "
        "the list away, since the count is consulted constantly and the list itself only occasionally. "
        "Bricks parked on the cork are not counted.")
+d.body("Where groups have been named, the list organizes itself by those names: each name heads a "
+       "section, with its parts indented beneath it and its own piece count beside it, and anything "
+       "belonging to no group falls under Other Parts at the end. A heading folds its own parts away, "
+       "the way the Parts heading folds the whole list, and the count stays in the heading so a folded "
+       "section still says how big it is.")
+d.body("Three things can be done from the list itself.", before_list=True)
+d.item("Arrange the Elements. ", "A heading is dragged onto another to put it there, so the sections can "
+                                 "be read in the order the figure is built — crown, head, body — "
+                                 "rather than the order the groups happened to be made in. The "
+                                 "arrangement is kept with the design and follows a group through a "
+                                 "rename.")
+d.item("Find a Part in the Model. ", "Clicking a row selects every brick of that part in that color, so "
+                                     "the pieces are outlined in the workspace. Selecting a brick in the "
+                                     "workspace lights its row in return.")
+d.item("Move a Part Between Groups. ", "A row under Other Parts is dragged onto a named heading to add "
+                                       "those bricks to that group, and a row under a name is dragged "
+                                       "into Other Parts to take them out again. The whole section is the "
+                                       "target, not the heading alone, and it lights while the pointer is "
+                                       "over it. Other Parts stays on the list once any group exists, so "
+                                       "there is always somewhere to put a part back.")
 d.body("Save writes that list to a file, in either of two forms chosen in the Save dialog:", before_list=True)
 d.item("A List to Read (.txt). ", "The parts, their design numbers, their colors and the quantities, as "
                                   "plain text to keep or to send.")
@@ -281,6 +301,12 @@ d.body("Save writes the whole design as a .block file — every brick with its p
        "afterward to confirm that it arrived.")
 d.body("Everything the application writes is reached from the one Save menu. A project keeps the name it "
        "was opened with: saving a parts list or a set of snapshots does not rename the design.")
+d.body("A saved design can also be opened in Sangala Studio, where it becomes geometry for a 3D printer "
+       "rather than a plan for bricks. Each part arrives as its own measured shape, and each named group "
+       "arrives as an element that can be given a depth and printed as a piece. Sangala Blocks itself "
+       "sends nothing to a machine; it is Sangala Studio that prints. What is named here decides what can "
+       "be worked with as one piece there, so it is worth naming the groups of a figure — head, "
+       "crown, wing — before saving it.")
 
 # ---------------------------------------------------------------- 21
 d.heading("21. Quick Reference")
@@ -313,7 +339,12 @@ d.table("Table 1. Where Each Task Is Done",
          ["Order the parts", "Save, Parts List, and choose the BrickLink type"],
          ["Record the build so far", "Snapshot"],
          ["Write the snapshots into a document", "Save, Snapshots"],
-         ["Keep the design to continue later", "Save, Design"]],
+         ["Keep the design to continue later", "Save, Design"],
+         ["Read the list by element", "Name the groups; the Parts list follows the names"],
+         ["Put the elements in order", "Drag a heading in the Parts list onto another"],
+         ["Find every brick of one part", "Click its row in the Parts list"],
+         ["Move a part into or out of a group", "Drag its row between sections of the Parts list"],
+         ["Print the figure", "Open the saved .block file in Sangala Studio"]],
         weights=[46, 54])
 
 d.heading("Appendix A. Installing Sangala Blocks")
