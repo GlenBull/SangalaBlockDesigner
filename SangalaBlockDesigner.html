@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.135 -->
+<!-- SANGALA_VERSION: 2026-08-20.136 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1604,6 +1604,13 @@ function swatches(){
       selCol=i;
       const g = libSel>=0 ? libGroups[libSel] : null;
       if(g) libColor[g.id]=i;
+      /* AND IT REPAINTS THE SELECTED BRICK. Glen, 2026-08-20: "If a brick is selected, and I change
+         color, the selected brick should change to the new color." Recoloring is otherwise a matter
+         of erasing a brick and placing it again, which loses its depth, its facing and its quarter
+         turn along with its color. The change is committed, so Ctrl-Z takes it back like any other,
+         and the parts list is rebuilt because it groups by part AND color. */
+      const b = selNow();
+      if(b && b.colorIdx!==i){ b.colorIdx=i; bom(); commit(); }
       swatches(); drawLibrary(); draw();
     };
     h.appendChild(s);
@@ -3453,7 +3460,11 @@ cv.addEventListener("mousedown",(e)=>{
      the courses this brick is in, which a flat plan cannot otherwise tell them. */
   /* No message: the Selected block above says what it is and which layer it stands in, and it STAYS
      there. Repeating it in the running commentary would only duplicate it and then be overwritten. */
-  if(selBrick!==b){ selBrick=b; draw(); }
+  /* THE PALETTE FOLLOWS THE SELECTION. Glen, 2026-08-20: "When I select a part, it should reflect
+     the color in the color picker." The palette is the one place the current color is stated, so a
+     selected brick whose color it does not show leaves two answers on the screen at once - and the
+     next brick placed would take the palette's rather than the one the builder is looking at. */
+  if(selBrick!==b){ selBrick=b; if(b.colorIdx>=0 && b.colorIdx!==selCol){ selCol=b.colorIdx; swatches(); } draw(); }
   moveDrag={i:i, dcol:c.col-b.col, drow:c.row-b.row, from:{col:b.col,row:b.row,base:b.base}, moved:false};
   cv.style.cursor="grabbing";
   e.preventDefault();
