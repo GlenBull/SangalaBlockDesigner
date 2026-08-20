@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.141 -->
+<!-- SANGALA_VERSION: 2026-08-20.142 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1683,7 +1683,11 @@ function bom(){
   const rows=tally();
   const secs=tallySections();
   const named=secs.some(s2=>s2.name);
-  const rowHtml = r => "<tr><td>"+r.p.name+"<br><span class='dn'>Design "+r.p.id+"</span></td>"+
+  /* INDENTED UNDER THE HEADING, which is Studio's practice and what makes a section read as one
+     thing rather than a run of rows that happen to follow a word. Only where there ARE sections: an
+     unsectioned list stays flush, exactly as it has always been. */
+  const rowHtml = (r,ind) => "<tr><td"+(ind?" style='padding-left:.9rem'":"")+">"+r.p.name+
+      "<br><span class='dn'>Design "+r.p.id+"</span></td>"+
       "<td><span class='chip' style='background:"+r.col.hex+"'></span>"+r.col.name+"</td>"+
       "<td class='q'>"+r.n+"</td></tr>";
   /* With nothing named the table is exactly what it has always been, so a design that uses no groups
@@ -1691,14 +1695,14 @@ function bom(){
   document.querySelector("#bom tbody").innerHTML =
     (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
     (!named
-      ? rows.map(rowHtml).join("")
+      ? rows.map(r=>rowHtml(r,false)).join("")
       : secs.map(s2=>{
           const n2=s2.rows.reduce((t,r)=>t+r.n,0);
           const head="<tr><td colspan='3' style=\"padding-top:.35rem;font-weight:700;color:#5a4a34;"+
                      "border-bottom:1px solid #d9cdb4\">"+
-                     (s2.name ? s2.name.replace(/[<>]/g,"") : "Not in a group")+
+                     (s2.name ? s2.name.replace(/[<>]/g,"") : "Other Parts")+
                      " <span class='dn'>\u00b7 "+n2+(n2===1?" piece":" pieces")+"</span></td></tr>";
-          return head + s2.rows.map(rowHtml).join("");
+          return head + s2.rows.map(r=>rowHtml(r,true)).join("");
         }).join(""));
   /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
   const park=bricks.filter(parked).length, built=bricks.length-park;
@@ -3617,6 +3621,11 @@ function nameGroup(){
   if(v==null) return;                       /* Cancel leaves it exactly as it was */
   const nm = v.trim();
   set.forEach(b=>{ if(nm) b.gname=nm; else b.gname=undefined; });
+  /* AND THE PARTS LIST OPENS, because naming a group reorganizes that list and an action whose
+     result sits behind a fold is an action the builder cannot see happen (Glen, 2026-08-20: "when a
+     part is named, the parts list should open, if it is not already open, to make the action
+     visible"). It is left open afterwards - it is the thing being worked with now. */
+  if(nm && !partsOpen){ partsOpen=true; drawPartsFold(); }
   draw(); commit();
   say(nm ? 'Named "'+nm+'".' : "Name cleared.");
 }
