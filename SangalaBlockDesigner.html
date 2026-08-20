@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.139 -->
+<!-- SANGALA_VERSION: 2026-08-20.140 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -420,10 +420,17 @@
            The row is hidden until two or more bricks are selected, because with one there is nothing
            to bind and nothing to peel; and only one of the two buttons is ever shown, since a set is
            either already a group or it is not. -->
-      <div id="groupsrow" style="margin-top:.4rem;display:none">
-        <button class="depthbtn" id="bGroup" style="width:100%"
+      <div id="groupsrow" style="margin-top:.4rem;display:none;gap:.3rem">
+        <button class="depthbtn" id="bGroup" style="flex:1"
                 title="Bind the selected bricks so they select and move as one">&#9638; Group</button>
-        <button class="depthbtn" id="bUngroup" style="width:100%;display:none"
+        <!-- NAME IS A BUTTON OF ITS OWN, not only the reading above. Making the panel's line the
+             button is Studio's gesture, but Studio's line sits in a TABLE OF PARTS where a name
+             obviously lives; one line of text in a panel is not the same affordance, and Glen swept,
+             grouped and reported "I dont see the name function" (2026-08-20). The reading stays
+             clickable as well - two ways to the same prompt costs nothing. -->
+        <button class="depthbtn" id="bName" style="flex:1;display:none"
+                title="Give this group a name — head, body, wing">&#9998; Name</button>
+        <button class="depthbtn" id="bUngroup" style="flex:1;display:none"
                 title="Take the outermost group apart; any group inside it stays">&#9636; Ungroup</button>
       </div>
     </div>
@@ -3018,6 +3025,7 @@ function ungroupSel(){               /* PEEL one level; a group inside this one 
 }
 $("bGroup").onclick=groupSel;
 $("bUngroup").onclick=ungroupSel;
+$("bName").onclick=nameGroup;
 $("selName").onclick=()=>{ if(isGroupSel()) nameGroup(); };
 $("spUp").onclick =()=>jogHalf(0.5);
 $("spDn").onclick =()=>jogHalf(-0.5);
@@ -3473,10 +3481,14 @@ const layerTag = b => mode!=="standing" ? "base "+plates(b.base||0)
    opened away, and the block must not go on describing it. */
 function syncGroup(){
   const n=selMulti.length;
-  $("groupsrow").style.display = n>=2 ? "block" : "none";
+  $("groupsrow").style.display = n>=2 ? "flex" : "none";
+  /* Group while the set is loose; Name and Ungroup once it is bound. A set is either one or the
+     other, so the row never offers a button that would do nothing. */
   const g = isGroupSel();
   $("bGroup").style.display   = g ? "none" : "";
+  $("bName").style.display    = g ? "" : "none";
   $("bUngroup").style.display = g ? "" : "none";
+  if(g) $("bName").textContent = (gnameOf(selMulti[0]) ? "✎ Rename" : "✎ Name");
 }
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
