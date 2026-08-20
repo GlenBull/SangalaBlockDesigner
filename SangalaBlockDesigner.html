@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.132 -->
+<!-- SANGALA_VERSION: 2026-08-19.133 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3599,20 +3599,26 @@ window.addEventListener("keydown",(e)=>{
    every other respect - same row, same layer, same colour, same turn, same flip, same quarter turn.
    A twin at the original's own depth is what "another one of these" means; settling it onto whatever
    happens to be under the new column would move it in the one direction hardest to see. */
-let clipBrick=null, clipMirror=0, pasteN=0;
+let clipBrick=null, clipFrom=null, clipMade=[], pasteN=0;
 const PASTE_STEP=1;                      /* studs to the right per paste - on the grid, and visible */
 function copyBrick(){
   const b=selNow();
   if(!b){ say("Select a brick first, then Ctrl+C."); return; }
   clipBrick={p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row, flip:b.flip,
              base:b.base, turn:b.turn, rot:b.rot, half:b.half};
-  /* THE MIRROR IS TAKEN WHEN THE PART IS COPIED, not when it is pasted, and it is held BESIDE the
-     clipboard rather than in it so nothing about it can reach a brick record or a saved file.
-     Read at paste time it would find the first copy: pasting a body brick twice from the far side
-     marched it backwards through the figure a course at a time, because copy one came to rest flush
-     against the original and so became copy two's host. On the near side a run of pastes marches
-     along the row and never moves in depth, and this is what makes the far side match. */
-  clipMirror = mirrorPlane(b);
+  /* THE CLIPBOARD REMEMBERS THE BRICK, NOT JUST ITS READING - and the paste follows it. The record
+     above is a snapshot, and a snapshot is wrong for the way this application is actually used:
+     Glen moves a part OFF the figure to reach the one underneath, copies that one, and moves it
+     back. Copied where it had been dragged to, the part is mounted on nothing, so the mirror fell
+     back to the midline and the copy took the position it had had out there too. Replayed against
+     his own file the paste landed at column 18, row 37, layer -2 - exactly the brick he saved, and
+     nine columns and ten rows from the body (2026-08-19).
+     So `clipFrom` holds the brick itself. If it is still in the design the paste reads its CURRENT
+     column, row and layer and mirrors about what it is mounted on NOW; only a brick that has since
+     been deleted falls back to the snapshot. `clipMade` lists the copies this run has put down, so
+     that a body brick pasted twice cannot mirror about its own first copy and march backwards
+     through the figure - which is what taking the mirror at copy time was there to prevent. */
+  clipFrom = b; clipMade = [];
   pasteN=0;
   /* THE STATUS LINE SPEAKS HERE AND NOT ON THE PASTE, which is the rule this application already
      follows: it says what the designer cannot see. Copying changes nothing on the plate, so without a
@@ -3648,9 +3654,10 @@ function copyBrick(){
    It is, and the reason it is now is that NEITHER SIDE SETTLES. The near side is an exact twin; the
    far side is that twin's mirror image. Only in a standing figure: a relief has one side, and
    nothing in it is tipped. */
-function mountedOn(b){          /* the brick b's mounting face is flush against; largest overlap wins */
+function mountedOn(b, skip){    /* the brick b's mounting face is flush against; largest overlap wins */
   let best=null, ba=0;
   bricks.forEach(h=>{ if(h===b || parked(h) || !overlaps(b,h)) return;
+    if(skip && skip.indexOf(h)>=0) return;   /* copies this run has already put down are not hosts */
     /* ONLY THE FACE `base` NAMES COUNTS. A part resting ON something is mounted by it; a part that
        merely has something resting on IT is not. Accepting contact either way sent the crane's own
        body brick forward off the front of the bird, mirrored about the wing lying against it. */
@@ -3667,13 +3674,13 @@ function mountedOn(b){          /* the brick b's mounting face is flush against;
    would drive it into the body, because the blue plate has no free back. Following the chain through
    TIPPED hosts to the first upright brick mirrors the whole stack together, so the two plates come
    round in order and land in the order they were built. */
-function mirrorHost(b){
-  let h = mountedOn(b);
-  for(let i=0; h && faced(h) && i<8; i++){ const up = mountedOn(h); if(!up) break; h = up; }
+function mirrorHost(b, skip){
+  let h = mountedOn(b, skip);
+  for(let i=0; h && faced(h) && i<8; i++){ const up = mountedOn(h, skip); if(!up) break; h = up; }
   return h;
 }
 /* The plane to reflect about, doubled - so a span [r,f] maps to [m-f, m-r] with no halving. */
-const mirrorPlane = b => { const h = mirrorHost(b); return h ? rearB(h)+frontB(h) : 0; };
+const mirrorPlane = (b, skip) => { const h = mirrorHost(b, skip); return h ? rearB(h)+frontB(h) : 0; };
 function faceToViewer(b, mirror){
   if(mode!=="standing") return;
   /* A PART ALREADY ON THE BUILDER'S SIDE IS AN EXACT TWIN and is not touched - that is the near-side
@@ -3695,10 +3702,13 @@ function pasteBrick(){
      the workspace mirrors there, so stepping the column up marches the copy off to the left, away
      from the hand that pasted it. Every other thing this application draws is presented from where
      the builder is standing, and a copy that fans out backwards is the same mistake in a new place. */
+  const src = (clipFrom && bricks.indexOf(clipFrom)>=0) ? clipFrom : clipBrick;
   const step = (viewBack ? -PASTE_STEP : PASTE_STEP) * (++pasteN);
-  const nb={...clipBrick, p:{...clipBrick.p}, col:clipBrick.col + step};
-  faceToViewer(nb, clipMirror);            /* brought to the side the builder is standing on */
-  bricks.push(nb); selBrick=nb; say("");   /* cleared, as placing a brick clears it - the copy has been used */
+  const nb={p:{...src.p}, colorIdx:src.colorIdx, col:src.col+step, row:src.row, flip:src.flip,
+            base:src.base, turn:src.turn, rot:src.rot, half:src.half};
+  faceToViewer(nb, mirrorPlane(src, clipMade));   /* brought to the side the builder is standing on */
+  bricks.push(nb); clipMade.push(nb);
+  selBrick=nb; say("");                    /* cleared, as placing a brick clears it - the copy has been used */
   draw(); commit();                      /* now, not on the usual delay: rapid pastes undo one at a time */
 }
 window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-Y redo; Ctrl-C / Ctrl-V copy a brick (Cmd on a Mac)
