@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.149 -->
+<!-- SANGALA_VERSION: 2026-08-20.153 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1675,7 +1675,7 @@ function tally(){
    did, and a group made after an arrangement appears at the bottom rather than in the middle of it.
    `secDrag` is the name being carried; it lives here because the rows it travels between are
    rebuilt under it. */
-let groupOrder=[], secDrag=null;
+let groupOrder=[], secDrag=null, partDrag=null;
 function tallySections(){
   const named=new Map(), loose=new Map(), order=[];
   bricks.forEach(b=>{ if(parked(b)) return;              /* a candidate on the cork is not a part */
@@ -1697,7 +1697,12 @@ function tallySections(){
     return ia-ib;
   });
   const out = ranked.map(nm=>({name:nm, rows:sort(named.get(nm))}));
-  if(loose.size) out.push({name:"", rows:sort(loose)});
+  /* OTHER PARTS STAYS ONCE THERE ARE GROUPS, even with nothing in it, because it is the way BACK:
+     join the last loose part and the section it came from would otherwise vanish, and with it the
+     only place a part can be dropped to leave its group. Empty, it carries no count and says
+     plainly that nothing is loose. With no named group anywhere there is nothing to leave, so it
+     does not appear and an ungrouped design looks exactly as it always has. */
+  if(loose.size || order.length) out.push({name:"", rows:sort(loose)});
   return out;
 }
 /* A SECTION FOLDS, AS A PLANE FOLDS IN STUDIO (Glen, 2026-08-20: "we should make named headings
@@ -1720,15 +1725,26 @@ function bom(){
      nothing about a part can reach the markup, and the click reads the design back out of it. */
   const sel = selMulti.length ? selMulti : (selBrick ? [selBrick] : []);
   const keyed = [];
-  const rowHtml = (r,ind) => {
-    const k = keyed.push({id:r.p.id, code:r.col.code})-1;
+  const rowHtml = (r,ind,secName,secIdx) => {
+    const k = keyed.push({id:r.p.id, code:r.col.code, name:r.p.name, sec:secName})-1;
+    /* EVERY SECTIONED ROW IS CARRIED, because the trip has to go both ways to be usable at all
+       (Glen, 2026-08-20: "to test it, I need to be able to drag parts back out of a named section
+       into Other Parts again"). A loose row joins the group it is dropped into; a named row is
+       dropped on Other Parts to LEAVE its group. Moving straight from one name to another is still
+       the case that is not built - it would have to peel and then join - so a named section refuses
+       a named row and does not light for it. */
+    const canDrag = secName!=null && (secName==="" ? secs.some(x=>x.name) : true);
     /* THE ROW IS WASHED WHEN THE SELECTION IS EXACTLY ITS PIECES - all of them, not one of them.
        Marking the row while a single brick of six is selected would say the list is showing what it
        is not. It follows the selection wherever that was made, so picking a brick on the plate
        lights its row too, the way choosing a color and choosing a brick already answer each other. */
     const on = sel.length===r.n && sel.every(b=>b.p.id===r.p.id && COLORS[b.colorIdx].code===r.col.code);
-    return "<tr class='partrow"+(on?" on":"")+"' data-part='"+k+"'"+
-      " title='Select every piece of this part in the model'><td"+(ind?" style='padding-left:.9rem'":"")+">"+r.p.name+
+    return "<tr class='partrow"+(on?" on":"")+"'"+(canDrag?" draggable='true'":"")+" data-part='"+k+"'"+
+      (secIdx==null?"":" data-insec='"+secIdx+"'")+
+      " title='"+(!canDrag ? "Select every piece of this part in the model"
+                : secName==="" ? "Select every piece of this part in the model, or drag it into a named group to add it"
+                : "Select every piece of this part in the model, or drag it into Other Parts to take it out of this group")+
+      "'><td"+(ind?" style='padding-left:.9rem'":"")+">"+r.p.name+
       "<br><span class='dn'>Design "+r.p.id+"</span></td>"+
       "<td><span class='chip' style='background:"+r.col.hex+"'></span>"+r.col.name+"</td>"+
       "<td class='q'>"+r.n+"</td></tr>"; };
@@ -1737,7 +1753,7 @@ function bom(){
   document.querySelector("#bom tbody").innerHTML =
     (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
     (!named
-      ? rows.map(r=>rowHtml(r,false)).join("")
+      ? rows.map(r=>rowHtml(r,false,undefined)).join("")
       : secs.map((s2,i)=>{
           const n2=s2.rows.reduce((t,r)=>t+r.n,0), shut=secShut.has(s2.name);
           const head="<tr class='sechead'"+(s2.name?" draggable='true'":"")+" data-sec='"+i+"' title=\""+
@@ -1749,8 +1765,9 @@ function bom(){
                      "<span style='color:#8a7350;font-size:.8rem;margin-right:.3rem'>"+
                      (shut?"&#9656;":"&#9662;")+"</span>"+
                      (s2.name ? s2.name.replace(/[<>]/g,"") : "Other Parts")+
-                     " <span class='dn'>\u00b7 "+n2+(n2===1?" piece":" pieces")+"</span></td></tr>";
-          return head + (shut ? "" : s2.rows.map(r=>rowHtml(r,true)).join(""));
+                     (n2 ? " <span class='dn'>· "+n2+(n2===1?" piece":" pieces")+"</span>" : "")+
+                     "</td></tr>";
+          return head + (shut ? "" : s2.rows.map(r=>rowHtml(r,true,s2.name,i)).join(""));
         }).join(""));
   /* The heading carries its section's INDEX and the name is read back at the click, so a group name
      holding a quote or an angle bracket can never reach the markup. */
@@ -1772,6 +1789,15 @@ function bom(){
      A row is a tally, so it stands for every brick of that part in that color: all of them are taken,
      which is also what makes the count in the Qty column mean something you can act on. The parked
      ones are left out, exactly as tally() leaves them out of the row's count. */
+  document.querySelectorAll("#bom tr.partrow[draggable]").forEach(tr=>{
+    tr.addEventListener("dragstart",e=>{
+      partDrag = keyed[+tr.dataset.part] || null;
+      if(!partDrag){ e.preventDefault(); return; }
+      e.dataTransfer.setData("text/plain","sangala-part");
+      e.dataTransfer.effectAllowed="move";
+    });
+    tr.addEventListener("dragend",()=>{ partDrag=null; });
+  });
   document.querySelectorAll("#bom tr.partrow").forEach(tr=>{
     tr.onclick=()=>{
       const k=keyed[+tr.dataset.part]; if(!k) return;
@@ -1784,10 +1810,31 @@ function bom(){
           (mem.length>1 ? " - all "+mem.length+" pieces of it." : "."));
     };
   });
-  const secRows=[...document.querySelectorAll("#bom tr.sechead")];
-  const clearMarks=()=>secRows.forEach(r=>r.style.boxShadow="");
+  /* THE WHOLE SECTION TAKES THE DROP, NOT ITS LABEL (Glen, 2026-08-20: "it was not intuitive. My
+     inclination was to drag the part into the space beneath the heading rather than onto it"). A
+     group on screen is a heading AND the rows under it, so the target is the block, and the block is
+     what lights up. Aiming at a one-line label is a thing a program asks for and a builder does not
+     do. A folded section has no rows, so its heading alone is the block, which is what the fold
+     already means.
+     Both drags resolve through the same lookup: a heading carries `data-sec`, a row under it carries
+     `data-insec`, and either answers with the section it belongs to. So dragging a heading into
+     another section's rows arranges the sections too - the same intuition, and it would be strange
+     to honor it in one direction and not the other. */
+  const secTargets=[...document.querySelectorAll("#bom tr.sechead, #bom tr[data-insec]")];
   const secAt=tr=>secs[+tr.dataset.sec];
-  secRows.forEach(tr=>{
+  const idxOf=tr=>tr.classList.contains("sechead") ? +tr.dataset.sec
+                : (tr.dataset.insec!=null ? +tr.dataset.insec : -1);
+  const clearMarks=()=>secTargets.forEach(r=>{ r.style.boxShadow=""; r.style.background=""; });
+  /* A PART LANDS INSIDE the section, so the section washes; a heading lands ABOVE one, so its
+     heading draws the line it will sit on. Two gestures, two marks. */
+  const markSection=(i,kind)=>{
+    clearMarks();
+    secTargets.forEach(r=>{ if(idxOf(r)!==i) return;
+      if(kind==="part") r.style.background="rgba(26,95,180,.12)";
+      else if(r.classList.contains("sechead")) r.style.boxShadow="inset 0 2px 0 #3f8fd0"; });
+  };
+
+  document.querySelectorAll("#bom tr.sechead").forEach(tr=>{
     tr.addEventListener("dragstart",e=>{
       const s2=secAt(tr), nm=s2 && s2.name;
       /* OTHER PARTS IS CARRIED NOWHERE - it is not a group, only the parts that belong to none. The
@@ -1798,15 +1845,70 @@ function bom(){
       e.dataTransfer.setData("text/plain","sangala-sec");
       e.dataTransfer.effectAllowed="move";
     });
+  });
+
+  secTargets.forEach(tr=>{
     tr.addEventListener("dragover",e=>{
-      if(secDrag==null) return;
+      if(secDrag==null && partDrag==null) return;
+      const i=idxOf(tr), to=secs[i]; if(!to) return;
+      /* WHERE A PART MAY LAND. A LOOSE row wants a NAMED section - dropping it back on Other Parts
+         would mean nothing, since that is where it already is. A NAMED row wants OTHER PARTS, which
+         is how it leaves its group; dropped on another name it would have to peel and then join, and
+         that case is not built, so the section does not light for it. */
+      if(partDrag!=null && (partDrag.sec==="" ? !to.name : !!to.name)) return;
       e.preventDefault(); e.dataTransfer.dropEffect="move";
-      tr.style.boxShadow="inset 0 2px 0 #3f8fd0";       /* the blue every selection in the family uses */
+      markSection(i, partDrag!=null ? "part" : "sec");
     });
-    tr.addEventListener("dragleave",()=>{ tr.style.boxShadow=""; });
+    tr.addEventListener("dragleave",e=>{
+      /* Leaving one row of a section for the next is not leaving the section, so the mark is only
+         dropped when the pointer has actually left the block. */
+      const to=e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("tr");
+      if(!to || idxOf(to)!==idxOf(tr)) clearMarks();
+    });
     tr.addEventListener("drop",e=>{
       e.preventDefault(); clearMarks();
-      const to=secAt(tr), moved=secDrag; secDrag=null;
+      const to=secs[idxOf(tr)];
+      /* A LOOSE PART JOINS THE GROUP THE SECTION NAMES. The bricks take that group's id and its name
+         at the FRONT of their own path, which is what groupSel does for a new group - except the id
+         is the existing one rather than a freshly minted one, which is the whole of the difference
+         between joining a group and making one. Anything the brick was already grouped into is kept,
+         nested inside, so an unnamed pair dropped on Crown stays a pair.
+         The id is read off the section's OWN bricks: a name is not an identity, and two groups could
+         in principle carry one name, so the first brick in the section decides which is meant. */
+      if(partDrag){
+        const k=partDrag; partDrag=null;
+        if(!to || (k.sec==="" ? !to.name : !!to.name)) return;
+        /* The row's own bricks: the ones of that part and color that sit in the section it was
+           carried from - not every brick of that part, which may be spread across several groups. */
+        const mem=bricks.filter(b=>!parked(b) && b.p.id===k.id && COLORS[b.colorIdx].code===k.code
+                                   && (gnameOf(b)||"")===k.sec);
+        if(!mem.length) return;
+        const nmOf=String(k.name).replace(/[<>]/g,"");
+        if(k.sec===""){
+          const host=bricks.find(b=>!parked(b) && gnameOf(b)===to.name);
+          if(!host) return;
+          const gid=gpathOf(host)[0];
+          mem.forEach(b=>{ const gp=gpathOf(b).slice(); gp.unshift(gid); b.gpath=gp; b.group=gid;
+                           const nm=gnamesOf(b).slice(); nm.unshift(to.name); b.gnames=nm; b.gname=undefined; });
+          say(mem.length+(mem.length===1?" piece":" pieces")+' of "'+nmOf+
+              '" added to "'+to.name.replace(/[<>]/g,"")+'".');
+        } else {
+          /* LEAVING IS UNGROUP'S OWN PEEL, one level, so a group nested inside this one survives -
+             the same rule the Ungroup button follows, because it is the same act. */
+          const from=k.sec;
+          mem.forEach(b=>{ const gp=gpathOf(b).slice(); gp.shift();
+                           b.gpath=gp.length?gp:undefined; b.group=gp.length?gp[0]:undefined;
+                           const nm=gnamesOf(b).slice(); nm.shift();
+                           b.gnames=nm.length?nm:undefined; b.gname=undefined; });
+          say(mem.length+(mem.length===1?" piece":" pieces")+' of "'+nmOf+
+              '" taken out of "'+from.replace(/[<>]/g,"")+'".');
+        }
+        selMulti = mem.length>1 ? mem.slice() : [];      /* what just moved is what is selected, so */
+        selBrick = mem.length===1 ? mem[0] : null;       /* the builder can see where it went */
+        draw(); commit();
+        return;
+      }
+      const moved=secDrag; secDrag=null;
       if(!moved || !to || to.name===moved) return;
       const list=secs.filter(x=>x.name && x.name!==moved).map(x=>x.name);
       const at=to.name ? list.indexOf(to.name) : list.length;
@@ -1814,7 +1916,7 @@ function bom(){
       groupOrder=list;
       bom(); commit();
     });
-    tr.addEventListener("dragend",()=>{ secDrag=null; clearMarks(); });
+    tr.addEventListener("dragend",()=>{ secDrag=null; partDrag=null; clearMarks(); });
   });
   /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
   const park=bricks.filter(parked).length, built=bricks.length-park;
