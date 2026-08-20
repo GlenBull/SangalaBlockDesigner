@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.146 -->
+<!-- SANGALA_VERSION: 2026-08-20.148 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1665,6 +1665,15 @@ function tally(){
    the wing is one thing to buy. Splitting it by group there would order it twice.
    SECTIONS COME IN THE ORDER THE GROUPS WERE BUILT - first appearance in the design - rather than
    alphabetically, because that is the order a builder thinks in and roughly the order they worked. */
+/* THE ARRANGEMENT IS THE DESIGN'S, NOT THE PANEL'S (Glen, 2026-08-20: "the ability to adjust the
+   order of named groups so that they can be arranged in a logical order: Crown, Head, Body, etc.
+   for example, would be a top to bottom approach"). So it is written into the .block, it rides the
+   undo snapshot, and it follows a rename. A name this list does not know falls in behind the ones
+   it does, in the order the groups were built - so a design saved before this opens exactly as it
+   did, and a group made after an arrangement appears at the bottom rather than in the middle of it.
+   `secDrag` is the name being carried; it lives here because the rows it travels between are
+   rebuilt under it. */
+let groupOrder=[], secDrag=null;
 function tallySections(){
   const named=new Map(), loose=new Map(), order=[];
   bricks.forEach(b=>{ if(parked(b)) return;              /* a candidate on the cork is not a part */
@@ -1678,7 +1687,14 @@ function tallySections(){
     if(!m.has(k)) m.set(k,{p:b.p,col:c,n:0});
     m.get(k).n++; });
   const sort = m => [...m.values()].sort((x,y)=>x.p.name.localeCompare(y.p.name)||x.col.name.localeCompare(y.col.name));
-  const out = order.map(nm=>({name:nm, rows:sort(named.get(nm))}));
+  const ranked = order.slice().sort((a,b)=>{
+    const ia=groupOrder.indexOf(a), ib=groupOrder.indexOf(b);
+    if(ia<0 && ib<0) return order.indexOf(a)-order.indexOf(b);   /* neither arranged: as they were built */
+    if(ia<0) return 1;                                            /* an unarranged group falls in behind */
+    if(ib<0) return -1;
+    return ia-ib;
+  });
+  const out = ranked.map(nm=>({name:nm, rows:sort(named.get(nm))}));
   if(loose.size) out.push({name:"", rows:sort(loose)});
   return out;
 }
@@ -1710,9 +1726,9 @@ function bom(){
       ? rows.map(r=>rowHtml(r,false)).join("")
       : secs.map((s2,i)=>{
           const n2=s2.rows.reduce((t,r)=>t+r.n,0), shut=secShut.has(s2.name);
-          const head="<tr class='sechead' data-sec='"+i+"' title=\""+
-                     (shut?"Expand - show the parts under this heading"
-                          :"Collapse - fold this heading's parts out of the list")+
+          const head="<tr class='sechead'"+(s2.name?" draggable='true'":"")+" data-sec='"+i+"' title=\""+
+                     (shut?"Expand - show the parts under this heading. Drag it to move this group."
+                          :"Collapse - fold this heading's parts out of the list. Drag it to move this group.")+
                      "\" style=\"cursor:pointer;user-select:none\">"+
                      "<td colspan='3' style=\"padding-top:.35rem;font-weight:700;color:#5a4a34;"+
                      "border-bottom:1px solid #d9cdb4\">"+
@@ -1728,6 +1744,43 @@ function bom(){
     tr.onclick=()=>{ const s2=secs[+tr.dataset.sec]; if(!s2) return;
       if(secShut.has(s2.name)) secShut.delete(s2.name); else secShut.add(s2.name);
       bom(); };
+  });
+  /* DRAG A HEADING TO ITS PLACE. A library row is already dragged onto the workspace in this
+     application, so the gesture is the one that is here rather than a new pair of arrows - and
+     Raise and Lower could not be borrowed from Studio, where they mean depth order and must go on
+     meaning that in all three applications.
+     Other Parts is not a group, so dropping onto it can only ever mean "put this one last". */
+  const secRows=[...document.querySelectorAll("#bom tr.sechead")];
+  const clearMarks=()=>secRows.forEach(r=>r.style.boxShadow="");
+  const secAt=tr=>secs[+tr.dataset.sec];
+  secRows.forEach(tr=>{
+    tr.addEventListener("dragstart",e=>{
+      const s2=secAt(tr), nm=s2 && s2.name;
+      /* OTHER PARTS IS CARRIED NOWHERE - it is not a group, only the parts that belong to none. The
+         name is taken AFTER this bail rather than before it, or an empty one is left half-carried
+         and the drop below writes it into the order as a nameless section. */
+      if(!nm){ e.preventDefault(); return; }
+      secDrag=nm;
+      e.dataTransfer.setData("text/plain","sangala-sec");
+      e.dataTransfer.effectAllowed="move";
+    });
+    tr.addEventListener("dragover",e=>{
+      if(secDrag==null) return;
+      e.preventDefault(); e.dataTransfer.dropEffect="move";
+      tr.style.boxShadow="inset 0 2px 0 #3f8fd0";       /* the blue every selection in the family uses */
+    });
+    tr.addEventListener("dragleave",()=>{ tr.style.boxShadow=""; });
+    tr.addEventListener("drop",e=>{
+      e.preventDefault(); clearMarks();
+      const to=secAt(tr), moved=secDrag; secDrag=null;
+      if(!moved || !to || to.name===moved) return;
+      const list=secs.filter(x=>x.name && x.name!==moved).map(x=>x.name);
+      const at=to.name ? list.indexOf(to.name) : list.length;
+      list.splice(at<0?list.length:at, 0, moved);
+      groupOrder=list;
+      bom(); commit();
+    });
+    tr.addEventListener("dragend",()=>{ secDrag=null; clearMarks(); });
   });
   /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
   const park=bricks.filter(parked).length, built=bricks.length-park;
@@ -3655,9 +3708,14 @@ function nameGroup(){
   const nm = v.trim();
   /* THE LEVEL THE PANEL IS SHOWING is the outermost, so that is the one named. An inner group keeps
      the name it was given: the two are different entries in the same list. */
+  /* THE ARRANGEMENT FOLLOWS THE RENAME. Without this, renaming Body to Torso drops it to the bottom
+     of the parts list - the arrangement destroyed by an edit that was not about the arrangement. */
+  const was = gnameOf(set[0]);
   set.forEach(b=>{ const g=gnamesOf(b).slice();
     if(!g.length) g.push(undefined);
     g[0] = nm || undefined; b.gnames=g; b.gname=undefined; });
+  if(was){ const gi=groupOrder.indexOf(was);
+           if(gi>=0){ if(nm) groupOrder[gi]=nm; else groupOrder.splice(gi,1); } }
   /* AND THE PARTS LIST OPENS, because naming a group reorganizes that list and an action whose
      result sits behind a fold is an action the builder cannot see happen (Glen, 2026-08-20: "when a
      part is named, the parts list should open, if it is not already open, to make the action
@@ -3830,6 +3888,9 @@ function serializeState(){
      brick already holds, and two sets that were never bound would move as one. */
   return { mode:mode, pageKind:pageKind, frameScale:frameScale, placeX:placeX, placeY:placeY,
     groupSeq:groupSeq,
+    /* AND THE ARRANGEMENT OF THE NAMED GROUPS. This map is a whitelist - a field it does not name is
+       a field one Ctrl-Z quietly destroys, which is how `turn` was lost once already. */
+    groupOrder:groupOrder.slice(),
     guide: guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0],q[1]]),
                                    holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))})),
     bricks: bricks.map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
@@ -3858,6 +3919,7 @@ function restoreState(st){
   /* AND THE GROUPING COMES BACK WITH THEM. This map is a whitelist: a field it does not name is a
      field one Ctrl-Z quietly destroys, which is exactly how `turn` was lost. */
   groupSeq = st.groupSeq || 0;
+  groupOrder = (st.groupOrder||[]).slice();
   bricks=(st.bricks||[]).map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
                                    flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
                                    group:b.group, gpath:b.gpath?b.gpath.slice():undefined,
@@ -4203,6 +4265,10 @@ function designJSON(){ return (
        index would silently point at a different color if the palette were ever reordered. */
     libColors:Object.keys(libColor).reduce((o,id)=>{
       const c=COLORS[libColor[id]]; if(c) o[id]=c.code; return o; }, {}),
+    /* THE ARRANGEMENT OF THE NAMED GROUPS, written only when there is one - so a design that has
+       never been arranged is saved byte for byte as it always was. A name no group carries any more
+       is simply passed over on the way back in, so an arrangement cannot go stale. */
+    ...(groupOrder.length?{groupOrder:groupOrder}:{}),
     bricks:bricks.map(b=>({id:b.p.id,name:b.p.name,w:b.p.w,d:b.p.d||1,h:b.p.h,shape:b.p.shape,
                            color:COLORS[b.colorIdx].code,col:b.col,row:b.row,base:b.base||0,
                            flip:b.flip,
@@ -5224,6 +5290,9 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
        mints a fresh id on first sight and reuses it thereafter, which is what preserves WHICH bricks
        share WHICH level while making the numbers unable to collide. Studio does the same thing to the
        data-gpath it reads out of an SVG. */
+    /* The arrangement of the named groups. A file written before this carries none and its parts
+       list falls back to the order the groups were built in, which is what it has always shown. */
+    groupOrder = Array.isArray(d.groupOrder) ? d.groupOrder.slice() : [];
     const gmap={};
     bricks=(d.bricks||[]).map(b=>{
       const gp=(b.gpath||[]).map(id=>{ if(!(id in gmap)) gmap[id]=++groupSeq; return gmap[id]; });
