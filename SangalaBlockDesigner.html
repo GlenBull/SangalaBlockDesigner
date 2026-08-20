@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.137 -->
+<!-- SANGALA_VERSION: 2026-08-20.138 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2998,13 +2998,16 @@ function ungroupSel(){               /* PEEL one level; a group inside this one 
   const set=groupIds().length ? groupIds() : (selNow() ? [selNow()] : []);
   let out=0;
   set.forEach(b=>{ const p=gpathOf(b).slice();
-    if(p.length){ p.shift(); b.gpath=p.length?p:undefined; b.group=p.length?p[0]:undefined; out++; } });
+    if(p.length){ p.shift(); b.gpath=p.length?p:undefined; b.group=p.length?p[0]:undefined;
+                  if(!p.length) b.gname=undefined;      /* out of every group: the name goes with it */
+                  out++; } });
   selMulti=[]; selBrick=null;
   draw(); commit();
   say(out ? "Ungrouped "+out+" bricks." : "");
 }
 $("bGroup").onclick=groupSel;
 $("bUngroup").onclick=ungroupSel;
+$("selName").onclick=()=>{ if(isGroupSel()) nameGroup(); };
 $("spUp").onclick =()=>jogHalf(0.5);
 $("spDn").onclick =()=>jogHalf(-0.5);
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
@@ -3471,9 +3474,20 @@ function drawSelection(){
      answer for Depth, Flip or Rotate either - so those controls go dark, which is Studio's behaviour
      for a multi-selection. Jogging a whole group's depth is its own decision, not part of the port. */
   if(selMulti.length){
-    $("selName").textContent = (isGroupSel() ? "Group of " : "") + selMulti.length + " bricks";
+    /* THE NAME IS THE READING when there is one - "wing", not "Group of 4 bricks". The count is what
+       the panel falls back to while the group is still nameless, and the whole reading is the button:
+       clicking it asks for the name, which is Studio's gesture (there the part's name in the table is
+       what is clicked). Underlined so it reads as something to press. */
+    const g=isGroupSel(), nm=gnameOf(selMulti[0]);
+    const el=$("selName");
+    el.textContent = nm ? nm + " · " + selMulti.length + " bricks"
+                        : (g ? "Group of " : "") + selMulti.length + " bricks";
+    el.style.cursor = g ? "pointer" : "";
+    el.style.textDecoration = g ? "underline dotted" : "";
+    el.title = g ? "Click to name this group — head, body, wing …" : "";
     return;
   }
+  $("selName").style.cursor=""; $("selName").style.textDecoration=""; $("selName").title="";
   if(!on){ $("selName").textContent=""; return; }   /* the row stays for the Inset toggle; the reading goes */
   /* THE NAME ALONE, because the spinner beside it now carries the layer and one fact shown twice is
      one fact that can disagree with itself. Relief keeps its reading here: it has no spinner, since
@@ -3519,6 +3533,27 @@ const wholeGroup = b => (b && b.group!=null) ? bricks.filter(z=>z.group===b.grou
 const selectedBricks = () => selMulti.length ? selMulti.slice() : (selNow() ? [selNow()] : []);
 const isGroupSel = () => { if(selMulti.length<2) return false;
   const g=selMulti[0].group; return g!=null && selMulti.every(b=>b.group===g); };
+/* A GROUP HAS A NAME, and that is the point of grouping rather than a decoration (Glen, 2026-08-20:
+   "the crucial aspect of grouping is the ability to assign a name to a group, from a pedagogical
+   perspective"). A figure the builder can talk about in parts - head, body, wing, near leg - is a
+   figure they can reason about and hand to somebody else; a numbered bundle is not.
+   IT IS WRITTEN ON EVERY MEMBER, which is Studio's arrangement exactly: its data-name goes on each
+   object of a set rather than into a table of group ids, so the name travels with the brick through
+   every copy, save and undo without a second structure to keep in step. Members of one group always
+   agree, because naming writes to all of them at once. */
+const gnameOf = b => (b && b.gname) ? b.gname : "";
+function nameGroup(){
+  const set = selMulti.length ? selMulti.slice() : (selNow() ? [selNow()] : []);
+  if(!set.length) return;
+  /* Studio's own words and its own examples, so a student who has named a part in one application
+     meets the same question in the other. */
+  const v = prompt("Name this group (head, body, wing …)", gnameOf(set[0]));
+  if(v==null) return;                       /* Cancel leaves it exactly as it was */
+  const nm = v.trim();
+  set.forEach(b=>{ if(nm) b.gname=nm; else b.gname=undefined; });
+  draw(); commit();
+  say(nm ? 'Named "'+nm+'".' : "Name cleared.");
+}
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
@@ -3660,7 +3695,7 @@ function serializeState(){
                                    holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))})),
     bricks: bricks.map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
                              flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
-                             group:b.group, gpath:b.gpath?b.gpath.slice():undefined })) };
+                             group:b.group, gpath:b.gpath?b.gpath.slice():undefined, gname:b.gname })) };
 }
 function commit(){ if(histBusy) return; const s=JSON.stringify(serializeState());   // push a snapshot unless it matches the current top
   if(hist.length && hist[hist.length-1]===s) return;                                 // no change -> no push, and the redo chain survives
@@ -3685,7 +3720,7 @@ function restoreState(st){
   groupSeq = st.groupSeq || 0;
   bricks=(st.bricks||[]).map(b=>({ p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row,
                                    flip:b.flip, base:b.base, turn:b.turn, rot:b.rot, half:b.half,
-                                   group:b.group, gpath:b.gpath?b.gpath.slice():undefined }));
+                                   group:b.group, gpath:b.gpath?b.gpath.slice():undefined, gname:b.gname }));
   selBrick=null; selMulti=[];              /* the old objects are gone; nothing may point at them */
   /* the controls follow the state, the way Studio's refreshEditPanel does - a restored mode that the
      menu still disagrees with is the next defect */
