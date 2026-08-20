@@ -50,7 +50,8 @@ d.item("The Page. ", "SangalaBlockDesigner.html, one self-contained file holding
                      "model, the parts catalog, the 3D view and the document writers. It holds everything "
                      "that knows what a brick is.")
 d.item("The Bridge. ", "SangalaBlockDesigner.exe, compiled from SangalaBlocksServer.cs. It serves the page "
-                       "on a loopback port and does the one thing a browser cannot do for itself: run "
+                       "on a loopback port and does the two things a browser cannot do for itself: read "
+                       "the parts library off disk, and run "
                        "another program.")
 d.item("The Renderer. ", "LDView, in the LDView folder beside the application, which draws an LDraw model "
                          "as an image.")
@@ -122,6 +123,34 @@ d.item("Relief. ", "The design is seen face on. A column is across and a row is 
 d.body("A brick that overlaps the plate nowhere is parked: drawn and saved, but excluded from the parts "
        "list, the 3D view and every export. That state is derived from where the brick sits rather than "
        "stored as a flag, so it stays true through a save, a reload and a change of page size.")
+d.body("THE PLAN DRAWS A PART'S OWN SHAPE. One silhouette per design number and viewing pair is "
+       "measured from the part's own mesh — which the plan asks for the first time it draws that part, "
+       "whether or not anything 3D has been opened — and kept, drawn at the size the part is. A wedge "
+       "therefore shows the flat section at its wide end, and a slope shows how far its ramp truly "
+       "reaches. The polygon written out by hand for each family of shapes has not gone: it stands in "
+       "until the geometry arrives, and permanently on a page with no bridge to ask.")
+d.body("Four things about that measurement are worth stating, because each is a decision rather than a "
+       "consequence:", before_list=True)
+d.item("Studs Are Not In It. ", "The y coordinate is clamped at the origin plane, so the studs fold onto "
+                                "the top face and leave the outline. The workspace draws them itself, "
+                                "from the library's measured stud positions, which is what lets a tipped "
+                                "part show recesses rather than studs when its attitude disagrees with "
+                                "the side being viewed from.")
+d.item("A Full Box Keeps Its Rounding. ", "A part whose outline fills its own box is drawn as the rounded "
+                                          "rectangle, that rounding being a drawing convention rather "
+                                          "than a measurement, and the test is measured so no register "
+                                          "of which parts are rectangles is needed.")
+d.item("The Cone and the Round Brick Are Exempt. ", "Both keep the shapes drawn for them here, which were "
+                                                    "settled against a photograph of the real brick. The "
+                                                    "LDraw file draws a collar the part does not have, "
+                                                    "and a measured silhouette would put it back.")
+d.item("It Is a Rasterization. ", "Not a union of polygons, because overlapping triangles, a hollow "
+                                  "underside and a curved edge all rasterize alike. The projection takes "
+                                  "the same yaw the 3D view works out, so the two pictures cannot "
+                                  "disagree about which way a part is turned — except in relief, "
+                                  "deliberately: the outline there takes a tipped part's mapping rather "
+                                  "than relief's own 3D matrix, which mirrors, and which is left alone "
+                                  "because changing it would alter every relief design at once.")
 d.body("NOTHING FALLS. A placed part stays where it was put, whether or not a frame lies behind it. An "
        "earlier version settled each part onto whatever was under it, on the reasoning that a builder "
        "cannot stack a figure in mid-air; what that missed is that this is a plan of a model rather than "
@@ -131,11 +160,13 @@ d.body("NOTHING FALLS. A placed part stays where it was put, whether or not a fr
 
 # ---------------------------------------------------------------- 8
 d.heading("8. Depth, the Midline and the Half Step")
-d.body("A standing figure is deeper than one course, and the workspace cannot show it: the plan is a front "
-       "elevation, so a part behind another is merely drawn behind it. Depth is therefore carried as a "
+d.body("A standing figure is deeper than one course, and the workspace cannot show it: the plan is a side "
+       "elevation — the figure in profile — so a part behind another is merely drawn behind it. Depth is therefore carried as a "
        "number and shown in a picture, never inferred from the plan.")
 d.body("Depth is measured from the MIDLINE, the plane the figure is built about. A part's base records "
-       "where its back face sits, in studs, positive toward the viewer and negative away from them; the "
+       "where its MOUNTING face sits, in studs, positive toward the viewer and negative away from them "
+       "— for a part whose studs face the front that is its rear face, and for one tipped studs-back it "
+       "is its front face; the "
        "midline is zero and carries no course of its own. Held beside it is a half step, either zero or "
        "one half, which is what places a part on the midline of a figure whose courses are a whole stud "
        "deep. The two are held apart because a placement recomputes the base and would wash a fraction "
@@ -149,6 +180,23 @@ d.item("What a Part Rests On. ", "A part settles clear of where the brick below 
 d.item("Tipping a Part. ", "A part tipped forward is as thick as it is high and as tall as it is deep. "
                            "Its own two other dimensions are swapped onto its face, and swapped again by a "
                            "quarter turn.")
+d.body("A part's base names the face it is MOUNTED BY, and which of its two faces that is depends on how "
+       "it has been tipped. A part whose studs face the front is mounted by its rear face and reaches "
+       "toward the viewer from there; a part whose studs face the back is mounted by its front face and "
+       "reaches away. The two surfaces are therefore derived rather than assumed, by a single pair of "
+       "expressions, rearB and frontB, which the plan's drawing order, its resting-place arithmetic and "
+       "the paste all read. The 3D build and the LDraw export apply the same rule in their own terms: "
+       "the mesh grows from the mounting face by the part's thickness, and the export offsets its "
+       "placement by the part's own box. Writing that arithmetic out at each site is what allowed the "
+       "three to hold three different opinions about where a studs-away part sat, each wrong by that "
+       "part's own thickness or by twice it. A change to the rule must therefore be made in all three, "
+       "and the three are checked against each other by rendering rather than guaranteed by "
+       "construction.")
+d.body("Settling belongs to PLACEMENT and to nothing else. A part being put down for the first time comes "
+       "to rest clear of whatever occupies its columns, measured from the side the builder is standing "
+       "on. A part already in the design has a depth its designer chose, so moving it across the plan "
+       "leaves that depth alone — including a move out to the cork and back, which is how a part is "
+       "lifted aside to reach the one beneath it.")
 d.body("The builder moves a part through this axis with the Depth control in the panel, whose two arrows "
        "step it half a layer at a time. Where a step lands is split back into the whole layer the part is "
        "in and the half it stands off, so a part can be carried through any number of layers by repeating "
@@ -158,7 +206,44 @@ d.body("Whether a layer should also be NUMBERED for the builder, and what such a
        "part sits among its neighbours, which is what a number was being asked to say in words.")
 
 # ---------------------------------------------------------------- 9
-d.heading("9. The Parts Catalog")
+d.heading("9. Copy and Paste")
+d.body("Ctrl-C and Ctrl-V are Sangala Studio's, function for function, because Studio settled the question "
+       "first: a copy carries everything about the part, repeated pastes fan out rather than stack, the "
+       "new copy becomes the selection, and each paste commits at once so a run of them undoes one at a "
+       "time. What differs is the step. A brick lives on the stud grid, so a copy moves one STUD along as "
+       "seen, which is a column lower once the builder has walked round to the far side.")
+d.body("The clipboard holds the BRICK, not a reading taken from it. While the original is still in the "
+       "design a paste reads its current column, row and layer; only a brick deleted since the copy falls "
+       "back to the recorded snapshot. A snapshot alone was wrong for the way the application is used: a "
+       "part is dragged aside to reach the one beneath it and copied where it has been dragged to, where "
+       "it is mounted on nothing, and both its position and its depth were then taken from the staging "
+       "area rather than from the figure.")
+d.body("A copy of a part lying on the side away from the builder is brought round to the side the "
+       "builder is standing on — which is the far side reached through Front / Back, and equally a "
+       "far-side part copied while facing the front. The rule for where it lands took three attempts:",
+       before_list=True)
+d.item("Not the Midline. ", "Reflecting the part's span about the midline is right only where the body it "
+                            "is mounted on is itself centered there. A side-stud brick spanning the two "
+                            "layers in front of the midline sends a plate mounted on it two layers behind "
+                            "the figure, hanging in space.")
+d.item("Not Settled. ", "Asking where the part would COME TO REST from the far side is symmetric and still "
+                        "wrong, because it settles clear of everything in those columns. A wing eight "
+                        "layers away in the same columns takes the copy with it.")
+d.item("Its Own Host. ", "The copy is reflected about the mid-plane of the brick the original is mounted "
+                         "on, following that chain through tipped detail to the body brick beneath it, so "
+                         "a plate on a side-stud brick's front face lands on its back face. A part mounted "
+                         "on nothing has no such brick, and the midline is then the only mirror there is.")
+d.body("Neither side settles, which is what makes the two behave alike: a copy on the near side is an "
+       "exact twin one stud along, and a copy on the far side is that twin's mirror image — and, if the "
+       "original was itself tipped, tipped the other way so its studs face the builder. An upright brick "
+       "is mirrored and left upright. All of this belongs to a standing figure: a relief has one side "
+       "and nothing in it is tipped, so a paste there is always the plain twin. The mirror excludes the "
+       "copies a run of pastes has already put down, or a "
+       "body brick pasted twice would mirror about its own first copy and march backward through the "
+       "figure a course at a time.")
+
+# ---------------------------------------------------------------- 10
+d.heading("10. The Parts Catalog")
 d.body("Every part the application offers carries a real design number and a real footprint, and both are "
        "read from the LDraw library rather than typed. Two tools do that reading: tools/ldparts.py "
        "resolves a number, reports the part's own description and measures its geometry, and "
@@ -170,16 +255,38 @@ d.body("Three facts about the library shape that code. A part's first line is it
        "at the top of its body.")
 d.body("A size that no real part has is reported as such. A parts list that claims a part which cannot be "
        "bought is worse than no parts list.")
+d.body("The palette is bound to the selection in both directions. Selecting a brick moves the palette to "
+       "its color, and a color chosen while a brick is selected is written onto that brick and "
+       "committed, so it undoes as one step and the parts list is rebuilt — the list groups by part AND "
+       "color, so a recolor moves a piece from one row to another. With no brick selected the palette is "
+       "only the color the next placement will take. The rule that a color chosen while a LIBRARY row is "
+       "selected stays with that part number is unchanged and independent: one records what the builder "
+       "means a part to be, the other repaints a brick already placed.")
+d.body("A library is written as well as read. The Save menu writes what the panel holds, merged, as a "
+       ".library file; the extension is the word a student meets at both ends, and the marker inside "
+       "says the same. Either marker opens, so every .parts file already made is unaffected - the "
+       "format did not change, only what it is called.")
+d.body("A library STATES neither color nor quantity. It is a catalog of shapes: what a part is, not "
+       "what it is to be made in or how many are owned. Color is chosen from the palette at the moment a "
+       "brick is placed and then stays with that part number, so a body brick set to green is placed in "
+       "green until it is changed; and a quantity belongs to the parts list, which counts what the design "
+       "actually uses and is what a physical build is ordered from. An entry that names a color would be "
+       "a choice made on the builder's behalf, and one that names a quantity invites the panel to be read "
+       "as stock. The format has not changed: an older file that carries a color still seeds the palette "
+       "when its row is picked, and a quantity in one is simply not shown, so nothing already written is "
+       "stranded.")
 d.body("A .parts library extends that catalog at run time. tools/parts_library.py turns a submitted list "
-       "of numbers into one, deriving every field but color and quantity from LDraw; the page merges it "
+       "of numbers into one, deriving every field from LDraw but the two a submitted line may name — a "
+       "color and a quantity, which are copied through and which the application no longer reads. The "
+       "page merges it "
        "into the menu, adding sizes it did not have and whole kinds it did not know. Two consequences "
        "follow. A library may name a part the page's own tables never held, so tools/bundle_parts.py "
        "reads every library in the repository as well as the page — a part that can be placed but was not "
        "shipped renders as nothing at all, with no error. And a design records the libraries it was built "
        "from, so opening it elsewhere reports what is missing rather than quietly offering less.")
 
-# ---------------------------------------------------------------- 10
-d.heading("10. The Local Bridge")
+# ---------------------------------------------------------------- 11
+d.heading("11. The Local Bridge")
 d.body("SangalaBlocksServer.cs is Sangala Studio's bridge ported: a loopback TcpListener, which needs "
        "neither administrator rights nor a firewall exception, a notification-area icon, and a single "
        "instance per session — a second double-click opens the page the first is already serving rather "
@@ -192,14 +299,18 @@ d.table("Table 2. The Routes the Bridge Answers",
         [["GET /", "Serves SangalaBlockDesigner.html, read from disk on every request"],
          ["GET /status", "Reports that this is Sangala Blocks, and whether the renderer and the parts "
                          "library were found"],
-         ["POST /snapshot", "Takes an LDraw model as text, renders it and returns a PNG"]],
+         ["POST /snapshot", "Takes an LDraw model as text, renders it and returns a PNG"],
+         ["GET /part", "Serves an LDraw part file and every file it references, as JSON, so the page "
+                       "can measure and draw the real part"]],
         weights=[26, 74])
 d.body("The page asks /status before it offers the Snapshot button, so a missing renderer is stated in "
        "the interface rather than discovered as a failed snapshot. A page opened directly as a file, "
-       "with no bridge behind it, still designs and saves; it simply cannot start a renderer, and says so.")
+       "with no bridge behind it, still designs and saves; it simply cannot start a renderer and cannot "
+       "ask for a part's geometry, so the plan falls back to the shapes drawn for it by hand, and says "
+       "so.")
 
-# ---------------------------------------------------------------- 11
-d.heading("11. Snapshots and the LDraw Pipeline")
+# ---------------------------------------------------------------- 12
+d.heading("12. Snapshots and the LDraw Pipeline")
 d.body("A snapshot is produced in three steps. The page writes the design as an LDraw model, one "
        "type-1 line for each brick that is not parked, carrying its color code, a 3 x 4 transform and the "
        "part file. The bridge writes that text to a temporary file and runs LDView over it. The resulting "
@@ -220,8 +331,8 @@ d.body("The same arithmetic exists twice — in the page for snapshots, and in t
        "command line — and the two must not drift. They are checked against each other by extracting the "
        "page's own function and running both over one design; they agree byte for byte.")
 
-# ---------------------------------------------------------------- 12
-d.heading("12. The Bundled Renderer and Parts")
+# ---------------------------------------------------------------- 13
+d.heading("13. The Bundled Renderer and Parts")
 d.body("LDView and the parts it needs are committed to the repository, so a clean checkout renders. "
        "LDView is 4 MB and requires nothing beside it; its license travels with it, as its terms require, "
        "along with a link to its source.")
@@ -238,8 +349,8 @@ d.body("All 2,833 primitives are therefore shipped, at a cost of 9.6 MB. tools/b
        "option renders one model against the bundle and against the full library and compares the pixels, "
        "which is the only check that catches geometry that is missing rather than wrong.")
 
-# ---------------------------------------------------------------- 13
-d.heading("13. The Documents the Page Writes")
+# ---------------------------------------------------------------- 14
+d.heading("14. The Documents the Page Writes")
 d.body("The snapshots are written into a document by the page itself, with no library and no help from "
        "the bridge, so the same capability exists on every platform the page runs on. A Word file and an "
        "OpenDocument file are both archives of XML, so one archive writer serves both.")
@@ -263,8 +374,8 @@ d.body("The parts list is written here too, in two forms: plain text to read, an
        "and reported. Item numbers need no such table, since BrickLink catalogs basic parts by the design "
        "number the list already carries.")
 
-# ---------------------------------------------------------------- 14
-d.heading("14. Verifying Changes")
+# ---------------------------------------------------------------- 15
+d.heading("15. Verifying Changes")
 d.body("A change to the page is tested by refreshing the browser; a change to the bridge requires a "
        "rebuild. Beyond that, three checks have proved worth the trouble:", before_list=True)
 d.item("Run the Function, Not a Copy of It. ", "Where a check needs the page's own code, the function is "
@@ -279,8 +390,8 @@ d.body("Documents generated by the scripts in tools/docs are checked with the pa
        "Sangala Studio, which reports orphaned headings and page fill and must be clean before "
        "publication.")
 
-# ---------------------------------------------------------------- 15
-d.heading("15. Contributing")
+# ---------------------------------------------------------------- 16
+d.heading("16. Contributing")
 d.body("Work proceeds one change at a time: make the change, let it be tested on a real machine, then "
        "commit. Batching untested changes has cost this project time before. Commit messages record why a "
        "change was made and what remains unverified, since the reasoning is what a later reader needs and "
@@ -289,11 +400,11 @@ d.body("Collaboration is by branch and pull request within the shared repository
        "Sangala Mosaic are read as reference and are not edited from here: a correction made while "
        "looking at Sangala Blocks belongs to Sangala Blocks.")
 
-# ---------------------------------------------------------------- 16
-d.heading("16. Glossary")
+# ---------------------------------------------------------------- 17
+d.heading("17. Glossary")
 d.table("Table 3. Terms Used in This Manual",
         ["Term", "Meaning"],
-        [["Base", "Where a part's back face sits: in a relief, how many plates it stands proud of the "
+        [["Base", "Where a part's mounting face sits: in a relief, how many plates it stands proud of the "
                   "backdrop; in a standing figure, how far it stands from the midline, in studs"],
          ["Bridge", "The local program that serves the page and runs the renderer"],
          ["Closure", "The set of files reached by following every reference from a starting part"],
@@ -323,8 +434,8 @@ d.heading("Appendix A. Other Platforms")
 d.body("The page runs unchanged on macOS, on Linux and on a Chromebook. What does not is the bridge, "
        "which is a Windows executable. Sangala Studio met the same problem and answered it with one "
        "Python file serving both macOS and the Chromebook. The same answer applies here: because the "
-       "bridge only receives text, runs a program and returns an image, it transcribes rather than being "
-       "reimplemented.")
+       "bridge only reads files off disk, runs a program and returns what it read or rendered, it "
+       "transcribes rather than being reimplemented.")
 d.body("Three facts govern that work. LDView is published for Windows, macOS and Linux, so the renderer "
        "is not the obstacle. ChromeOS runs a program of this kind only inside its Linux development "
        "environment, which on a school-managed device is the administrator's setting and on a personally "

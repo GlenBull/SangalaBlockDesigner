@@ -46,7 +46,7 @@ d.body("Open accepts three kinds of file. A Sangala Studio design, ending in .mo
        "frame to build against; the shapes of the Studio design become an outline and nothing else. A "
        "Sangala Blocks design, ending in .block, reopens work already begun, with every brick where it "
        "was left. A parts library, ending in .parts, adds the parts it holds to those the application "
-       "offers, and is described in Section 16.")
+       "offers, and is described in Section 17.")
 d.body("A design may also be started with no frame at all, by placing bricks on the empty plate.")
 
 # ---------------------------------------------------------------- 3
@@ -95,15 +95,39 @@ d.body("The palette at the top of the control panel sets the color of the next b
        "Gray is 71 — so the color travels with the design number when the design is rendered. Each also "
        "carries BrickLink's own number for the same color, which is a different number and is what an "
        "order needs.")
+d.body("The palette and the selected brick are bound both ways. Selecting a brick moves the palette to "
+       "that brick's color, so what the palette shows is always the color in hand; and choosing a color "
+       "while a brick is selected repaints that brick, which is how a part is recolored without losing "
+       "the depth, facing and quarter turn that erasing and replacing it would cost. Ctrl-Z takes a "
+       "recolor back like any other change. With no brick selected the palette is simply the color the "
+       "next brick will be placed in.")
+d.body("A parts library made today names no color. A library is a catalog of shapes — what a part is, "
+       "not what it is to be made in — so the color of a brick is chosen from the palette at the moment "
+       "it is placed. An older library that does carry one uses it only to set the palette when its row "
+       "is clicked; it never decides what is placed. A color chosen while a library part is selected stays with that part, so a body brick "
+       "set to green is placed in green each time until it is changed.")
 
 # ---------------------------------------------------------------- 8
 d.heading("8. Placing Bricks")
 d.body("With a part and a color chosen, clicking the workspace places a brick, and the brick stays where "
        "it is put. Nothing falls: a design is a plan of a model rather than the model, so the courses are "
-       "worked out in whatever order suits the designer. In a relief the click places the part where it "
-       "is put in the same way, and its base is taken from whatever is already behind it.")
+       "worked out in whatever order suits the designer. In either way of building the click places the "
+       "part where it is put and its depth is taken from whatever already occupies its columns: in a "
+       "relief it stands clear of what is behind it, and in a standing figure it comes to rest just "
+       "clear of what is already there, on the side the builder is standing on.")
 d.body("The Select tool moves a brick that is already placed; the Erase tool removes one. Ctrl-Z undoes "
-       "the last change and Ctrl-Y restores it, so a misplaced brick costs nothing.")
+       "the last change and Ctrl-Y restores it, so a misplaced brick costs nothing. Moving a brick "
+       "across the plan does not change its depth: a part keeps the layer it was given, and the Depth "
+       "control described in Section 12 is what changes it. A brick taken out to the cork and brought "
+       "back comes back unaltered.")
+d.body("Each part is drawn at its own shape rather than as a rectangle standing in for it. The outline "
+       "is measured from the part itself, so a wedge shows the flat section at its wide end and a slope "
+       "shows how far its ramp actually reaches. The studs are not part of that outline: the workspace "
+       "draws them as its own marks, so a part tipped onto its face shows the studs that are then on it.")
+d.body("What the plan draws and what the 3D view builds come from the same geometry, so a wedge or a "
+       "slope is the same part seen two ways rather than two drawings kept in step. The cone and the "
+       "round brick are the exception and keep their own drawn shapes, which were settled against a "
+       "photograph of the real brick.")
 
 # ---------------------------------------------------------------- 9
 d.heading("9. Parking a Brick on the Cork")
@@ -137,7 +161,7 @@ d.body("Rotate turns a part already tipped forward through a quarter turn counte
 # ---------------------------------------------------------------- 12
 d.heading("12. Depth in a Standing Figure")
 d.body("A standing figure is more than one course deep, and that depth runs into and out of the screen. The "
-       "workspace shows the figure from the front, so depth cannot be read there directly: a brick behind "
+       "workspace shows the figure in profile, so depth cannot be read there directly: a brick behind "
        "another is simply drawn behind it.")
 d.body("Depth is counted from the midline of the figure, the plane the design is built about. A part in "
        "front of the midline has a positive depth and a part behind it a negative one, and the midline "
@@ -146,6 +170,9 @@ d.body("The Depth control sits beside the name of the selected brick in the cont
        "move that brick half a layer at a time, the upper one toward the viewer and the lower one away, so "
        "two presses carry a part through a whole layer. The half step is what places a part on the midline "
        "of a figure whose courses are a whole stud deep, where a jumper plate's centered stud carries it.")
+d.body("Once a part is placed, that control is what changes its depth. Sliding a brick sideways across the plan "
+       "leaves its layer exactly as it was, which is what allows a part to be lifted out of the way and "
+       "put back without losing the position it was given.")
 
 # ---------------------------------------------------------------- 13
 d.heading("13. Working on the Far Side")
@@ -157,7 +184,27 @@ d.body("Nothing in the design is changed by it. No brick's column, depth or faci
        "where the builder is standing, and may be turned on and off freely without touching the model.")
 
 # ---------------------------------------------------------------- 14
-d.heading("14. Seeing the Design in Three Dimensions")
+d.heading("14. Copying a Brick")
+d.body("Ctrl-C copies the selected brick and Ctrl-V places a copy of it. The copy carries everything "
+       "about the original — its part, its color, its layer, and the way it has been tipped or turned — "
+       "and arrives one stud along, so that it can be seen and moved rather than hidden underneath. "
+       "Pressing Ctrl-V again places another, each a stud further on, and each may be undone on its own.")
+d.body("A copy of a part lying on the side away from the builder is brought round to the side the "
+       "builder is standing on — whether that is the far side reached through the Front / Back button, "
+       "or a far-side part copied while facing the front. A part that had been tipped forward has its "
+       "studs turned to face the builder; an upright brick stays upright.")
+d.body("It is placed at the mirror image of the original's position on the body brick its stack is "
+       "mounted on, followed down through any tipped parts between: a plate resting on the front face "
+       "of a side-stud brick is copied onto the back face of that same brick, and a second plate "
+       "resting on the first comes round with it. A part mounted on nothing has no such brick to mirror "
+       "about, and is placed at the mirror image of its depth about the midline instead, which is what "
+       "reproduces a leg or a crest slope from its opposite number.")
+d.body("A copy of a part already on the side being worked from is an exact twin, at the same depth, one "
+       "stud along. The two sides therefore behave alike: near or far, a copy lands beside the original "
+       "and never settles onto whatever else happens to lie in its columns.")
+
+# ---------------------------------------------------------------- 15
+d.heading("15. Seeing the Design in Three Dimensions")
 d.body("3D View shows the design as layers standing off the plate, and the view can be turned by dragging "
        "and zoomed by scrolling. It is a way of looking rather than a mode to build in: while it is up the "
        "building tools are set aside, and pressing 3D View again returns to the design.")
@@ -170,8 +217,8 @@ d.body("The two are not the same control. 3D View replaces the workspace with th
        "tools aside while it is up; the mini viewer is a window beside the work, and building continues "
        "behind it.")
 
-# ---------------------------------------------------------------- 15
-d.heading("15. The Parts List")
+# ---------------------------------------------------------------- 16
+d.heading("16. The Parts List")
 d.body("The Parts section of the control panel lists every brick in the design — the part, its design "
        "number, its color and the quantity — with the total piece count in its heading. The heading folds "
        "the list away, since the count is consulted constantly and the list itself only occasionally. "
@@ -184,20 +231,27 @@ d.item("An Order to Place (.xml). ", "A BrickLink Wanted List. It is uploaded wh
                                      "becomes an order or two, and no number is typed by hand. BrickLink "
                                      "is owned by LEGO.")
 
-# ---------------------------------------------------------------- 16
-d.heading("16. A Parts Library")
+# ---------------------------------------------------------------- 17
+d.heading("17. A Parts Library")
 d.body("A library is the bricks a builder owns or can get at, written as a plain list of design numbers "
        "and turned into a .parts file. Opening one adds what it holds to the parts the application offers, "
        "so a design can be planned from bricks that are actually to hand.")
 d.body("A library adds to the menu and never replaces it: nothing already offered disappears, and more "
        "than one library may be held at a time. A kind of part the menu did not have — a tile, say — "
        "arrives with its own button on the Part tool.")
+d.body("A library is saved from the Save menu, as a .library file. What is written is everything loaded "
+       "at that moment, merged into one catalog, so a library assembled by opening two of them, or "
+       "pruned to the parts a finished design actually uses, can be kept and passed on. It records no "
+       "color and no quantity, so a library that arrived carrying either is cleaned by being saved. A "
+       ".parts file made before the name changed still opens unaltered.")
 d.body("The Library section of the control panel lists what has been loaded: each part with its design "
-       "number, its color and, where the list gave one, the quantity. That section answers what there is; "
-       "the Parts section above it answers what has been used.")
+       "number. It names no color and no quantity, because a library says what a part is and not what it "
+       "is to be made in or how many are owned. That section answers what there is to build with; the "
+       "Parts section above it answers what has been used, and it is the Parts section that a physical "
+       "build is ordered from.")
 
-# ---------------------------------------------------------------- 17
-d.heading("17. Snapshots")
+# ---------------------------------------------------------------- 18
+d.heading("18. Snapshots")
 d.body("Snapshot records a picture of the build as it stands. The pictures collect in the Snapshots "
        "section of the control panel, in the order they were taken, and clicking one opens it full size, "
        "where it can be removed if it is not wanted.")
@@ -206,8 +260,8 @@ d.body("The pictures are drawn by an LDraw renderer rather than captured from th
        "modeled, and no background behind the assembly. Taking a snapshot at the end of each phase of a "
        "build produces the sequence a second builder needs to follow.")
 
-# ---------------------------------------------------------------- 18
-d.heading("18. Saving the Snapshots as a Document")
+# ---------------------------------------------------------------- 19
+d.heading("19. Saving the Snapshots as a Document")
 d.body("The Save menu offers the collected snapshots as a document, and the format is chosen in the Save "
        "dialog itself, from its Save as type list:", before_list=True)
 d.item("Word Document. ", "A .docx file, opened by Microsoft Word.")
@@ -219,8 +273,8 @@ d.body("Each document holds one line naming the project, then each picture in tu
        "nothing about what they are for. Written up as numbered steps they become building instructions; "
        "they are equally a record of a design, a page for a display, or figures for a report.")
 
-# ---------------------------------------------------------------- 19
-d.heading("19. Saving and Reopening a Design")
+# ---------------------------------------------------------------- 20
+d.heading("20. Saving and Reopening a Design")
 d.body("Save writes the whole design as a .block file — every brick with its part, color and position, "
        "the frame it was built against, the page, and the way of building. Reopening it restores the work "
        "exactly. The Save dialog asks where the file should go, and the application reads the file back "
@@ -228,8 +282,8 @@ d.body("Save writes the whole design as a .block file — every brick with its p
 d.body("Everything the application writes is reached from the one Save menu. A project keeps the name it "
        "was opened with: saving a parts list or a set of snapshots does not rename the design.")
 
-# ---------------------------------------------------------------- 20
-d.heading("20. Quick Reference")
+# ---------------------------------------------------------------- 21
+d.heading("21. Quick Reference")
 d.table("Table 1. Where Each Task Is Done",
         ["To do this", "Go here"],
         [["Build against a Studio design", "Open, and choose a .model file"],
@@ -239,6 +293,7 @@ d.table("Table 1. Where Each Task Is Done",
          ["Change the plate or sheet", "Settings, Page size"],
          ["Choose a part", "Toolbar, Part, then Brick Size"],
          ["Choose a color", "Control panel, Color"],
+         ["Recolor a brick", "Select it, then Control panel, Color"],
          ["Move a brick", "Toolbar, Select"],
          ["Remove a brick", "Toolbar, Erase (Ctrl-Z undoes)"],
          ["Face a slope the other way", "Toolbar, Flip Horizontal"],
@@ -246,11 +301,14 @@ d.table("Table 1. Where Each Task Is Done",
          ["Point a tipped part", "Toolbar, Rotate"],
          ["Move a brick toward the front or the back", "Control panel, Depth"],
          ["Build on the far side of the figure", "Toolbar, Front / Back"],
+         ["Copy the selected brick", "Ctrl-C"],
+         ["Place a copy of it", "Ctrl-V"],
          ["Watch the design in three dimensions while building", "Control panel, Mini 3D Viewer"],
          ["Try a brick without using it", "Place it on the cork beside the plate"],
          ["See the design in three dimensions", "3D View"],
          ["Read the piece count", "Control panel, Parts"],
          ["See what a loaded library holds", "Control panel, Library"],
+         ["Keep the library to share or reopen", "Save, Library"],
          ["Write the parts list to a file", "Save, Parts List"],
          ["Order the parts", "Save, Parts List, and choose the BrickLink type"],
          ["Record the build so far", "Snapshot"],
@@ -263,7 +321,7 @@ d.body("Installation is covered by its own document, Installing Sangala Blocks, 
        "this guide. In outline: the application is a folder of files that is copied to the computer and "
        "started from an icon. It requires no administrator rights, no driver and no internet connection "
        "once it has been copied.")
-d.body("One part of the installation matters to the snapshots described in Section 17. The renderer that "
+d.body("One part of the installation matters to the snapshots described in Section 18. The renderer that "
        "draws them, and the parts library it draws from, travel in the same folder as the application. If "
        "the Snapshot button is not offered, the application was started by opening its page directly "
        "rather than from its icon; started from the icon, it supplies the renderer itself.")
