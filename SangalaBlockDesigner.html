@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-19.133 -->
+<!-- SANGALA_VERSION: 2026-08-20.134 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -4651,44 +4651,30 @@ function drawLibrary(){
   libGroups = groups;
   if(libSel >= groups.length) libSel = -1;      /* a new library leaves no stale mark behind */
   document.querySelector("#libtable tbody").innerHTML =
-    (groups.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Design</th></tr>" : "") +
+    (groups.length ? "<tr><th>Part</th><th class='q'>Design</th></tr>" : "") +
     groups.map((g,i)=>{
-      /* THE SELECTED ROW SHOWS THE PALETTE'S COLOR, not the library's. Glen, 2026-08-17: "The part has
-         been selected and i have selected the color red in the palette, but the color square beside
-         the part still shows yellow." The two are bound both ways - picking a row moves the palette,
-         picking a color moves the row's chip - so the pair can never disagree, and the chip answers
-         the question the builder is actually asking it: what will this be placed in? An unselected
-         row still shows what the library says the part comes in. */
-      /* ONE COLOR PER ROW, ALWAYS. Glen, 2026-08-17: "some parts in the library are showing two
-         colors - so presumably it would be a random select when the part is dragged onto the
-         workspace. a part in the library should only show one color at a time." Nothing was ever
-         random - the palette decides, and has since the drop handler stopped reading the entry - but
-         a row offering two answers made that impossible to tell from looking, which is the defect.
-         So a row states ONE color: the palette's while it is selected, otherwise the first the
-         library lists for that part. What else it comes in is said once, in the status line, at the
-         moment it is selected - which is where a passing fact belongs rather than in every row. */
-      const ci = libColorOf(g);
-      const shown = ci>=0 ? { hex: COLORS[ci].hex, name: COLORS[ci].name }
-                          : { hex: null, name: g.colors[0].name||"&mdash;" };
-      /* THE SQUARE IS THE ANSWER; THE NAME IS NOISE. Glen, 2026-08-17: "since we can see the color in
-         the color square, we don't need the text with the color name." It also cost the most room in
-         the panel - "Dark Bluish Gray" wrapped to two lines and made nine rows double height for a
-         fact the swatch states at a glance. The name is kept on the chip's tooltip, and the status
-         line says it aloud when the row is selected, so nothing is lost but the space. A color the
-         palette does not contain has no square to show, so there the name still stands in. */
-      const cells = shown.hex
-        ? "<span class='chip' style='background:"+shown.hex+"' title='"+shown.name+"'></span>"
-        : shown.name;
-      /* the drag carries the FIRST entry of the group: every entry of one part number has the same
-         footprint, height and shape, and the color no longer comes from the entry at all */
+      /* NO COLOR COLUMN. Glen, 2026-08-20: "The library should not record color. Since it is a
+         library of parts, once you pick a part, you can choose any color that you want." A catalog
+         states the SHAPE a part is; the color is a choice made when it is placed, and the palette is
+         where that choice lives. A column here could only ever show one of two things - a color the
+         builder has not chosen yet, or a copy of the palette - and both invite the question the
+         panel should not be answering.
+         What went with it: a chip that showed the palette's color while the row was selected and the
+         library's otherwise, and the rule that a row states ONE color. Those settled a real
+         complaint in August, when a library entry carried a color and two entries of one part could
+         disagree; with color out of the file there is nothing left for them to settle.
+         `libColor` STAYS. Picking a palette color while a row is selected still assigns it to that
+         part number, so a part keeps its color across placements - that is a fact about the design,
+         not about the catalog, and it is what makes a green 2434 stay green. */
       /* THE DESIGN NUMBER TAKES THE COLUMN THE QUANTITY VACATED, so a part is one line instead of two
          (Glen, 2026-08-17: "we can save space by putting the design # in place of quantity - then each
          part just takes up one line"). It used to sit under the name on a second line, which doubled
          the height of every row to carry six characters. */
+      /* the drag carries the FIRST entry of the group: every entry of one part number has the same
+         footprint, height and shape, and the color no longer comes from the entry at all */
       return "<tr draggable='true' data-lib='"+g.first+"' data-grp='"+i+"'"+(i===libSel?" class='on'":"")
         +" title='Click to select it; drag it onto the workspace to place it'"
         +" style='cursor:grab'><td>"+g.name+"</td>"
-        +"<td>"+cells+"</td>"
         +"<td class='q'>"+g.id+"</td></tr>";
     }).join("");
   /* A LIBRARY ROW IS A DRAG SOURCE. Glen, 2026-08-15: "I need to be able to drag parts out of the
@@ -4715,7 +4701,12 @@ function drawLibrary(){
       libSel = parseInt(tr.dataset.grp, 10);
       const g = libGroups[libSel];
       let note = "";
-      if(g && g.colors.length){
+      /* ONLY IF THE LIBRARY ACTUALLY NAMES ONE. A catalog records no color, so there is nothing to
+         seed the palette with and nothing to apologise for; saying "its color is not in the palette"
+         about a part that was never given one is a sentence about the file format, not about the
+         brick. An older .parts file that does carry colors still seeds the palette exactly as it
+         did. */
+      if(g && g.colors.length && g.colors[0].code != null){
         const ci = libColorOf(g);
         /* record it on first sight, so the part owns its color from then on rather than borrowing
            the library's each time the row is looked at */
