@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.140 -->
+<!-- SANGALA_VERSION: 2026-08-20.141 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1655,13 +1655,51 @@ function tally(){
     if(!m.has(k))m.set(k,{p:b.p,col:c,n:0}); m.get(k).n++;});
   return [...m.values()].sort((x,y)=>x.p.name.localeCompare(y.p.name)||x.col.name.localeCompare(y.col.name));
 }
+/* THE LIST ORGANIZES ITSELF BY GROUP NAME (Glen, 2026-08-20: "now you can name a group but the
+   parts in the parts list are not organized by the group name"). Studio's rule is that named parts
+   fold together and an unnamed one keeps its own row; here the list is a bill of materials, so a
+   name becomes a SECTION and the rows beneath it still read part, color and quantity - which is what
+   a build is ordered from.
+   tally() IS NOT TOUCHED. It is what the .txt list and the BrickLink order are built from, and those
+   need one line per part and color across the WHOLE design: the same brick used in the head and in
+   the wing is one thing to buy. Splitting it by group there would order it twice.
+   SECTIONS COME IN THE ORDER THE GROUPS WERE BUILT - first appearance in the design - rather than
+   alphabetically, because that is the order a builder thinks in and roughly the order they worked. */
+function tallySections(){
+  const named=new Map(), loose=new Map(), order=[];
+  bricks.forEach(b=>{ if(parked(b)) return;              /* a candidate on the cork is not a part */
+    const c=COLORS[b.colorIdx], k=b.p.id+"|"+c.code, nm=(b.gname||"");
+    let m;
+    if(nm){ if(!named.has(nm)){ named.set(nm,new Map()); order.push(nm); } m=named.get(nm); }
+    else m=loose;
+    if(!m.has(k)) m.set(k,{p:b.p,col:c,n:0});
+    m.get(k).n++; });
+  const sort = m => [...m.values()].sort((x,y)=>x.p.name.localeCompare(y.p.name)||x.col.name.localeCompare(y.col.name));
+  const out = order.map(nm=>({name:nm, rows:sort(named.get(nm))}));
+  if(loose.size) out.push({name:"", rows:sort(loose)});
+  return out;
+}
 function bom(){
   const rows=tally();
+  const secs=tallySections();
+  const named=secs.some(s2=>s2.name);
+  const rowHtml = r => "<tr><td>"+r.p.name+"<br><span class='dn'>Design "+r.p.id+"</span></td>"+
+      "<td><span class='chip' style='background:"+r.col.hex+"'></span>"+r.col.name+"</td>"+
+      "<td class='q'>"+r.n+"</td></tr>";
+  /* With nothing named the table is exactly what it has always been, so a design that uses no groups
+     sees no change at all. */
   document.querySelector("#bom tbody").innerHTML =
     (rows.length ? "<tr><th>Part</th><th>Color</th><th class='q'>Qty</th></tr>" : "") +
-    rows.map(r=>"<tr><td>"+r.p.name+"<br><span class='dn'>Design "+r.p.id+"</span></td>"+
-      "<td><span class='chip' style='background:"+r.col.hex+"'></span>"+r.col.name+"</td>"+
-      "<td class='q'>"+r.n+"</td></tr>").join("");
+    (!named
+      ? rows.map(rowHtml).join("")
+      : secs.map(s2=>{
+          const n2=s2.rows.reduce((t,r)=>t+r.n,0);
+          const head="<tr><td colspan='3' style=\"padding-top:.35rem;font-weight:700;color:#5a4a34;"+
+                     "border-bottom:1px solid #d9cdb4\">"+
+                     (s2.name ? s2.name.replace(/[<>]/g,"") : "Not in a group")+
+                     " <span class='dn'>\u00b7 "+n2+(n2===1?" piece":" pieces")+"</span></td></tr>";
+          return head + s2.rows.map(rowHtml).join("");
+        }).join(""));
   /* Say what is parked, or the list looks short against what is on screen and reads as a fault. */
   const park=bricks.filter(parked).length, built=bricks.length-park;
   $("partscount").textContent = built ? " · "+built+(built===1?" piece":" pieces") : "";
