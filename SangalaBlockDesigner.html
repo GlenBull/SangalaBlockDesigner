@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.144 -->
+<!-- SANGALA_VERSION: 2026-08-20.145 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1668,7 +1668,10 @@ function tally(){
 function tallySections(){
   const named=new Map(), loose=new Map(), order=[];
   bricks.forEach(b=>{ if(parked(b)) return;              /* a candidate on the cork is not a part */
-    const c=COLORS[b.colorIdx], k=b.p.id+"|"+c.code, nm=(b.gname||"");
+    /* gnameOf, NOT b.gname. The name moved to a list running parallel to the nesting path so an
+       inner group could keep its own, and this read the old flat field - so the sections vanished
+       the moment naming started writing the list. A reader left behind by its writer. */
+    const c=COLORS[b.colorIdx], k=b.p.id+"|"+c.code, nm=gnameOf(b);
     let m;
     if(nm){ if(!named.has(nm)){ named.set(nm,new Map()); order.push(nm); } m=named.get(nm); }
     else m=loose;
