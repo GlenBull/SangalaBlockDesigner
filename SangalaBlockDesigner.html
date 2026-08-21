@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.168 -->
+<!-- SANGALA_VERSION: 2026-08-21.169 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -854,7 +854,8 @@ let PX = 3, hover = null;   /* modelW/modelH are constants beside the baseplate 
    PX = baseK * zoom, and pan is a translate in canvas pixels - the same wheel step, the same
    100%-2000% range, the same "- 100% + Fit" cluster in the same place. */
 let view={zoom:1,panX:0,panY:0};
-let baseK=3, MX=0, MY=0, DPR=1;   /* px per mm at Fit, and the mm that centre the plate in the canvas */
+const SCALE100=96/25.4;           /* CSS px per design mm at 100% - the family's shared scale */
+let baseK=3, MX=0, MY=0, DPR=1;   /* device px per mm at 100%, and the mm that center the plate in the canvas */
 /* Studio's two margins, its numbers and its reasoning, not scaled-down versions of them. */
 const VIEW_MARGIN=20;   /* mm of cork shown around the plate at the DEFAULT view (zoom 1 / Fit). Small, so the
                            plate opens large and usable - no need to zoom in first. */
@@ -983,9 +984,16 @@ function corkPattern(){
    makes the pointer-anchored arithmetic in setZoom exact. */
 function worldParams(){
   const dw=modelW, dh=modelH;
-  baseK=Math.min(cv.width/(dw+2*VIEW_MARGIN), cv.height/(dh+2*VIEW_MARGIN));
+  /* 100% IS A SIZE, NOT A FIT (Glen, 2026-08-21: "it would be good to have a common scale so
+     the size was constant in both at the same scale to make comparisons possible"). One
+     millimeter of design is SCALE100 CSS pixels at 100% - the same constant, by the same name,
+     in Sangala Studio - so the two applications side by side at one percentage show one size.
+     Fitting the window is the Fit button's job now, at whatever percentage the window earns. */
+  baseK=SCALE100*DPR;
   PX=baseK*view.zoom;
-  MX=(cv.width/baseK-dw)/2; MY=(cv.height/baseK-dh)/2;
+  /* centred at ANY zoom with the pan at rest - the old form divided by baseK alone, which was
+     only right when zoom 1 meant the fit */
+  MX=(cv.width/PX-dw)/2; MY=(cv.height/PX-dh)/2;
 }
 const mx=v=>v*PX;
 /* w and d are the FOOTPRINT in studs (columns across, rows deep); h is the part's THICKNESS in
@@ -3460,20 +3468,29 @@ function clampPan(){   /* keep the view within the plate + WS_MARGIN of cork; if
   view.panX=Math.max(bx[0], Math.min(bx[1], view.panX));
   view.panY=Math.max(by[0], Math.min(by[1], view.panY)); }
 function updateZoomUI(){ $("zoomPct").textContent=Math.round(view.zoom*100)+"%"; }
+/* the zoom that fits the plate in the window - what 100% used to mean, now a computed number */
+function fitZoom(){ sizeCanvas();
+  const fk=Math.min(cv.width/(modelW+2*VIEW_MARGIN), cv.height/(modelH+2*VIEW_MARGIN));
+  return fk/(SCALE100*DPR); }
 function setZoom(nz, cx, cy){   /* cx,cy = canvas px to keep fixed under the cursor (default: centre) */
-  nz=Math.min(20, Math.max(1, nz)); if(cx==null){ cx=cv.width/2; cy=cv.height/2; }
+  nz=Math.min(20, Math.max(0.05, nz)); if(cx==null){ cx=cv.width/2; cy=cv.height/2; }
   view.panX = cx-(cx-view.panX)*(nz/view.zoom); view.panY = cy-(cy-view.panY)*(nz/view.zoom); view.zoom = nz;
-  if(view.zoom<=1.0001){ view.zoom=1; view.panX=0; view.panY=0; }
   clampPan(); draw(); updateZoomUI(); }
 cv.addEventListener("wheel",(e)=>{ if(view3D) return; e.preventDefault(); const p=canvasPt(e);
   setZoom(view.zoom*(e.deltaY<0?1.15:1/1.15), p[0], p[1]); }, {passive:false});
 $("zoomIn").onclick =()=>setZoom(view.zoom*1.3);
 $("zoomOut").onclick=()=>setZoom(view.zoom/1.3);
-$("zoomFit").onclick=()=>{ view.zoom=1; view.panX=0; view.panY=0; draw(); updateZoomUI(); };
+$("zoomFit").onclick=()=>{ view.zoom=fitZoom(); view.panX=0; view.panY=0; draw(); updateZoomUI(); };
+/* the percentage is a BUTTON to true size: Fit lands on whatever the window earns, and 1.3x
+   steps can never reach exactly 100 - one click can */
+$("zoomPct").style.cursor="pointer";
+$("zoomPct").title="Click for 100% - actual size, the same scale in Sangala Studio";
+$("zoomPct").onclick=()=>setZoom(1);
+view.zoom=fitZoom(); updateZoomUI();     /* open fitted, reported truthfully */
 let spaceHeld=false, panDrag=null, suppressClick=false;
 window.addEventListener("keydown",(e)=>{ if(e.code!=="Space") return; const t=e.target, tag=t&&t.tagName&&t.tagName.toLowerCase();
   if(tag==="input"||tag==="textarea"||tag==="select"||(t&&t.isContentEditable)) return;
-  spaceHeld=true; if(view.zoom>1&&!panDrag) cv.style.cursor="grab"; e.preventDefault(); });
+  spaceHeld=true; if(!panDrag) cv.style.cursor="grab"; e.preventDefault(); });
 window.addEventListener("keyup",(e)=>{ if(e.code==="Space"){ spaceHeld=false; if(!panDrag) cv.style.cursor="default"; } });
 cv.addEventListener("mousedown",(e)=>{ if(view3D) return;
   if(e.button===1 || (spaceHeld && e.button===0)){   /* pan: middle-mouse, or hold Space + left-drag */
