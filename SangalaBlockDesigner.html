@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.159 -->
+<!-- SANGALA_VERSION: 2026-08-21.160 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -4996,34 +4996,34 @@ function docxPara(text,{bold=false,center=false,size=22,after=100}={}){
              +'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r>' : '')
     +'</w:p>';
 }
-/* A TABLE, IN THE SHAPE GLEN APPROVED IN CHAT (2026-08-21) for the parts list: a thin
-   single-line grid, a bold heading row, and a column either left-aligned or right-aligned -
-   Qty and Part # sit right, words sit left. Fixed layout, so the columns hold their widths
-   whatever lands in them. Rows never split across a page, and every row but the last keeps
-   with the next, so a small table stays whole on one page. */
+/* A TABLE THAT LOOKS LIKE THE CHAT MOCKUP GLEN APPROVED (2026-08-21) - his correction after
+   a first version drew a conventional boxed grid: "the table formatting on the left looks
+   nothing like the table formatting on the right." The look is the one code-hosting sites
+   render tables with, and its terms are: NO grid - no vertical lines, no outer box; a light
+   gray band behind the heading row; every other body row on a near-white band; sans-serif
+   type; and room around the text. Qty and Part # sit right-aligned, words sit left. Fixed
+   layout so the columns hold their widths; rows never split across a page, and every row but
+   the last keeps with the next, so a small table stays whole. */
 function docxTable(headers,rows,rights,widths){
   const total=widths.reduce((a,b)=>a+b,0);
   const cellP=(text,bold,right,keep)=>'<w:p><w:pPr>'+(keep?'<w:keepNext/>':'')
     +(right?'<w:jc w:val="right"/>':'')
-    +'<w:spacing w:before="20" w:after="20"/></w:pPr>'
-    +'<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
-    +(bold?'<w:b/>':'')+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
+    +'<w:spacing w:before="40" w:after="40"/></w:pPr>'
+    +'<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>'
+    +(bold?'<w:b/>':'')+'<w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>'
     +'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r></w:p>';
-  const tc=(text,i,bold,keep)=>'<w:tc><w:tcPr><w:tcW w:w="'+widths[i]+'" w:type="dxa"/></w:tcPr>'
-    +cellP(text,bold,rights[i],keep)+'</w:tc>';
-  const tr=(cells,bold,keep)=>'<w:tr><w:trPr><w:cantSplit/></w:trPr>'
-    +cells.map((t,i)=>tc(t,i,bold,keep)).join("")+'</w:tr>';
-  const line=s=>'<w:'+s+' w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  const tc=(text,i,bold,keep,fill)=>'<w:tc><w:tcPr><w:tcW w:w="'+widths[i]+'" w:type="dxa"/>'
+    +(fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+fill+'"/>':'')
+    +'</w:tcPr>'+cellP(text,bold,rights[i],keep)+'</w:tc>';
+  const tr=(cells,bold,keep,fill)=>'<w:tr><w:trPr><w:cantSplit/></w:trPr>'
+    +cells.map((t,i)=>tc(t,i,bold,keep,fill)).join("")+'</w:tr>';
   return '<w:tbl><w:tblPr><w:tblW w:w="'+total+'" w:type="dxa"/>'
-    +'<w:tblBorders>'+line("top")+line("left")+line("bottom")+line("right")
-    +line("insideH")+line("insideV")+'</w:tblBorders>'
-    /* explicit cell margins: this package carries no styles.xml, and without one Word set
-       them to zero, so the text sat against the grid lines */
-    +'<w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>'
+    /* no tblBorders at all: the bands are the structure */
+    +'<w:tblCellMar><w:left w:w="144" w:type="dxa"/><w:right w:w="144" w:type="dxa"/></w:tblCellMar>'
     +'<w:tblLayout w:type="fixed"/></w:tblPr>'
     +'<w:tblGrid>'+widths.map(w=>'<w:gridCol w:w="'+w+'"/>').join("")+'</w:tblGrid>'
-    +tr(headers,true,true)
-    +rows.map((r,k)=>tr(r,false,k<rows.length-1)).join("")
+    +tr(headers,true,true,"EDEDED")
+    +rows.map((r,k)=>tr(r,false,k<rows.length-1,k%2?null:"F6F6F6")).join("")
     +'</w:tbl>';
 }
 function docxImage(n,rid,cx,cy){
