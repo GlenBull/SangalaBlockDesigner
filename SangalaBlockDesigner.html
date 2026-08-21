@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.164 -->
+<!-- SANGALA_VERSION: 2026-08-21.165 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -198,6 +198,7 @@
 #zoomctl{margin-top:auto;align-self:center;display:flex;gap:4px;align-items:center;background:rgba(255,255,255,.92);border:1px solid #c9b48c;border-radius:9px;padding:3px 5px;box-shadow:0 1px 4px rgba(0,0,0,.2);font-size:.82rem;color:#5a4326;user-select:none}
 #zoomctl button{width:26px;height:24px;border:1px solid #c9b48c;border-radius:6px;background:linear-gradient(#fffdf7,#efe6d3);cursor:pointer;font-size:1rem;line-height:1;color:#7a3b12}
 #zoomctl button:hover{background:#fff}
+#zoomctl #bSnapTog.on{background:linear-gradient(#bfe3ff,#8fcaf5);border-color:#3f8fd0}
 #zoomctl #zoomFit{width:auto;padding:0 7px;font-size:.78rem}
 #zoomctl #zoomPct{min-width:3.05em;text-align:center;font-variant-numeric:tabular-nums}
 .swrow{display:flex;flex-wrap:wrap;gap:5px;margin:.3rem 0 .2rem}
@@ -553,6 +554,8 @@
       <span id="zoomPct">100%</span>
       <button id="zoomIn" title="Zoom in">+</button>
       <button id="zoomFit" title="Fit the whole plate">Fit</button>
+      <!-- Studio's magnet, in Studio's place: Snap to Fit for dragging frame elements -->
+      <button id="bSnapTog" class="on" title="Snap to Fit: dragging a frame element near another pulls the corners together. Click to turn it off. (While on, hold Alt to drag free.)">&#129522;</button>
     </div>
   </div>
 </div>
@@ -3388,6 +3391,10 @@ $("pagesize").onchange=e=>{ setPageSize(e.target.value);
   say("Page is now "+pageLabel()+". The design is unchanged.");
   offPageWarning(); commit(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
+/* Studio's magnet, Studio's words (SangalaStudio.html:5561) - only the object it acts on differs */
+$("bSnapTog").onclick=()=>{ snapOn=!snapOn; $("bSnapTog").classList.toggle("on",snapOn);
+  say(snapOn ? "Snap to Fit is on - dragging a frame element near another pulls the corners together (hold Alt to drag free)."
+             : "Snap to Fit is off - frame elements drag freely. Click the magnet to turn it back on."); };
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
 /* Coming back it is drawn from scratch: syncMini sees a hidden window and rebuilds rather than
    trusting a bitmap that the design may have moved on from while it was away. */
@@ -3960,6 +3967,51 @@ function frameIdxAt(pt){
   }
   return -1;
 }
+/* ---------- Snap to Fit, Studio's own (Glen, 2026-08-21: "since snap doesn't work, I have
+   to manually align it which is awkward"). segDist and snapDelta are Studio's functions
+   carried over whole (SangalaStudio.html:3892), the magnet lives in the zoom cluster where
+   Studio keeps it, the reach is the same seven screen pixels at any zoom, and Alt drags
+   free while the magnet is on. A dragged frame element pulls corner-onto-corner first,
+   then corner-onto-edge, against the regions NOT being dragged. */
+const SNAP_PX=7;
+let snapOn=true;
+function segDist(px,py,ax,ay,bx,by){ const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
+  let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0; t=t<0?0:t>1?1:t;
+  return Math.hypot(px-(ax+t*dx), py-(ay+t*dy)); }
+function snapDelta(drpts, targets, tolMm){   // the offset that locks the nearest pair - corners first, then a corner onto an edge
+  if(!snapOn) return null;                   // the magnet is off - every drag is free
+  let best=null;
+  for(const p of drpts) for(const q of targets.pts){
+    const d=Math.hypot(p[0]-q[0],p[1]-q[1]);
+    if(d<=tolMm && (!best||d<best.d)) best={d:d, ox:q[0]-p[0], oy:q[1]-p[1]};
+  }
+  if(!best) for(const p of drpts) for(const s of targets.segs){
+    const d=segDist(p[0],p[1],s[0][0],s[0][1],s[1][0],s[1][1]);
+    if(d<=tolMm && (!best||d<best.d)){
+      const ax=s[0][0],ay=s[0][1],dx2=s[1][0]-ax,dy2=s[1][1]-ay,l2=dx2*dx2+dy2*dy2||1e-9;
+      let t=((p[0]-ax)*dx2+(p[1]-ay)*dy2)/l2; t=Math.max(0,Math.min(1,t));
+      best={d:d, ox:ax+dx2*t-p[0], oy:ay+dy2*t-p[1]};
+    }
+  }
+  return best;
+}
+/* everything a frame drag needs, taken at the press: copies of the dragged polygons (the
+   drag re-derives each position from these plus one total delta, so snapping can never
+   accumulate error) and the corners and edges of every region left behind */
+function frameGrab(pt){
+  const idxs=selFrame.slice();
+  const cp=P=>P.map(q=>[q[0],q[1]]);
+  const base=idxs.map(ix=>({ix:ix,
+    poly:cp(guide[ix].poly||[]), holes:(guide[ix].holes||[]).map(cp),
+    rp:cp(guideRaw[ix].poly||[]), rh:(guideRaw[ix].holes||[]).map(cp)}));
+  const targets={pts:[],segs:[]};
+  guide.forEach((g,ix)=>{ if(idxs.indexOf(ix)>=0 || !g.poly || !g.poly.length) return;
+    const P=g.poly;
+    P.forEach(q=>targets.pts.push([q[0],q[1]]));
+    for(let i=0;i<P.length;i++) targets.segs.push([P[i],P[(i+1)%P.length]]);
+  });
+  return {x:pt[0], y:pt[1], moved:false, idxs:idxs, base:base, targets:targets};
+}
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
@@ -3979,7 +4031,7 @@ cv.addEventListener("mousedown",(e)=>{
                const ci=COLORS.findIndex(c2=>(c2.hex||"").toLowerCase()===(guide[gi].fill||"").toLowerCase());
                if(ci>=0 && ci!==selCol){ selCol=ci; swatches(); }
              }
-             frameDrag={x:pt[0], y:pt[1], moved:false, idxs:selFrame.slice()};
+             frameDrag=frameGrab(pt);
              cv.style.cursor="grabbing"; draw(); e.preventDefault(); return;
            }
            if(e.shiftKey) return;                                      /* Shift on bare ground keeps the set */
@@ -4032,19 +4084,31 @@ cv.addEventListener("mousedown",(e)=>{
 });
 window.addEventListener("mousemove",(e)=>{
   if(frameDrag){
-    const pt=mmAt(e), dx=pt[0]-frameDrag.x, dy=pt[1]-frameDrag.y;
-    if(dx||dy){
-      const k=frameScale||1;
-      frameDrag.idxs.forEach(ix=>{
-        const g=guide[ix], r=guideRaw[ix]; if(!g||!r) return;
-        (g.poly||[]).forEach(q=>{q[0]+=dx;q[1]+=dy;});
-        (g.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx;q[1]+=dy;}));
-        (r.poly||[]).forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;});
-        (r.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;}));
-      });
-      frameDrag.x=pt[0]; frameDrag.y=pt[1]; frameDrag.moved=true;
-      draw();
+    const pt=mmAt(e);
+    let dx=pt[0]-frameDrag.x, dy=pt[1]-frameDrag.y;
+    /* Snap to Fit: the dragged corners, at where this delta would put them, pull onto the
+       stationary regions' corners and edges - within the same seven screen pixels Studio
+       reaches, whatever the zoom. Alt drags free. */
+    if(snapOn && !e.altKey && (frameDrag.targets.pts.length || frameDrag.targets.segs.length)){
+      const dr=[];
+      frameDrag.base.forEach(b=>b.poly.forEach(q=>dr.push([q[0]+dx,q[1]+dy])));
+      const rct=cv.getBoundingClientRect();
+      const tol = rct.width ? SNAP_PX*cv.width/(PX*rct.width) : SNAP_PX/PX;
+      const s=snapDelta(dr, frameDrag.targets, tol);
+      if(s){ dx+=s.ox; dy+=s.oy; }
     }
+    /* every position re-derived from the copies taken at the press: base plus one total
+       delta, so a snap engaging and letting go leaves no accumulated drift behind */
+    const k=frameScale||1;
+    frameDrag.base.forEach(b=>{
+      const g=guide[b.ix], rw=guideRaw[b.ix]; if(!g||!rw) return;
+      b.poly.forEach((q,i2)=>{ g.poly[i2][0]=q[0]+dx; g.poly[i2][1]=q[1]+dy; });
+      b.holes.forEach((h,hi)=>h.forEach((q,i2)=>{ g.holes[hi][i2][0]=q[0]+dx; g.holes[hi][i2][1]=q[1]+dy; }));
+      b.rp.forEach((q,i2)=>{ rw.poly[i2][0]=q[0]+dx/k; rw.poly[i2][1]=q[1]+dy/k; });
+      b.rh.forEach((h,hi)=>h.forEach((q,i2)=>{ rw.holes[hi][i2][0]=q[0]+dx/k; rw.holes[hi][i2][1]=q[1]+dy/k; }));
+    });
+    if(dx||dy) frameDrag.moved=true;
+    draw();
     return; }
   if(marquee){ const c=cell(e);
     if(c.col!==marquee.c1 || c.row!==marquee.r1){ marquee.c1=c.col; marquee.r1=c.row; draw(); }
