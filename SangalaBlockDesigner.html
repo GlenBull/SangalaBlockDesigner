@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.167 -->
+<!-- SANGALA_VERSION: 2026-08-21.168 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1006,10 +1006,13 @@ function drawGrid(){
      the page is its own "LEGO baseplate 32 x 32 studs" with Snap to Studs on - its 8 mm lattice is
      snapping behaviour, and its brown stud rings are drawn on parts that have been PLACED. So the
      empty plate here is Studio's empty page (white, one hairline border, the size in gray at the
-     corner) and the lattice is what the Grid checkbox adds to it, in BOTH ways of building - kept
-     because Glen asked for it kept. The ruled lines are gone; so is the older idea of a drawn brick
-     wall in running bond, which depicted bricks nobody had placed. The surface says where a stud
-     can land; the bricks say what is built. */
+     corner) and the lattice is what the Grid checkbox adds to it. The ruled lines are gone; so is
+     the older idea of a drawn brick wall in running bond, which depicted bricks nobody had placed.
+     The surface says where a stud can land; the bricks say what is built. */
+  /* TOP-DOWN ONLY (Glen, 2026-08-21, the view reframing): the ring field is the PLATE'S FACE,
+     and from the side no stud faces you - the same reason the blue baseplate left the side-view
+     frame. His ruling, superseding the earlier keep-in-both: "plain page in both." */
+  if(mode!=="relief") return;
   const r = Math.max(0.7, mx(1.5));
   ctx.save();
   ctx.strokeStyle="#dde5ea"; ctx.lineWidth=1;
@@ -3376,13 +3379,24 @@ $("bSettings").onclick=()=>{
   $("bSettings").classList.toggle("on", setupOpen);
   if(setupOpen) $("setup").scrollIntoView({block:"nearest"});
 };
+/* THE GRID CHECKBOX FOLLOWS THE VIEW: from the side there is no stud field to draw (the rings
+   are the plate's FACE), so the control disables rather than sitting live and doing nothing. */
+function syncGridChk(){
+  const off = mode!=="relief";
+  $("ckGrid").disabled = off;
+  $("ckGrid").parentElement.title = off
+    ? "The stud grid is the plate's face - from the side there is no grid to draw."
+    : "Show or hide the stud grid";
+}
 $("selMode").onchange=e=>{
   mode=e.target.value; bricks=[];        /* the two grids do not share coordinates */
   say(mode==="standing"
-      ? "Standing figure: bricks stack in courses from the ground, studs up."
-      : "Relief: each layer stands one plate proud of the one behind, studs towards you.");
+      ? "Side view: bricks stack in courses from the ground - studs across, plates of height up."
+      : "Top-down view: each layer stands one plate proud of the one behind, studs towards you.");
+  syncGridChk();
   fit(); commit();                 /* the switch empties the design, so it must be undoable too */
 };
+syncGridChk();                     /* the load-time state: the side view is the default */
 $("frScale").onchange=e=>{
   frameScale=Math.max(0.1, Math.min(4, (parseInt(e.target.value,10)||100)/100));
   applyFrameScale();
@@ -4293,7 +4307,7 @@ function restoreState(st){
   /* the controls follow the state, the way Studio's refreshEditPanel does - a restored mode that the
      menu still disagrees with is the next defect */
   setPageSize(pageKind); $("pagesize").value=pageKind;
-  $("selMode").value=mode; $("frScale").value=Math.round(frameScale*100);
+  $("selMode").value=mode; syncGridChk(); $("frScale").value=Math.round(frameScale*100);
   hover=null; buildFrameTop(); draw();      /* which brings whichever 3D picture is up up to date */
 }
 function undo(){
@@ -5924,7 +5938,7 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
        (Relief 8)" and saved as "Test.block" is still the crane. A file written before the name was
        stored has no `project`, and its file name is the best that is known of it. */
     if(d.project) setDocName(d.project);
-    mode=d.mode==="relief"?"relief":"standing"; $("selMode").value=mode;
+    mode=d.mode==="relief"?"relief":"standing"; $("selMode").value=mode; syncGridChk();
     if(d.pageSize){ $("pagesize").value=d.pageSize; setPageSize(d.pageSize); }   /* the author's page, restored */
     frameScale=+d.frameScale||1; $("frScale").value=Math.round(frameScale*100);
     /* A file written before the placement was held apart from the geometry has neither field, and
