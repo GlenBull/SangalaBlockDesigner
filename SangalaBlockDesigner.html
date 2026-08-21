@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.161 -->
+<!-- SANGALA_VERSION: 2026-08-21.162 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -3896,11 +3896,41 @@ function nameGroup(){
   draw(); commit();
   say(nm ? 'Named "'+nm+'".' : "Name cleared.");
 }
+/* ---------- The frame is draggable (Glen, 2026-08-21: "the frame still is not draggable;
+   i can't reposition it"). A press on a frame region with no brick under the pointer picks
+   the frame up; the drag carries every region together. guideRaw moves in lockstep with
+   guide, divided by the frame scale, so the new position rides the SAME paths the frame
+   already travels - the .block save, the undo snapshot, and the Frame scale control - and
+   no new field exists to fall out of step. A press that never moves keeps its old meaning,
+   the click that clears the selection; a sweep still starts on ground outside the frame. */
+let frameDrag=null;
+function mmAt(e){
+  const p=canvasPt(e);
+  let x=(p[0]-view.panX)/PX - MX - placeX;
+  const y=(p[1]-view.panY)/PX - MY - placeY;
+  if(viewBack) x = backAxis - x;
+  return [x,y];
+}
+function inPoly(pt,poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
+    if((yi>pt[1])!==(yj>pt[1]) && pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+function frameAt(pt){
+  return showGuide && guide.some(g=> inPoly(pt,g.poly||[]) &&
+    !(g.holes||[]).some(h=>inPoly(pt,h)));
+}
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
   if(i<0){ if(e.shiftKey) return;                                      /* Shift on bare ground keeps the set */
+           const pt=mmAt(e);
+           if(frameAt(pt)){ frameDrag={x:pt[0], y:pt[1], moved:false};
+             cv.style.cursor="grabbing"; e.preventDefault(); return; }
            /* BARE GROUND STARTS A SWEEP. The selection is not cleared here: a sweep that catches
               nothing clears it on mouseup, and a press that never moves is treated as the click it
               is. Clearing now would make the box flash over an already-empty panel. */
@@ -3949,6 +3979,18 @@ cv.addEventListener("mousedown",(e)=>{
   e.preventDefault();
 });
 window.addEventListener("mousemove",(e)=>{
+  if(frameDrag){
+    const pt=mmAt(e), dx=pt[0]-frameDrag.x, dy=pt[1]-frameDrag.y;
+    if(dx||dy){
+      guide.forEach(g=>{ (g.poly||[]).forEach(q=>{q[0]+=dx;q[1]+=dy;});
+        (g.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx;q[1]+=dy;})); });
+      const k=frameScale||1;
+      guideRaw.forEach(g=>{ (g.poly||[]).forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;});
+        (g.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;})); });
+      frameDrag.x=pt[0]; frameDrag.y=pt[1]; frameDrag.moved=true;
+      draw();
+    }
+    return; }
   if(marquee){ const c=cell(e);
     if(c.col!==marquee.c1 || c.row!==marquee.r1){ marquee.c1=c.col; marquee.r1=c.row; draw(); }
     return; }
@@ -3963,6 +4005,15 @@ window.addEventListener("mousemove",(e)=>{
   moveDrag.moved=true; draw();
 });
 window.addEventListener("mouseup",()=>{
+  if(frameDrag){
+    const fd=frameDrag; frameDrag=null; cv.style.cursor="default";
+    if(fd.moved){
+      /* bricks rest against the frame's indexed top, so the index must follow the move */
+      buildFrameTop(); draw(); commit();
+      say("Frame moved. Undo puts it back.");
+    } else if(selBrick||selMulti.length){ selBrick=null; selMulti=[]; draw(); say(""); }
+    return;
+  }
   if(marquee){
     const lo={c:Math.min(marquee.c0,marquee.c1), r:Math.min(marquee.r0,marquee.r1)};
     const hi={c:Math.max(marquee.c0,marquee.c1), r:Math.max(marquee.r0,marquee.r1)};
