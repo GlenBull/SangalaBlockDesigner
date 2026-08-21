@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.163 -->
+<!-- SANGALA_VERSION: 2026-08-21.164 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1693,6 +1693,19 @@ function swatches(){
          and the parts list is rebuilt because it groups by part AND color. */
       const b = selNow();
       if(b && b.colorIdx!==i){ b.colorIdx=i; bom(); commit(); }
+      /* AND THE SELECTED FRAME ELEMENTS, by the same rule (Glen, 2026-08-21: "When an element
+         of the frame is selected, I would like to be able to change its color."). The fill
+         changes in guide and guideRaw together, so it survives Save, the Frame scale control,
+         and Ctrl-Z exactly as a move does. */
+      if(selFrame.length){
+        let n=0;
+        selFrame.forEach(ix=>{ const g=guide[ix], r=guideRaw[ix];
+          if(g && g.fill!==c.hex){ g.fill=c.hex; if(r) r.fill=c.hex; n++; } });
+        if(n){ commit();
+          const one = selFrame.length===1 ? guide[selFrame[0]] : null;
+          say((one && one.name ? '"'+one.name+'" recolored ' : n+" frame element"+(n===1?"":"s")+" recolored ")
+              +c.name+"."); }
+      }
       swatches(); drawLibrary(); draw();
     };
     h.appendChild(s);
@@ -3960,7 +3973,12 @@ cv.addEventListener("mousedown",(e)=>{
              }
              /* a press on a member of the set drags the set; on anything else it selects
                 that one region first - Studio's own click */
-             if(selFrame.indexOf(gi)<0){ selFrame=[gi]; selBrick=null; selMulti=[]; }
+             if(selFrame.indexOf(gi)<0){ selFrame=[gi]; selBrick=null; selMulti=[];
+               /* the palette follows the selection, as it does for a brick - when the fill IS a
+                  palette color; a Studio fill outside the palette leaves the palette alone */
+               const ci=COLORS.findIndex(c2=>(c2.hex||"").toLowerCase()===(guide[gi].fill||"").toLowerCase());
+               if(ci>=0 && ci!==selCol){ selCol=ci; swatches(); }
+             }
              frameDrag={x:pt[0], y:pt[1], moved:false, idxs:selFrame.slice()};
              cv.style.cursor="grabbing"; draw(); e.preventDefault(); return;
            }
