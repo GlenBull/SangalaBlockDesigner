@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.166 -->
+<!-- SANGALA_VERSION: 2026-08-21.167 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -464,11 +464,15 @@
     <div id="setup" style="display:none">
       <h2 class="marker sub">Workspace</h2>
       <div class="showrow" style="margin-top:.55rem;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .85rem;font-size:.85rem;color:#5a4a34">
-        <label style="display:flex;align-items:center;gap:.35rem;width:100%" title="Standing: the figure is stacked in courses, studs up, the way the LEGO crane is built. Relief: the parts lie on the plate with their studs towards you, a plate of depth at a time, the way a Studio relief is built.">
-          <span style="font-weight:700">Build</span>
+        <!-- THE VIEW, not the build (Glen, 2026-08-21: "the inherent coordinates don't change,
+             it is just a matter of whether you are looking at it top down or from the side -
+             plates vs studs"). The SAME control with the SAME words is in Sangala Studio; the
+             values keep their old names so every .block file opens exactly as it did. -->
+        <label style="display:flex;align-items:center;gap:.35rem;width:100%" title="Top-down: you are looking at the face of the baseplate, so both axes are studs - the way a relief or mosaic is built. Side: you are looking at the figure from the side, so it is studs across and plates of height up - the way a standing figure like the crane is built.">
+          <span style="font-weight:700">View</span>
           <select id="selMode" style="width:auto">
-            <option value="standing">Standing figure</option>
-            <option value="relief">Relief</option>
+            <option value="relief">Top-down (studs)</option>
+            <option value="standing" selected>Side (plates)</option>
           </select>
         </label>
         <label style="display:flex;align-items:center;gap:.35rem;width:100%" title="The surface the design sits on, as Sangala Studio offers it: a LEGO baseplate for brick work, or one of the two sheets. The page never changes size to suit a design - a design too big for it is reported instead.">
