@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-20.154 -->
+<!-- SANGALA_VERSION: 2026-08-21.157 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -555,11 +555,12 @@
          in which side of the head they are on;
        * the PLAN is the view the builder is working in, so where a piece goes is unambiguous and
          nothing hides behind anything, which is what makes it the better picture for "put this
-         piece here".
+         piece here". It is drawn at its own size rather than cropped from the screen, so a set of
+         them are all the same scale however the window was zoomed while they were taken.
      Same menu pattern as Save, on the button it belongs to. -->
 <div id="snapMenu" class="popmenu" style="display:none">
   <button id="snap3D" title="A rendered picture of the model, drawn the way LEGO documentation draws it">Three-Dimensional <small>rendered</small></button>
-  <button id="snapPlan" title="The workspace as you see it, cropped to the build - the better picture for showing where a piece goes">Plan View <small>as you see it</small></button>
+  <button id="snapPlan" title="The workspace drawing, cropped to the build and always the same size whatever the zoom - the better picture for showing where a piece goes">Plan View <small>the build, drawn flat</small></button>
 </div>
 <div id="saveMenu" class="popmenu" style="display:none">
   <button id="saveDesign" title="Save the whole design so you can keep building later">Design <small>.block</small></button>
@@ -573,7 +574,7 @@
        not print - it writes a file - which made it a second Save (Glen, 2026-08-15: "Why Print?
        Should this be under the Save menu?"). Mosaic had already settled it: its menu is Project /
        Image / Tile List, with the bill of materials as a Save item. This is the same three. -->
-  <button id="savePartsList" title="Save the parts list - a list to read (.txt) or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .xml</small></button>
+  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .docx / .xml</small></button>
   <!-- A LIBRARY CAN NOW BE WRITTEN, NOT ONLY READ. Until today one arrived from tools/parts_library.py
        and there was no way back out, so a catalog assembled by opening two libraries could not be kept.
        It saves what the Library panel holds - everything loaded, merged - so the file that goes out
@@ -912,7 +913,12 @@ function offPageWarning(){
 }
 /* The canvas is the WHOLE board, at device resolution for crisp pixels - it is not the plate. The
    plate is painted on it, so there is room around it to zoom into and pan across. */
+/* SET WHILE A PLAN SNAPSHOT IS BEING DRAWN. The shot gives the canvas its own size and its own
+   scale so the picture does not depend on where the zoom happened to be; sizeCanvas would otherwise
+   put the canvas straight back to the size of the window. */
+let shotMode=false;
 function sizeCanvas(){
+  if(shotMode) return;
   /* Studio's own three lines from its draw(): measure the canvas, back it at device resolution. Safe
      here for the same reason it is safe there - the canvas takes its height from the viewport, so its
      size is never a consequence of what is drawn on it. */
@@ -4500,6 +4506,61 @@ function partsListXml(){
   }).join("");
   return {xml:"<INVENTORY>\n"+items+"</INVENTORY>\n", skipped:skipped};
 }
+/* THE PARTS LIST AS A WORD DOCUMENT, ORGANIZED BY THE ELEMENTS OF THE FIGURE (Glen, 2026-08-21).
+   The .txt list is one line per part across the whole design - what a build is ORDERED from. The
+   Word list is what a kit is PACKED and read from, so it follows tallySections(): one section per
+   named group, in the arranged order (Crown, Head, Body...), the same sections the Parts panel
+   shows and the same division the kit's bags follow. Loose parts close the list under Other Parts.
+   The package scaffolding deliberately mirrors snapsToDocx - same Letter page, same footer with
+   the page number - rather than sharing code with it: that exporter is shipped and proven, and a
+   list of paragraphs is not worth entangling with its media handling. */
+function partsListDocx(){
+  const enc=new TextEncoder(), XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const secs=tallySections(), rows=tally(), built=bricks.filter(b=>!parked(b)).length;
+  const title=(docName||"Sangala Blocks design").replace(/\.[^.]+$/,"");
+  let body=docxPara('Parts list from Sangala Blocks "'+title+'".',{after:200});
+  secs.forEach(s=>{
+    if(!s.rows.length) return;             /* the empty way-back section has no place on paper */
+    const n=s.rows.reduce((a,r)=>a+r.n,0);
+    body+=docxPara((s.name||"Other Parts")+" ("+n+(n===1?" piece)":" pieces)"),{bold:true,after:60});
+    s.rows.forEach(r=>{
+      body+=docxPara(r.n+" × "+r.p.name+", "+r.col.name+" (design "+r.p.id+")",{after:40});
+    });
+    body+=docxPara("",{after:120});
+  });
+  body+=docxPara("Total pieces: "+built+". Distinct parts: "+rows.length+".",{after:100});
+  const doc=XML+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    +' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'+body
+    +'<w:sectPr><w:footerReference w:type="default" r:id="rId1"/>'
+    +'<w:pgSz w:w="12240" w:h="15840"/>'
+    +'<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>'
+    +'</w:sectPr></w:body></w:document>';
+  const ftr=XML+'<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    +'<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+    +'<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+    +'<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+    +'<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r>'
+    +'<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
+  const ct=XML+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    +'<Default Extension="xml" ContentType="application/xml"/>'
+    +'<Override PartName="/word/document.xml" ContentType="'+DOCX_MIME+'.main+xml"/>'
+    +'<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+    +'</Types>';
+  const root=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    +'</Relationships>';
+  const drels=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
+    +'</Relationships>';
+  const T=s=>enc.encode(s);
+  /* [Content_Types].xml first - snapsToDocx's rule, for the same readers */
+  return zipStore([{name:"[Content_Types].xml",bytes:T(ct)},
+                   {name:"_rels/.rels",bytes:T(root)},
+                   {name:"word/document.xml",bytes:T(doc)},
+                   {name:"word/footer1.xml",bytes:T(ftr)},
+                   {name:"word/_rels/document.xml.rels",bytes:T(drels)}]);
+}
 $("saveLibrary").onclick=async()=>{
   closeSaveMenu();
   if($("saveLibrary").disabled) return;
@@ -4517,6 +4578,8 @@ $("savePartsList").onclick=async()=>{
   const name=await saveChoice(docFileName(" parts"),
     [{ext:".txt", desc:"Parts list",
       build:async()=>new Blob([partsListText()],{type:"text/plain"})},
+     {ext:".docx", desc:"Parts list by element (Word)",
+      build:async()=>partsListDocx()},
      {ext:".xml", desc:"BrickLink Wanted List",
       build:async()=>{ const r=partsListXml();
         note = r.skipped.length
@@ -4732,6 +4795,78 @@ document.addEventListener("click",(e)=>{
    occupy, with a cell of margin so nothing touches the edge. The mapping is cell()'s own, run
    forwards: a design millimetre lands at view.pan + (mm + MX + place) * PX, and the far-side mirror
    is undone the same way cell() undoes it. */
+/* THE PLAN AT ITS OWN SIZE (Glen, 2026-08-20). Cropping the screen made a picture whose size
+   followed the zoom - the two-brick head came out 74 x 36 - so a document built from them had
+   figures of wildly different scales, and a builder had to remember to zoom in before pressing.
+   This draws the SAME picture with the canvas and the scale chosen for the shot: the build's own
+   bounding box, a cell of margin, and a long side of SHOT_PX whatever the window is doing.
+
+   It reuses draw() rather than reproducing it. draw() reads cv, PX, MX, MY and view, so the shot
+   sets those, draws, takes the pixels and puts everything back. draw() does not clamp the pan, so
+   the pan it is given is the pan it uses; only sizeCanvas had to be told to stand aside. */
+const SHOT_PX=900;
+/* THE MARGIN IS MEASURED IN MILLIMETRES, AND AROUND WHAT IS DRAWN (Glen, 2026-08-21). It was one
+   CELL, which is the wrong quantity twice over: a cell is 8 mm across and 3.2 mm down, so the
+   margin was two and a half times wider than it was tall; and on a small sub-assembly 8 mm is
+   enormous - the two-brick head came out with 40 per cent of its width white, and every one of
+   thirty-five pictures then had to be cropped by hand in Word.
+
+   A FOOTPRINT IS NOT THE PICTURE. Three things are drawn outside it and would be clipped by a
+   margin of zero: a stud stands STUD_PROUD above the top face, the drop shadow falls down and to
+   the side by `off` (see the shadow note in the brick drawing, which this must track), and the
+   selection ring straddles the outline so half of it lies outside. Those are cleared first, and
+   SHOT_PAD is then the hairline of white that shows around the result - the one number to tune if
+   the crop ever wants to be tighter or looser.
+
+   The shadow is padded on BOTH sides rather than only the side it falls on: viewing the back
+   mirrors the drawing, which swaps that side, and a millimetre of symmetry is worth more than a
+   millimetre saved. */
+const SHOT_PAD=0.8;                /* the visible hairline of white, mm, every side */
+const STUD_PROUD=1.8;              /* a stud stands this far above the top face - see the stud note */
+const RING_HALF=0.4;               /* half the selection ring, which straddles the outline */
+function planShotFixed(px){
+  const bs=bricks.filter(b=>!parked(b));
+  if(!bs.length) return null;
+  let c0=1e9,c1=-1e9,r0=1e9,r1=-1e9,shad=0;
+  bs.forEach(b=>{ const f=foot(b);
+    if(f.x0<c0)c0=f.x0; if(f.x1>c1)c1=f.x1; if(f.y0<r0)r0=f.y0; if(f.y1>r1)r1=f.y1;
+    shad=Math.max(shad, 0.7+depthOf(b)*0.22); });   /* the same reach the shadow is drawn with */
+  let x0=c0*STUD, x1=c1*STUD;
+  if(viewBack){ const a=backAxis-x1, b=backAxis-x0; x0=a; x1=b; }
+  let y0=r0*vUnit(), y1=r1*vUnit();
+  const padX=SHOT_PAD+Math.max(RING_HALF,shad);
+  x0-=padX; x1+=padX;
+  y0-=SHOT_PAD+Math.max(RING_HALF,STUD_PROUD);
+  y1+=SHOT_PAD+Math.max(RING_HALF,shad);
+  const wMM=x1-x0, hMM=y1-y0;
+  if(!(wMM>0&&hMM>0)) return null;
+  const scale=(px||SHOT_PX)/Math.max(wMM,hMM);
+  const W=Math.max(2,Math.round(wMM*scale)), H=Math.max(2,Math.round(hMM*scale));
+  const keep={w:cv.width,h:cv.height,z:view.zoom,px:view.panX,py:view.panY,bk:baseK,dpr:DPR};
+  let out=null;
+  try{
+    shotMode=true;
+    cv.width=W; cv.height=H; DPR=1; view.zoom=1; view.panX=0; view.panY=0;
+    /* THE ZOOM IS THE LEVER, NOT baseK. worldParams() refits baseK to the page on every call - it
+       is the fit, not a setting - so a baseK written here is thrown away the moment draw() runs and
+       the shot came out a fitted view of the whole plate with the build nowhere in it. Ask
+       worldParams for the fit, then choose the zoom that turns that fit into the scale wanted. */
+    worldParams();
+    view.zoom=scale/baseK;
+    worldParams();                       /* PX and the centring offsets, at the shot's own scale */
+    view.panX=-(x0+MX+placeX)*PX;        /* then bring the build's own corner to the origin */
+    view.panY=-(y0+MY+placeY)*PX;
+    draw();
+    out=document.createElement("canvas"); out.width=W; out.height=H;
+    out.getContext("2d").drawImage(cv,0,0);
+  } finally {
+    shotMode=false;
+    cv.width=keep.w; cv.height=keep.h; DPR=keep.dpr; baseK=keep.bk;
+    view.zoom=keep.z; view.panX=keep.px; view.panY=keep.py;
+    draw();                              /* the window gets its own drawing back */
+  }
+  return out;
+}
 function planShot(){
   const bs=bricks.filter(b=>!parked(b));
   if(!bs.length) return null;
@@ -4753,7 +4888,7 @@ function planShot(){
 }
 $("snapPlan").onclick=()=>{
   closeSnapMenu();
-  const t=planShot();
+  const t=planShotFixed(SHOT_PX);
   if(!t){ say("Nothing to photograph yet - place a brick first."); return; }
   t.toBlob(blob=>{ if(!blob){ say("The plan could not be photographed."); return; }
     snaps.push({blob:blob, url:URL.createObjectURL(blob)});
