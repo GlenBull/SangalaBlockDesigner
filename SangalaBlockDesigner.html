@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.157 -->
+<!-- SANGALA_VERSION: 2026-08-21.158 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -4523,8 +4523,12 @@ function partsListDocx(){
     if(!s.rows.length) return;             /* the empty way-back section has no place on paper */
     const n=s.rows.reduce((a,r)=>a+r.n,0);
     body+=docxPara((s.name||"Other Parts")+" ("+n+(n===1?" piece)":" pieces)"),{bold:true,after:60});
+    /* "part", not "design": the number is the one LEGO molds into the part - its design ID,
+       BrickLink's part number - and "part 3040" is the phrase a reader can act on. Glen,
+       2026-08-21: "The word Design doesn't mean anything to me and I doubt it will to the
+       reader as well." */
     s.rows.forEach(r=>{
-      body+=docxPara(r.n+" × "+r.p.name+", "+r.col.name+" (design "+r.p.id+")",{after:40});
+      body+=docxPara(r.n+" × "+r.p.name+", "+r.col.name+" (part "+r.p.id+")",{after:40});
     });
     body+=docxPara("",{after:120});
   });
