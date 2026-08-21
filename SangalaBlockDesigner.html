@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.158 -->
+<!-- SANGALA_VERSION: 2026-08-21.159 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -4519,20 +4519,27 @@ function partsListDocx(){
   const secs=tallySections(), rows=tally(), built=bricks.filter(b=>!parked(b)).length;
   const title=(docName||"Sangala Blocks design").replace(/\.[^.]+$/,"");
   let body=docxPara('Parts list from Sangala Blocks "'+title+'".',{after:200});
+  /* ONE TABLE PER ELEMENT, in the exact shape Glen approved from the chat mockup
+     (2026-08-21): a heading with the element name in bold and the piece count plain, then
+     Qty | Part | Color | Part # - "Part #", his wording, for the number LEGO molds into the
+     part. Qty and Part # sit right-aligned; the heading keeps with its table. */
+  const RIGHTS=[true,false,false,true], WIDTHS=[720,5280,2280,1080];
   secs.forEach(s=>{
     if(!s.rows.length) return;             /* the empty way-back section has no place on paper */
     const n=s.rows.reduce((a,r)=>a+r.n,0);
-    body+=docxPara((s.name||"Other Parts")+" ("+n+(n===1?" piece)":" pieces)"),{bold:true,after:60});
-    /* "part", not "design": the number is the one LEGO molds into the part - its design ID,
-       BrickLink's part number - and "part 3040" is the phrase a reader can act on. Glen,
-       2026-08-21: "The word Design doesn't mean anything to me and I doubt it will to the
-       reader as well." */
-    s.rows.forEach(r=>{
-      body+=docxPara(r.n+" × "+r.p.name+", "+r.col.name+" (part "+r.p.id+")",{after:40});
-    });
-    body+=docxPara("",{after:120});
+    body+='<w:p><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="60"/></w:pPr>'
+      +'<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/>'
+      +'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
+      +'<w:t xml:space="preserve">'+xesc(s.name||"Other Parts")+'</w:t></w:r>'
+      +'<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+      +'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
+      +'<w:t xml:space="preserve"> ('+n+(n===1?" piece)":" pieces)")+'</w:t></w:r></w:p>';
+    body+=docxTable(["Qty","Part","Color","Part #"],
+                    s.rows.map(r=>[String(r.n), r.p.name, r.col.name, r.p.id]),
+                    RIGHTS, WIDTHS);
   });
-  body+=docxPara("Total pieces: "+built+". Distinct parts: "+rows.length+".",{after:100});
+  body+=docxPara("",{after:60});           /* Word wants a paragraph between a table and what follows */
+  body+=docxPara("Total pieces: "+built+". Distinct parts: "+rows.length+".",{bold:true,after:100});
   const doc=XML+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
     +' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'+body
     +'<w:sectPr><w:footerReference w:type="default" r:id="rId1"/>'
@@ -4988,6 +4995,36 @@ function docxPara(text,{bold=false,center=false,size=22,after=100}={}){
              +(bold?'<w:b/>':'')+'<w:sz w:val="'+size+'"/><w:szCs w:val="'+size+'"/></w:rPr>'
              +'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r>' : '')
     +'</w:p>';
+}
+/* A TABLE, IN THE SHAPE GLEN APPROVED IN CHAT (2026-08-21) for the parts list: a thin
+   single-line grid, a bold heading row, and a column either left-aligned or right-aligned -
+   Qty and Part # sit right, words sit left. Fixed layout, so the columns hold their widths
+   whatever lands in them. Rows never split across a page, and every row but the last keeps
+   with the next, so a small table stays whole on one page. */
+function docxTable(headers,rows,rights,widths){
+  const total=widths.reduce((a,b)=>a+b,0);
+  const cellP=(text,bold,right,keep)=>'<w:p><w:pPr>'+(keep?'<w:keepNext/>':'')
+    +(right?'<w:jc w:val="right"/>':'')
+    +'<w:spacing w:before="20" w:after="20"/></w:pPr>'
+    +'<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+    +(bold?'<w:b/>':'')+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
+    +'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r></w:p>';
+  const tc=(text,i,bold,keep)=>'<w:tc><w:tcPr><w:tcW w:w="'+widths[i]+'" w:type="dxa"/></w:tcPr>'
+    +cellP(text,bold,rights[i],keep)+'</w:tc>';
+  const tr=(cells,bold,keep)=>'<w:tr><w:trPr><w:cantSplit/></w:trPr>'
+    +cells.map((t,i)=>tc(t,i,bold,keep)).join("")+'</w:tr>';
+  const line=s=>'<w:'+s+' w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  return '<w:tbl><w:tblPr><w:tblW w:w="'+total+'" w:type="dxa"/>'
+    +'<w:tblBorders>'+line("top")+line("left")+line("bottom")+line("right")
+    +line("insideH")+line("insideV")+'</w:tblBorders>'
+    /* explicit cell margins: this package carries no styles.xml, and without one Word set
+       them to zero, so the text sat against the grid lines */
+    +'<w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>'
+    +'<w:tblLayout w:type="fixed"/></w:tblPr>'
+    +'<w:tblGrid>'+widths.map(w=>'<w:gridCol w:w="'+w+'"/>').join("")+'</w:tblGrid>'
+    +tr(headers,true,true)
+    +rows.map((r,k)=>tr(r,false,k<rows.length-1)).join("")
+    +'</w:tbl>';
 }
 function docxImage(n,rid,cx,cy){
   return '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="60"/></w:pPr>'
