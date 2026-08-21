@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.165 -->
+<!-- SANGALA_VERSION: 2026-08-21.166 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -554,8 +554,8 @@
       <span id="zoomPct">100%</span>
       <button id="zoomIn" title="Zoom in">+</button>
       <button id="zoomFit" title="Fit the whole plate">Fit</button>
-      <!-- Studio's magnet, in Studio's place: Snap to Fit for dragging frame elements -->
-      <button id="bSnapTog" class="on" title="Snap to Fit: dragging a frame element near another pulls the corners together. Click to turn it off. (While on, hold Alt to drag free.)">&#129522;</button>
+      <!-- Studio's magnet, in Studio's place: Snap to Studs for dragging frame elements -->
+      <button id="bSnapTog" class="on" title="Snap to Studs: a dragged frame element lands on the stud-and-plate lattice, so bricks placed against it line up. Click to turn it off. (While on, hold Alt to drag free.)">&#129522;</button>
     </div>
   </div>
 </div>
@@ -3391,10 +3391,10 @@ $("pagesize").onchange=e=>{ setPageSize(e.target.value);
   say("Page is now "+pageLabel()+". The design is unchanged.");
   offPageWarning(); commit(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
-/* Studio's magnet, Studio's words (SangalaStudio.html:5561) - only the object it acts on differs */
+/* Studio's magnet, in Studio's place - governing Snap to Studs, the lattice snap */
 $("bSnapTog").onclick=()=>{ snapOn=!snapOn; $("bSnapTog").classList.toggle("on",snapOn);
-  say(snapOn ? "Snap to Fit is on - dragging a frame element near another pulls the corners together (hold Alt to drag free)."
-             : "Snap to Fit is off - frame elements drag freely. Click the magnet to turn it back on."); };
+  say(snapOn ? "Snap to Studs is on - a dragged frame element lands on the stud-and-plate lattice (hold Alt to drag free)."
+             : "Snap to Studs is off - frame elements drag freely. Click the magnet to turn it back on."); };
 $("ckGrid").onchange =e=>{showGrid =e.target.checked;draw();};
 /* Coming back it is drawn from scratch: syncMini sees a hidden window and rebuilds rather than
    trusting a bitmap that the design may have moved on from while it was away. */
@@ -4010,7 +4010,10 @@ function frameGrab(pt){
     P.forEach(q=>targets.pts.push([q[0],q[1]]));
     for(let i=0;i<P.length;i++) targets.segs.push([P[i],P[(i+1)%P.length]]);
   });
-  return {x:pt[0], y:pt[1], moved:false, idxs:idxs, base:base, targets:targets};
+  /* the dragged set's minimum corner, fixed at the press: Snap to Studs anchors here */
+  let mx0=1e9, my0=1e9;
+  base.forEach(b=>b.poly.forEach(q=>{ if(q[0]<mx0)mx0=q[0]; if(q[1]<my0)my0=q[1]; }));
+  return {x:pt[0], y:pt[1], moved:false, idxs:idxs, base:base, targets:targets, min:[mx0,my0]};
 }
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
@@ -4086,16 +4089,17 @@ window.addEventListener("mousemove",(e)=>{
   if(frameDrag){
     const pt=mmAt(e);
     let dx=pt[0]-frameDrag.x, dy=pt[1]-frameDrag.y;
-    /* Snap to Fit: the dragged corners, at where this delta would put them, pull onto the
-       stationary regions' corners and edges - within the same seven screen pixels Studio
-       reaches, whatever the zoom. Alt drags free. */
-    if(snapOn && !e.altKey && (frameDrag.targets.pts.length || frameDrag.targets.segs.length)){
-      const dr=[];
-      frameDrag.base.forEach(b=>b.poly.forEach(q=>dr.push([q[0]+dx,q[1]+dy])));
-      const rct=cv.getBoundingClientRect();
-      const tol = rct.width ? SNAP_PX*cv.width/(PX*rct.width) : SNAP_PX/PX;
-      const s=snapDelta(dr, frameDrag.targets, tol);
-      if(s){ dx+=s.ox; dy+=s.oy; }
+    /* SNAP TO STUDS FIRST - the stud-and-plate lattice IS the Blocks coordinate system, and
+       Glen, 2026-08-21: "the issue is that the frame doesn't align with the blocks coordinate
+       system. therefore, this has to be done by hand." Studio's rule, both halves: the snap is
+       ABSOLUTE - the set's minimum corner lands on the lattice whether or not anything is near
+       (SangalaStudio.html:3867, whose own comment says this is what makes a brick line up with
+       an imported mosaic) - and the lattice WINS over Snap to Fit: one snap at a time, so a
+       drag never fights itself (SangalaStudio.html:5883). Alt drags free. */
+    if(snapOn && !e.altKey){
+      const nx=frameDrag.min[0]+dx, ny=frameDrag.min[1]+dy, vu=vUnit();
+      dx += Math.round(nx/STUD)*STUD - nx;
+      dy += Math.round(ny/vu)*vu - ny;
     }
     /* every position re-derived from the copies taken at the press: base plus one total
        delta, so a snap engaging and letting go leaves no accumulated drift behind */
