@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.171 -->
+<!-- SANGALA_VERSION: 2026-08-21.172 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -199,6 +199,10 @@
 #zoomctl button{width:26px;height:24px;border:1px solid #c9b48c;border-radius:6px;background:linear-gradient(#fffdf7,#efe6d3);cursor:pointer;font-size:1rem;line-height:1;color:#7a3b12}
 #zoomctl button:hover{background:#fff}
 #zoomctl #bSnapTog.on{background:linear-gradient(#bfe3ff,#8fcaf5);border-color:#3f8fd0}
+/* the pan scrollbars: thin, on the canvas's own edges, visible only when there is somewhere to pan */
+.sbar{position:fixed;z-index:18;background:rgba(90,67,38,.12);border-radius:5px}
+.sbthumb{position:absolute;background:#c9b48c;border:1px solid #b9a67f;border-radius:5px;cursor:grab;min-width:9px;min-height:9px}
+.sbthumb:hover{background:#d8c4a0}
 #zoomctl #zoomFit{width:auto;padding:0 7px;font-size:.78rem}
 #zoomctl #zoomPct{min-width:3.05em;text-align:center;font-variant-numeric:tabular-nums}
 .swrow{display:flex;flex-wrap:wrap;gap:5px;margin:.3rem 0 .2rem}
@@ -300,7 +304,7 @@
        the board by its title bar. It is a canvas of its own, but NOT a renderer of its own - see
        syncMini(). The BAR is what makes the two drags distinguishable: on the canvas a drag turns the
        model, on the bar it moves the window, exactly as a window behaves. -->
-  <div class="board cork"><canvas id="cv"></canvas><div id="minibox"><div id="minibar"
+  <div class="board cork"><canvas id="cv"></canvas><div id="sbH" class="sbar" style="display:none;height:9px"><div id="sbHt" class="sbthumb" style="top:0;height:100%"></div></div><div id="sbV" class="sbar" style="display:none;width:9px"><div id="sbVt" class="sbthumb" style="left:0;width:100%"></div></div><div id="minibox"><div id="minibar"
        title="Drag to move this window"></div><canvas id="pvmini"
        title="The design in 3D. Drag to turn it, wheel to zoom. The selected brick is ringed in blue"></canvas><div
        id="minigrip" title="Drag to resize this window"></div></div><canvas id="pv" style="display:none;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:grab"></canvas></div>
@@ -795,6 +799,8 @@ let rotNext = 0;
    rather than a capability: a part just placed IS the selected one, so the spinner is already
    pointing at it and one step puts it where the jumper plate's centred stud carries it. */
 let tool = "select", showGuide = true, showGrid = true;
+let selFrame=[];   /* the frame-element selection - declared with the early state because draw()
+                      can run during script load, and a let further down sits in its dead zone */
 /* WHICH SIDE OF THE FIGURE YOU ARE STANDING ON. Glen, 2026-08-18: "we need a way to flip the crane
    so that I can add the blocks that go on the other side." A standing figure is deep, and the near
    side hides the far one - so the wings, and anything else that attaches to a side, could only ever
@@ -1068,7 +1074,7 @@ function drawGuide(){
   /* A SELECTED REGION WEARS THE RING A SELECTED BRICK WEARS - same color, same weight - drawn
      after every fill so a neighboring region cannot paint over it. A selection you cannot see
      is nothing (the brick rule, applying here too). */
-  if(typeof selFrame!=="undefined" && selFrame.length){
+  if(selFrame.length){
     ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
     selFrame.forEach(ix=>{ const g=guide[ix];
       if(!g || !g.poly || !g.poly.length) return;
@@ -3499,6 +3505,56 @@ $("zoomPct").addEventListener("change",e=>{
   if(v>=5 && v<=2000) setZoom(v/100); else updateZoomUI();
 });
 view.zoom=fitZoom(); updateZoomUI();     /* open fitted, reported truthfully */
+/* ---------- Pan scrollbars (Glen, 2026-08-21: "what happened to the pan sliders in both?" -
+   there never were any; panning was Space-drag and middle-mouse, invisible. Now that 100% can
+   exceed the window they exist: thin bars on the canvas's bottom and right edges, shown only
+   when the park-able world (page + WS_MARGIN of cork, clampPan's own bounds) overflows the
+   window. Dragging a thumb pans; the SAME control, by the same names, is in Sangala Studio. */
+function syncScrollbars(){
+  const rct=cv.getBoundingClientRect();
+  const hs=$("sbH"), vs=$("sbV");
+  if(rct.width<40 || view3D){ hs.style.display="none"; vs.style.display="none"; return; }
+  const wpx=(modelW+2*WS_MARGIN)*PX, hpx=(modelH+2*WS_MARGIN)*PX;
+  const x0=(MX-WS_MARGIN)*PX+view.panX, y0=(MY-WS_MARGIN)*PX+view.panY;
+  const fx=cv.width/wpx, fy=cv.height/hpx;
+  hs.style.display = fx<0.999 ? "" : "none";
+  vs.style.display = fy<0.999 ? "" : "none";
+  if(fx<0.999){
+    hs.style.left=(rct.left+3)+"px"; hs.style.width=(rct.width-18)+"px";
+    hs.style.top=(rct.top+rct.height-12)+"px";
+    const len=Math.max(8, fx*100), pos=Math.max(0, Math.min(100-len, (-x0/wpx)*100));
+    $("sbHt").style.width=len+"%"; $("sbHt").style.left=pos+"%";
+  }
+  if(fy<0.999){
+    vs.style.top=(rct.top+3)+"px"; vs.style.height=(rct.height-18)+"px";
+    vs.style.left=(rct.left+rct.width-12)+"px";
+    const len=Math.max(8, fy*100), pos=Math.max(0, Math.min(100-len, (-y0/hpx)*100));
+    $("sbVt").style.height=len+"%"; $("sbVt").style.top=pos+"%";
+  }
+}
+function sbDrag(thumb, horiz){
+  thumb.addEventListener("pointerdown",e=>{
+    e.preventDefault(); e.stopPropagation();
+    thumb.setPointerCapture(e.pointerId); thumb.style.cursor="grabbing";
+    const track=thumb.parentElement.getBoundingClientRect();
+    const world=horiz ? (modelW+2*WS_MARGIN)*PX : (modelH+2*WS_MARGIN)*PX;
+    const start=horiz ? e.clientX : e.clientY;
+    const pan0=horiz ? view.panX : view.panY;
+    const move=ev=>{
+      const d=(horiz?ev.clientX:ev.clientY)-start;
+      const track_len=horiz ? track.width : track.height;
+      const np=pan0 - d/track_len*world;
+      if(horiz) view.panX=np; else view.panY=np;
+      clampPan(); draw();
+    };
+    const up=ev=>{ thumb.style.cursor="grab";
+      thumb.removeEventListener("pointermove",move); thumb.removeEventListener("pointerup",up); };
+    thumb.addEventListener("pointermove",move); thumb.addEventListener("pointerup",up);
+  });
+}
+sbDrag($("sbHt"),true); sbDrag($("sbVt"),false);
+/* every path that changes the view already ends in draw(); the bars follow it */
+const __draw_sb=draw; draw=function(){ __draw_sb(); syncScrollbars(); };
 let spaceHeld=false, panDrag=null, suppressClick=false;
 window.addEventListener("keydown",(e)=>{ if(e.code!=="Space") return; const t=e.target, tag=t&&t.tagName&&t.tagName.toLowerCase();
   if(tag==="input"||tag==="textarea"||tag==="select"||(t&&t.isContentEditable)) return;
@@ -3989,7 +4045,7 @@ function nameGroup(){
    so a move rides the SAME paths the frame already travels - the .block save, the undo
    snapshot, the Frame scale control - and no new field exists to fall out of step.
    Not built yet, deliberately: Group on frame elements, and Delete of one. */
-let frameDrag=null, selFrame=[];
+let frameDrag=null;   /* selFrame is declared with the early state above */
 function mmAt(e){
   const p=canvasPt(e);
   let x=(p[0]-view.panX)/PX - MX - placeX;
