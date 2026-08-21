@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.162 -->
+<!-- SANGALA_VERSION: 2026-08-21.163 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1040,6 +1040,18 @@ function drawGuide(){
     ctx.fillStyle=g.fill; ctx.fill("evenodd");
     ctx.strokeStyle="#8a8a8a"; ctx.lineWidth=1; ctx.stroke();
   });
+  /* A SELECTED REGION WEARS THE RING A SELECTED BRICK WEARS - same color, same weight - drawn
+     after every fill so a neighboring region cannot paint over it. A selection you cannot see
+     is nothing (the brick rule, applying here too). */
+  if(typeof selFrame!=="undefined" && selFrame.length){
+    ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=Math.max(2, mx(0.8));
+    selFrame.forEach(ix=>{ const g=guide[ix];
+      if(!g || !g.poly || !g.poly.length) return;
+      ctx.beginPath();
+      g.poly.forEach((p,i)=> i?ctx.lineTo(mx(p[0]),mx(p[1])):ctx.moveTo(mx(p[0]),mx(p[1])));
+      ctx.closePath(); ctx.stroke();
+    });
+  }
 }
 /* THE FOOTPRINT, SEEN FACE ON - both axes in studs, because the figure is built in RELIEF: the
    parts lie on the plate with their studs towards you and each layer stands one plate proud of
@@ -3896,14 +3908,21 @@ function nameGroup(){
   draw(); commit();
   say(nm ? 'Named "'+nm+'".' : "Name cleared.");
 }
-/* ---------- The frame is draggable (Glen, 2026-08-21: "the frame still is not draggable;
-   i can't reposition it"). A press on a frame region with no brick under the pointer picks
-   the frame up; the drag carries every region together. guideRaw moves in lockstep with
-   guide, divided by the frame scale, so the new position rides the SAME paths the frame
-   already travels - the .block save, the undo snapshot, and the Frame scale control - and
-   no new field exists to fall out of step. A press that never moves keeps its old meaning,
-   the click that clears the selection; a sweep still starts on ground outside the frame. */
-let frameDrag=null;
+/* ---------- Frame elements select and move THE WAY STUDIO'S OBJECTS DO (Glen, 2026-08-21,
+   with Studio open in front of him: "If I sweep out the entire object (i.e., the whole
+   frame) I can move it as a whole... Or, I can select individual elements and move them
+   separately."). Same grammar, same gestures, nothing invented:
+     - click a frame region (no brick under the pointer): selects it and a drag moves it;
+     - Shift+click a region: ADDS it to the frame selection, builds the set, moves nothing;
+     - a sweep takes every region that lies FULLY inside, with any bricks it also caught;
+     - dragging any selected region carries the whole selected set.
+   A selected region wears the same blue ring a selected brick does, because a selection
+   you cannot see is nothing. Bricks still win under the pointer, and a sweep still starts
+   on any bare ground. guideRaw moves in lockstep with guide, divided by the frame scale,
+   so a move rides the SAME paths the frame already travels - the .block save, the undo
+   snapshot, the Frame scale control - and no new field exists to fall out of step.
+   Not built yet, deliberately: Group on frame elements, and Delete of one. */
+let frameDrag=null, selFrame=[];
 function mmAt(e){
   const p=canvasPt(e);
   let x=(p[0]-view.panX)/PX - MX - placeX;
@@ -3919,18 +3938,33 @@ function inPoly(pt,poly){
   }
   return inside;
 }
-function frameAt(pt){
-  return showGuide && guide.some(g=> inPoly(pt,g.poly||[]) &&
-    !(g.holes||[]).some(h=>inPoly(pt,h)));
+/* the TOPMOST region under the point - the last drawn, which is how the eye reads it */
+function frameIdxAt(pt){
+  if(!showGuide) return -1;
+  for(let i=guide.length-1;i>=0;i--){
+    const g=guide[i];
+    if(inPoly(pt,g.poly||[]) && !(g.holes||[]).some(h=>inPoly(pt,h))) return i;
+  }
+  return -1;
 }
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
   const c=cell(e), i=hit(c);
-  if(i<0){ if(e.shiftKey) return;                                      /* Shift on bare ground keeps the set */
-           const pt=mmAt(e);
-           if(frameAt(pt)){ frameDrag={x:pt[0], y:pt[1], moved:false};
-             cv.style.cursor="grabbing"; e.preventDefault(); return; }
+  if(i<0){ const pt=mmAt(e), gi=frameIdxAt(pt);
+           if(gi>=0){
+             if(e.shiftKey){                     /* Studio's add-to-set: build, move nothing */
+               if(selFrame.indexOf(gi)<0) selFrame.push(gi);
+               draw(); say(selFrame.length+" frame element"+(selFrame.length===1?"":"s")+" selected.");
+               e.preventDefault(); return;
+             }
+             /* a press on a member of the set drags the set; on anything else it selects
+                that one region first - Studio's own click */
+             if(selFrame.indexOf(gi)<0){ selFrame=[gi]; selBrick=null; selMulti=[]; }
+             frameDrag={x:pt[0], y:pt[1], moved:false, idxs:selFrame.slice()};
+             cv.style.cursor="grabbing"; draw(); e.preventDefault(); return;
+           }
+           if(e.shiftKey) return;                                      /* Shift on bare ground keeps the set */
            /* BARE GROUND STARTS A SWEEP. The selection is not cleared here: a sweep that catches
               nothing clears it on mouseup, and a press that never moves is treated as the click it
               is. Clearing now would make the box flash over an already-empty panel. */
@@ -3982,11 +4016,14 @@ window.addEventListener("mousemove",(e)=>{
   if(frameDrag){
     const pt=mmAt(e), dx=pt[0]-frameDrag.x, dy=pt[1]-frameDrag.y;
     if(dx||dy){
-      guide.forEach(g=>{ (g.poly||[]).forEach(q=>{q[0]+=dx;q[1]+=dy;});
-        (g.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx;q[1]+=dy;})); });
       const k=frameScale||1;
-      guideRaw.forEach(g=>{ (g.poly||[]).forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;});
-        (g.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;})); });
+      frameDrag.idxs.forEach(ix=>{
+        const g=guide[ix], r=guideRaw[ix]; if(!g||!r) return;
+        (g.poly||[]).forEach(q=>{q[0]+=dx;q[1]+=dy;});
+        (g.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx;q[1]+=dy;}));
+        (r.poly||[]).forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;});
+        (r.holes||[]).forEach(h=>h.forEach(q=>{q[0]+=dx/k;q[1]+=dy/k;}));
+      });
       frameDrag.x=pt[0]; frameDrag.y=pt[1]; frameDrag.moved=true;
       draw();
     }
@@ -4010,8 +4047,12 @@ window.addEventListener("mouseup",()=>{
     if(fd.moved){
       /* bricks rest against the frame's indexed top, so the index must follow the move */
       buildFrameTop(); draw(); commit();
-      say("Frame moved. Undo puts it back.");
-    } else if(selBrick||selMulti.length){ selBrick=null; selMulti=[]; draw(); say(""); }
+      const one = fd.idxs.length===1 && guide[fd.idxs[0]];
+      say((one && one.name ? 'Moved "'+one.name+'"' :
+           "Moved "+fd.idxs.length+" frame element"+(fd.idxs.length===1?"":"s"))
+          +". Undo puts it back.");
+    }
+    /* a press that never moved is Studio's click: the region stays selected */
     return;
   }
   if(marquee){
@@ -4027,11 +4068,21 @@ window.addEventListener("mouseup",()=>{
         return f.x0>=lo.c && f.x1<=hi.c+1 && f.y0>=lo.r && f.y1<=hi.r+1; });
       selMulti = got.length>1 ? got : [];
       selBrick = got.length===1 ? got[0] : null;
+      /* AND THE FRAME'S ELEMENTS, by the same fully-inside rule, in the same sweep - which is
+         how the whole frame is picked up to move as one: sweep it out, drag any region. */
+      const x0=lo.c*STUD, x1=(hi.c+1)*STUD, y0=lo.r*vUnit(), y1=(hi.r+1)*vUnit();
+      selFrame = !showGuide ? [] : guide.map((g,ix)=>{
+        const P=g.poly||[]; if(!P.length) return -1;
+        return P.every(q=>q[0]>=x0 && q[0]<=x1 && q[1]>=y0 && q[1]<=y1) ? ix : -1;
+      }).filter(ix=>ix>=0);
       suppressClick=true;                        /* the click this sweep ends on must not place */
       draw();
-      say(!got.length ? "" : got.length===1 ? ""
-          : got.length+" bricks selected — Group binds them.");
-    } else if(selBrick||selMulti.length){ selBrick=null; selMulti=[]; draw(); say(""); }
+      const parts=[];
+      if(got.length>1) parts.push(got.length+" bricks");
+      if(selFrame.length) parts.push(selFrame.length+" frame element"+(selFrame.length===1?"":"s"));
+      say(!parts.length ? "" : parts.join(" and ")+" selected"
+          + (got.length>1 && !selFrame.length ? " — Group binds them." : "."));
+    } else if(selBrick||selMulti.length||selFrame.length){ selBrick=null; selMulti=[]; selFrame=[]; draw(); say(""); }
     return;
   }
   if(!moveDrag) return;
@@ -4133,6 +4184,7 @@ function restoreState(st){
                                         holes:(g.holes||[]).map(h=>h.map(q=>[q[0],q[1]]))}));
   /* the SCALED working copy is derived, never stored - the same derivation the loader makes, so a
      restored design cannot end up scaled twice */
+  selFrame=[];                     /* the old frame is gone; a selection into it would point at nothing */
   guide=guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0]*frameScale, q[1]*frameScale]),
                                 holes:(g.holes||[]).map(h=>h.map(q=>[q[0]*frameScale, q[1]*frameScale]))}));
   /* TURN COMES BACK WITH THE BRICK. serializeState has written it since the day Turn was built, and
@@ -5449,7 +5501,7 @@ function loadModel(j){
   /* AT ITS OWN SIZE. A .model carries no frame scale, so importing one resets the control to 100% and
      the design lands at the coordinates Studio saved it with — which is what Studio does with the same
      file. Leaving the control at whatever it happened to hold silently reinterpreted the import. */
-  frameScale=1; $("frScale").value=100;
+  frameScale=1; $("frScale").value=100; selFrame=[];
   guideRaw=g; applyFrameScale();
   /* A FRESH HISTORY AT THE LOADED STATE, as Studio starts one at SangalaStudio.html:1743 - undo
      walks back to the design as imported and stops there, never into whatever preceded it. */
@@ -5791,7 +5843,8 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     /* The file now stores the UNSCALED frame, so scale it on the way in exactly as an import does.
        applyFrameScale clears the bricks, so it cannot run here - the bricks are loaded below. */
     guideRaw=d.guide||[];
-    guide=guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0]*frameScale, q[1]*frameScale]),
+    selFrame=[];                     /* the old frame is gone; a selection into it would point at nothing */
+  guide=guideRaw.map(g=>({...g, poly:(g.poly||[]).map(q=>[q[0]*frameScale, q[1]*frameScale]),
                                   holes:(g.holes||[]).map(h=>h.map(q=>[q[0]*frameScale, q[1]*frameScale]))}));
     buildFrameTop();          /* the frame must be indexed before anything lands on it */
     /* THE LIBRARY COMES IN WITH THE DESIGN, and silently. Glen, 2026-08-17: "the library associated
