@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.160 -->
+<!-- SANGALA_VERSION: 2026-08-21.161 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -508,6 +508,22 @@
         <div class="hint" id="total"></div>
       </div>
     </div>
+    <!-- THE KIT: a saved parts list, reopened as the thing to build from (Glen, 2026-08-21: "if
+         i'm going to reconstruct the kit in a live demo, i'll never be able to do that with the
+         undifferentiated list"). One section per element, the bag division, each row a part with
+         its color and quantity. The rows follow the LIBRARY's grammar exactly - click seeds the
+         palette, drag places on the workspace - so the two lists cannot teach two conventions.
+         The Parts section above is what IS placed; this is what SHOULD BE. -->
+    <div id="kitpanel" style="margin-top:.8rem;border-top:1px solid #d8c4a0;padding-top:.6rem;display:none">
+      <h2 class="marker" id="kithead" title="Hide the kit"
+          style="margin-top:0;cursor:pointer;user-select:none">
+        <span id="kittog" style="color:#8a7350;font-size:.8rem;margin-right:.3rem">&#9662;</span>Kit<!--
+     --><span id="kitcount" style="font-family:inherit;font-size:.82rem;color:#8a7350"></span></h2>
+      <div id="kitbody">
+        <div class="hint" id="kitnote" style="margin-top:0"></div>
+        <table class="bom" id="kittable"><tbody></tbody></table>
+      </div>
+    </div>
     <!-- WHAT THE LOADED LIBRARY HOLDS. Glen, having opened the starter set: "how can I see what is
          in the library?" - and he could not: the only sign of it was a line in the status bar and a
          new button on the Part flyout. The Parts section above is the DESIGN's bill of materials;
@@ -574,7 +590,7 @@
        not print - it writes a file - which made it a second Save (Glen, 2026-08-15: "Why Print?
        Should this be under the Save menu?"). Mosaic had already settled it: its menu is Project /
        Image / Tile List, with the bill of materials as a Save item. This is the same three. -->
-  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .docx / .xml</small></button>
+  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), a kit file that reopens in Sangala Blocks (.kit), or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .docx / .kit / .xml</small></button>
   <!-- A LIBRARY CAN NOW BE WRITTEN, NOT ONLY READ. Until today one arrived from tools/parts_library.py
        and there was no way back out, so a catalog assembled by opening two libraries could not be kept.
        It saves what the Library panel holds - everything loaded, merged - so the file that goes out
@@ -591,7 +607,7 @@
   <button data-kind="wedge">&#9699; Wedge Plate</button>
 </div>
 
-<input type="file" id="fOpen" accept=".block,.model,.library,.parts,.json" style="display:none">
+<input type="file" id="fOpen" accept=".block,.model,.library,.parts,.kit,.json" style="display:none">
 
 <div class="modal" id="snapview">
   <div class="card" style="max-width:none;width:auto">
@@ -4591,6 +4607,8 @@ $("savePartsList").onclick=async()=>{
       build:async()=>new Blob([partsListText()],{type:"text/plain"})},
      {ext:".docx", desc:"Parts list by element (Word)",
       build:async()=>partsListDocx()},
+     {ext:".kit", desc:"Kit - reopens in Sangala Blocks, by element",
+      build:async()=>new Blob([kitJSON()],{type:"application/json"})},
      {ext:".xml", desc:"BrickLink Wanted List",
       build:async()=>{ const r=partsListXml();
         note = r.skipped.length
@@ -5547,28 +5565,109 @@ $("libhead").onclick=()=>{ libOpen=!libOpen; drawLibrary(); };
 cv.addEventListener("dragover", e=>{ e.preventDefault(); e.dataTransfer.dropEffect="copy"; });
 cv.addEventListener("drop", e=>{
   const data = e.dataTransfer.getData("text/plain") || "";
-  if(data.indexOf("sangala-lib:")!==0) return;
+  const fromKit = data.indexOf("sangala-kit:")===0;
+  if(data.indexOf("sangala-lib:")!==0 && !fromKit) return;
   e.preventDefault();
   if(view3D){ say("Turn 3D View off to place a part."); return; }
-  const lp = libParts[parseInt(data.slice(12),10)];
+  /* a kit row carries its whole part - the kit file is self-contained, like a .block - and it
+     lands through the SAME code as a library row, so a kit part obeys the same rules */
+  const lp = fromKit ? kitRow(data.slice(12)) : libParts[parseInt(data.slice(12),10)];
   if(!lp) return;
   const c = cell(e);
   const p = {id:lp.id, name:lp.name||lp.id, w:Math.max(1,lp.w|0), d:Math.max(1,lp.d|0),
              h:Math.max(1,lp.h|0), shape:(lp.shape==="box"?"rect":lp.shape||"rect"),
-             studs:(lp.kind!=="tile"),
+             studs:fromKit ? (lp.studs!==false) : (lp.kind!=="tile"),
              /* the studs on its faces and on its top, measured in the library - see drawBrick */
              ...(lp.side&&lp.side.length?{side:lp.side}:{}),
              ...(lp.top&&lp.top.length?{top:lp.top}:{})};
   /* IN THE COLOR ASSIGNED TO THAT PART, which is not necessarily the palette's: a builder who has set
      one row green and another black, then dragged the black one out, means black. The palette shows
-     the SELECTED row's color; a part carries its own. */
-  const gi = COLORS.findIndex(x=>x.code===lp.colorCode);
-  const ci = (lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol);
+     the SELECTED row's color; a part carries its own.
+     A KIT ROW'S OWN COLOR WINS OUTRIGHT: the kit is the record of a finished design, so the red bill
+     dragged from the kit is red, whatever the palette or a library assignment says. */
+  const gi = COLORS.findIndex(x=>x.code===(fromKit ? lp.color : lp.colorCode));
+  const ci = fromKit ? (gi>=0 ? gi : selCol)
+                     : ((lp.id in libColor) ? libColor[lp.id] : (gi>=0 ? gi : selCol));
   const nb = settle({p:p, colorIdx:ci, col:anchor(c,p,rotNext), row:c.row, flip:flip, turn:faceNext||undefined, rot:rotNext});
   bricks.push(nb);
   selBrick=nb; say("");            /* as the Part tool does - the block above is the report */
   draw(); bom(); commit();
 });
+/* ---------- The kit: a saved parts list that reopens as the thing to build from ----------
+   Glen, 2026-08-21: "once I complete a project, I need to be able to save and reimport the
+   parts list... if i'm going to reconstruct the kit in a live demo, i'll never be able to do
+   that with the undifferentiated list." The LIBRARY stays a palette of shapes, by his own
+   rule; the KIT is the design-specific list - elements, colors, quantities - written by
+   Save > Parts List as .kit and opened like any other file. Each row carries the whole part
+   (footprint, height, shape, face studs), so a kit opens complete on any machine, the same
+   self-containment a .block carries its library with. Session-only: a kit is not written
+   into the .block, it is opened beside a design when it is wanted. */
+let kit=null, kitOpen=true;
+function kitJSON(){
+  const secs=tallySections().filter(s=>s.rows.length);
+  return JSON.stringify({sangala:"kit", version:1,
+    project:docName||"Sangala Blocks design",
+    sections:secs.map(s=>({name:s.name||"Other Parts",
+      rows:s.rows.map(r=>({qty:r.n, color:r.col.code, colorName:r.col.name,
+        id:r.p.id, name:r.p.name, w:r.p.w, d:r.p.d||1, h:r.p.h, shape:r.p.shape,
+        ...(r.p.studs===false?{studs:false}:{}),
+        ...(r.p.side&&r.p.side.length?{side:r.p.side}:{}),
+        ...(r.p.top&&r.p.top.length?{top:r.p.top}:{})}))}))}, null, 1);
+}
+function kitRow(key){
+  const m=/^(\d+):(\d+)$/.exec(key||""); if(!m||!kit) return null;
+  const s=kit.sections[+m[1]]; return (s&&(s.rows||[])[+m[2]])||null;
+}
+function loadKit(d, fileName){
+  const secs=(Array.isArray(d.sections)?d.sections:[]).filter(s=>s&&(s.rows||[]).length);
+  if(!secs.length){ say("That kit file lists nothing."); return; }
+  kit={project:d.project||((fileName||"").replace(/\.[^.]+$/,""))||"a kit", sections:secs};
+  kitOpen=true; drawKit();
+  const n=secs.reduce((a,s)=>a+s.rows.reduce((x,r)=>x+(+r.qty||0),0),0);
+  say('Kit "'+kit.project+'" loaded: '+n+" piece"+(n===1?"":"s")+" in "+secs.length
+      +" element"+(secs.length===1?"":"s")
+      +". Click a row to set the palette to its color; drag it onto the workspace to place it.");
+}
+function drawKit(){
+  if(!kit){ $("kitpanel").style.display="none"; return; }
+  document.querySelector("#kittable tbody").innerHTML =
+    kit.sections.map((s,si)=>{
+      const n=s.rows.reduce((a,r)=>a+(+r.qty||0),0);
+      return "<tr><th colspan='2'>"+xesc(s.name||"")+" · "+n+(n===1?" piece":" pieces")+"</th></tr>"
+        + s.rows.map((r,ri)=>{
+            const hex=(COLORS.find(c2=>c2.code===r.color)||{}).hex||"#cccccc";
+            return "<tr draggable='true' data-kit='"+si+":"+ri+"'"
+              +" title='Click to set the palette to its color; drag it onto the workspace to place it'"
+              +" style='cursor:grab'><td><span style='display:inline-block;width:.72em;height:.72em;"
+              +"border-radius:3px;background:"+hex+";border:1px solid rgba(0,0,0,.25);"
+              +"margin-right:.35em'></span>"
+              +(+r.qty||0)+" × "+xesc(r.name||r.id)+"</td><td class='q'>"+xesc(r.id)+"</td></tr>";
+          }).join("");
+    }).join("");
+  document.querySelectorAll("#kittable tr[data-kit]").forEach(tr=>{
+    tr.addEventListener("dragstart", e=>{
+      e.dataTransfer.setData("text/plain","sangala-kit:"+tr.dataset.kit);
+      e.dataTransfer.effectAllowed="copy";
+    });
+    /* the library's click, spoken here: seed the palette, change nothing else */
+    tr.addEventListener("click", ()=>{
+      const r=kitRow(tr.dataset.kit); if(!r) return;
+      const ci=COLORS.findIndex(c2=>c2.code===r.color);
+      if(ci>=0){ selCol=ci; swatches();
+        say(r.name+" — the palette is now "+COLORS[ci].name+"."); }
+      else say(r.name+" — its color"+(r.colorName?" ("+r.colorName+")":"")
+               +" is not in the palette, so the palette is unchanged.");
+    });
+  });
+  const total=kit.sections.reduce((a,s)=>a+s.rows.reduce((x,r)=>x+(+r.qty||0),0),0);
+  $("kitcount").textContent=" · "+total+(total===1?" piece":" pieces");
+  $("kitnote").textContent=kit.project;
+  $("kitpanel").style.display="";
+  $("kitbody").style.display=kitOpen?"":"none";
+  $("kittog").innerHTML=kitOpen?"&#9662;":"&#9656;";
+  $("kithead").title=kitOpen?"Hide the kit":"Show the kit";
+}
+$("kithead").onclick=()=>{ kitOpen=!kitOpen; drawKit(); };
 function addKindButton(kind, label){
   const menu = $("partmenu");
   if(menu.querySelector('button[data-kind="'+kind+'"]')) return;
@@ -5622,6 +5721,8 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     /* EITHER MARKER OPENS. A library is written as ".library" now, which is the word a student meets
        at both ends, and its marker says "library" to match. Every .parts file already made still
        opens: the format did not change, only what it is called. */
+    /* A KIT IS NOT A PROJECT EITHER - it is opened BESIDE one, so it must not name anything */
+    if(d.sangala==="kit") return loadKit(d, f.name);
     if(d.sangala==="library" || d.sangala==="parts") return loadParts(d, f.name);
     setDocName(f.name, true);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
