@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.170 -->
+<!-- SANGALA_VERSION: 2026-08-21.171 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -555,7 +555,7 @@
     <!-- Studio's zoom cluster, in Studio's place: the bottom of the control panel. -->
     <div id="zoomctl">
       <button id="zoomOut" title="Zoom out">&minus;</button>
-      <input id="zoomPct" value="100%" title="Type a zoom percentage - the same number in Sangala Studio shows the same size (100 = actual size)" style="width:3.6em;text-align:center;border:1px solid #c9b48c;border-radius:6px;background:#fffdf7;font:inherit;color:inherit;padding:2px 0">
+      <input id="zoomPct" value="100%" title="Type a zoom percentage - the same number in Sangala Studio shows the same size; at 100 the page fits a typical window" style="width:3.6em;text-align:center;border:1px solid #c9b48c;border-radius:6px;background:#fffdf7;font:inherit;color:inherit;padding:2px 0">
       <button id="zoomIn" title="Zoom in">+</button>
       <button id="zoomFit" title="Fit the whole plate">Fit</button>
       <!-- Studio's magnet, in Studio's place: Snap to Studs for dragging frame elements -->
@@ -854,7 +854,14 @@ let PX = 3, hover = null;   /* modelW/modelH are constants beside the baseplate 
    PX = baseK * zoom, and pan is a translate in canvas pixels - the same wheel step, the same
    100%-2000% range, the same "- 100% + Fit" cluster in the same place. */
 let view={zoom:1,panX:0,panY:0};
-const SCALE100=96/25.4;           /* CSS px per design mm at 100% - the family's shared scale */
+/* THE SHARED SCALE IS SIZED TO SCREENS, NOT TO PAPER (Glen, 2026-08-21: "the crane should fit
+   on the screen at 100%. Otherwise, 100% zoom will be unusable... they fit before, but applying
+   arbitrary computer logic without reference to human usability made both applications
+   unusable."). The first value here was 96 css px per inch - print-physical truth - and a Letter
+   page at that size overflows a laptop window. The criterion is HIS: at 100% the working page
+   fits. 2.4 css px per mm stands a Letter page 670 css px tall. What matters for comparison is
+   only that the constant is the SAME, by the same name, in Sangala Studio. */
+const SCALE100=2.4;               /* CSS px per design mm at 100% - the family's shared scale */
 let baseK=3, MX=0, MY=0, DPR=1;   /* device px per mm at 100%, and the mm that center the plate in the canvas */
 /* Studio's two margins, its numbers and its reasoning, not scaled-down versions of them. */
 const VIEW_MARGIN=20;   /* mm of cork shown around the plate at the DEFAULT view (zoom 1 / Fit). Small, so the
