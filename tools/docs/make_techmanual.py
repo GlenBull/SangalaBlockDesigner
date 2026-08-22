@@ -32,9 +32,10 @@ d.body("The program is built once, by double-clicking Build SangalaBlocks.cmd. T
 
 # ---------------------------------------------------------------- 2
 d.heading("2. What Sangala Blocks Is, and the Rule That Shapes It")
-d.body("Sangala Blocks plans a kit of real LEGO bricks. A figure designed in Sangala Studio is brought in "
-       "as a frame, and the builder places every brick against it by hand. Because each part carries the "
-       "design number it is ordered by, a finished design is also its own parts list.")
+d.body("Sangala Blocks plans a kit of real LEGO bricks. A figure designed in Sangala Studio, or a mosaic "
+       "made in Sangala Mosaic, is brought in as a frame, and the builder places every brick against it "
+       "by hand. Because each part carries the design number it is ordered by, a finished design is also "
+       "its own parts list.")
 d.body("One constraint shapes every decision in the code: the application must run on a school computer "
        "with no administrator rights, no installation and no dependency fetched from the internet at run "
        "time. That is why the interface is a single HTML file, why the local program is compiled with the "
@@ -108,18 +109,38 @@ d.body("The second and third are drawn by the SAME renderer. It takes its canvas
        "short string and comparing it: the plan view is redrawn on every mouse move, and rebuilding tens of "
        "thousands of triangles for a pointer that moved three pixels would be the most expensive thing in "
        "the application.")
+d.body("One line of the zoom arithmetic is shared with the rest of the family: SCALE100 is 2.4 CSS "
+       "pixels per millimeter, under the same name and value in Sangala Studio, chosen so that 100 "
+       "percent fits the working page on a typical screen and the same number typed in two windows "
+       "shows the two designs at the same size. The percentage readout is an input — typing a number "
+       "applies it — and Fit computes the window's own honest percentage rather than snapping to a "
+       "nominal one. When the pannable world overflows the window, thin scrollbars are drawn along the "
+       "workspace's bottom and right edges; they are kept in step by wrapping draw itself, and their "
+       "bounds are the pan clamp's own, so the bars and the pan cannot disagree about where the world "
+       "ends.")
 
 # ---------------------------------------------------------------- 7
 d.heading("7. The Brick Model")
 d.body("Geometry follows LEGO rather than a drawing grid. A stud is 8 mm and a plate 3.2 mm, so three "
        "plates make a brick. Bricks are drawn in side view with their studs standing proud of the top "
        "face.")
-d.body("What a row means depends on the way of building, and confusing the two is the mistake that looks "
+d.body("What a row means depends on the view, and confusing the two is the mistake that looks "
        "plausible until an image is rendered:", before_list=True)
-d.item("Standing. ", "The design is seen from the side. A column is across in studs, a row is a vertical "
-                     "course counted in plates, and depth runs into the screen in studs. See Section 8.")
-d.item("Relief. ", "The design is seen face on. A column is across and a row is depth, both in studs, and "
-                   "a part's base records how many plates it stands proud of the backdrop.")
+d.item("Side (plates). ", "The design is seen from the side. A column is across in studs, a row is a "
+                          "vertical course counted in plates, and depth runs into the screen in studs. "
+                          "See Section 8.")
+d.item("Top-down (studs). ", "The design is seen face on. A column is across and a row is depth, both in "
+                             "studs, and a part's base records how many plates it stands proud of the "
+                             "backdrop.")
+d.body("The control is the View selector in Settings, and it is a view rather than a kind of design: the "
+       "inherent coordinates do not change, only the meaning of the vertical direction. The stored "
+       "values keep their older names — standing for the side view, relief for top-down — so every file "
+       "already saved opens exactly as it did. On the plan the difference is one function, vUnit, which "
+       "answers 3.2 mm from the side and 8 mm top-down; the snap, the rows and the drawing all ask it. "
+       "Switching the view clears the bricks placed, because the two readings of a row do not describe "
+       "the same brick; the switch commits, so Ctrl-Z restores them. The stud grid draws only top-down — "
+       "the grid is the plate's face — and the Grid checkbox is disabled from the side, with the reason "
+       "in its tooltip.")
 d.body("A brick that overlaps the plate nowhere is parked: drawn and saved, but excluded from the parts "
        "list, the 3D view and every export. That state is derived from where the brick sits rather than "
        "stored as a flag, so it stays true through a save, a reload and a change of page size.")
@@ -243,7 +264,55 @@ d.body("Neither side settles, which is what makes the two behave alike: a copy o
        "figure a course at a time.")
 
 # ---------------------------------------------------------------- 10
-d.heading("10. Groups, Names and the Parts List")
+d.heading("10. The Frame")
+d.body("The frame is held twice, and the doubling is the design. guideRaw is the unscaled geometry — "
+       "what a .block file stores — and guide is the working copy, derived from it by the Frame scale "
+       "whenever it is needed and never stored, so a restored or reopened design cannot end up scaled "
+       "twice. Every edit writes both in step: the drag applies one delta to the working copy and the "
+       "same delta over the scale to the raw one, and the resize applies the same factors about the "
+       "same anchor in each space.")
+d.body("Placement is remembered rather than baked in. placeX and placeY hold where the design sits on "
+       "the plate, and draw lays the stud lattice, the frame and the bricks down together at that "
+       "offset — one placement over everything that lives in design coordinates, which is what keeps a "
+       "brick's studs on the outline it was placed against. Baking the offset into the frame's points "
+       "instead once put the frame and the bricks on lattices 4.7 mm apart, which no snapping could "
+       "cure.")
+d.body("A frame arrives two ways. A .model is read the way Sangala Studio would place it — each "
+       "polygon at its own coordinates times the design's scale, offset by its saved position — with a "
+       "region's thickness and lift converted from millimeters to plates. A .mosaic is read by Studio's "
+       "own importer carried over: the built grid of tiles, each named mass traced into one region "
+       "under its name, and tiles in no mass traced one region per same-color patch so the picture "
+       "survives. Two rules guard the mosaic path. The backdrop of a photograph — the field of tiles "
+       "reachable from the built rectangle's corners in the corner's own color — is left behind, and "
+       "that flood runs only when every cell of the rectangle carries a tile, the signature of a "
+       "photograph's build; a sparse mosaic already cleaned by hand is not touched, a gate added after "
+       "the flood ate the grass out of exactly such a file. And a tile's height follows the view: one "
+       "stud wide by two plates tall from the side, so every edge of the frame lands on a line a brick "
+       "can land on — 8 mm is 2.5 plates, so square tiles can never be plate-true — and a stud square "
+       "top-down. The page is switched to the baseplate, which is the surface a mosaic is built on.")
+d.body("The frame answers Studio's selection grammar. Clicking selects the topmost region under the "
+       "point — the last drawn, which is how the eye reads it — Shift adds to the set, and the sweep "
+       "takes what lies fully inside, bricks and frame elements in the same gesture. A drag re-derives "
+       "every position from copies taken at the press plus one total delta, so a snap engaging and "
+       "letting go leaves no accumulated drift; the set's minimum corner snaps to the stud-and-plate "
+       "lattice absolutely, Studio's rule, with Alt dragging free and the magnet in the zoom cluster "
+       "as the switch. The palette follows a selected element's fill and a palette choice recolors it. "
+       "Bricks rest against the frame's indexed top, so the index is rebuilt when a drag or a resize "
+       "ends.")
+d.body("The resize box is Studio's, carried over line for line: eight square handles on the selection's "
+       "bounding box, a corner scaling uniformly by projecting the pointer onto the original diagonal "
+       "so drifting off it does not wobble the scale, a mid-edge handle scaling one axis about the "
+       "opposite side, and the scale floored short of zero so a handle dragged through its anchor "
+       "cannot silently mirror the frame. Sizes are reported in studs and plates as the handle moves.")
+d.body("Transparent draws the bricks translucent so the frame reads through them — Mosaic's tracing "
+       "view with the pair reversed. The alpha is owned by the brick-drawing function itself, whose "
+       "first act is to set it; an earlier attempt to set it around the brick pass was stomped brick "
+       "by brick, which is worth remembering before adding any translucency elsewhere. The brick's "
+       "shadow fades with its brick; the hover ghost and the selection marks keep full strength. The "
+       "mode and the slider are view state, saved in no file; the frame itself — raw geometry, scale "
+       "and placement — travels in the .block.")
+
+d.heading("11. Groups, Names and the Parts List")
 d.body("A group binds bricks so that they select and move as one. The objects stay separate and can be "
        "taken apart again: grouping is a bundle, not a weld.")
 d.body("Grouping nests. Each brick carries gpath, the path of group numbers it belongs to, outermost "
@@ -258,7 +327,8 @@ d.body("A name belongs to a level, not to a brick, so gnames runs parallel to gp
        "step.")
 d.body("The parts list buckets by the outermost name. A part used in two groups therefore appears twice, "
        "once under each name, each row counting only that group's pieces — which is what makes a row "
-       "unambiguous enough to drag. The plain tally the .txt list and the BrickLink order are built from "
+       "unambiguous enough to drag. The bucketed form is also what the by-element Word document and the "
+       "kit file are written from. The plain tally the .txt list and the BrickLink order are built from "
        "is not bucketed: those need one line per part and color across the whole design, since the same "
        "brick used in a head and in a wing is one thing to buy.")
 d.body("Two pieces of state sit behind the list, and they are deliberately different in kind:", before_list=True)
@@ -279,7 +349,7 @@ d.body("The names matter beyond this application. Sangala Studio reads a .block 
        "group arrives there as an element that can be given a depth and printed as one piece. What is "
        "named here decides what can be worked with as a piece there.")
 
-d.heading("11. The Parts Catalog")
+d.heading("12. The Parts Catalog")
 d.body("Every part the application offers carries a real design number and a real footprint, and both are "
        "read from the LDraw library rather than typed. Two tools do that reading: tools/ldparts.py "
        "resolves a number, reports the part's own description and measures its geometry, and "
@@ -322,7 +392,7 @@ d.body("A .parts library extends that catalog at run time. tools/parts_library.p
        "from, so opening it elsewhere reports what is missing rather than quietly offering less.")
 
 # ---------------------------------------------------------------- 11
-d.heading("12. The Local Bridge")
+d.heading("13. The Local Bridge")
 d.body("SangalaBlocksServer.cs is Sangala Studio's bridge ported: a loopback TcpListener, which needs "
        "neither administrator rights nor a firewall exception, a notification-area icon, and a single "
        "instance per session — a second double-click opens the page the first is already serving rather "
@@ -346,7 +416,7 @@ d.body("The page asks /status before it offers the Snapshot button, so a missing
        "so.")
 
 # ---------------------------------------------------------------- 12
-d.heading("13. Snapshots and the LDraw Pipeline")
+d.heading("14. Snapshots and the LDraw Pipeline")
 d.body("A snapshot is produced in three steps. The page writes the design as an LDraw model, one "
        "type-1 line for each brick that is not parked, carrying its color code, a 3 x 4 transform and the "
        "part file. The bridge writes that text to a temporary file and runs LDView over it. The resulting "
@@ -368,7 +438,7 @@ d.body("The same arithmetic exists twice — in the page for snapshots, and in t
        "page's own function and running both over one design; they agree byte for byte.")
 
 # ---------------------------------------------------------------- 13
-d.heading("14. The Bundled Renderer and Parts")
+d.heading("15. The Bundled Renderer and Parts")
 d.body("LDView and the parts it needs are committed to the repository, so a clean checkout renders. "
        "LDView is 4 MB and requires nothing beside it; its license travels with it, as its terms require, "
        "along with a link to its source.")
@@ -386,7 +456,7 @@ d.body("All 2,833 primitives are therefore shipped, at a cost of 9.6 MB. tools/b
        "which is the only check that catches geometry that is missing rather than wrong.")
 
 # ---------------------------------------------------------------- 14
-d.heading("15. The Documents the Page Writes")
+d.heading("16. The Documents the Page Writes")
 d.body("The snapshots are written into a document by the page itself, with no library and no help from "
        "the bridge, so the same capability exists on every platform the page runs on. A Word file and an "
        "OpenDocument file are both archives of XML, so one archive writer serves both.")
@@ -402,8 +472,13 @@ d.item("PDF. ", "There is no text flow. Word and LibreOffice decide where pages 
 d.body("All three fit a picture inside a box rather than to the page width alone, which caps both "
        "dimensions and never distorts a proportion, and all three place four steps on a page so that the "
        "three formats are one document rather than three layouts.")
-d.body("The parts list is written here too, in two forms: plain text to read, and a BrickLink Wanted List "
-       "as XML to order from. The one thing in that file which cannot be derived is the color. BrickLink "
+d.body("The parts list is written here too, in four forms: plain text to read; a Word document by "
+       "element, one table per named group, in the style a kit's printed instructions use; a kit file; "
+       "and a BrickLink Wanted List as XML to order from. The kit is JSON under a sangala marker — the "
+       "sections by element, each row carrying the quantity, the color, and the whole part: footprint, "
+       "height, shape and the studs on its faces, so a kit opens complete on any machine with no library "
+       "beside it. Opened, it arrives as its own panel beside the design; it is session state and is "
+       "never written into the .block. The one thing in the BrickLink file which cannot be derived is the color. BrickLink "
        "numbers colors its own way and the numbers do not agree with LDraw — red is 4 to LDraw and 5 to "
        "BrickLink — and no rule converts between them, so each is recorded in the palette beside the LDraw "
        "code, read from BrickLink's own guide. A color with no BrickLink number is left out of the export "
@@ -411,7 +486,7 @@ d.body("The parts list is written here too, in two forms: plain text to read, an
        "number the list already carries.")
 
 # ---------------------------------------------------------------- 15
-d.heading("16. Verifying Changes")
+d.heading("17. Verifying Changes")
 d.body("A change to the page is tested by refreshing the browser; a change to the bridge requires a "
        "rebuild. Beyond that, three checks have proved worth the trouble:", before_list=True)
 d.item("Run the Function, Not a Copy of It. ", "Where a check needs the page's own code, the function is "
@@ -427,7 +502,7 @@ d.body("Documents generated by the scripts in tools/docs are checked with the pa
        "publication.")
 
 # ---------------------------------------------------------------- 16
-d.heading("17. Contributing")
+d.heading("18. Contributing")
 d.body("Work proceeds one change at a time: make the change, let it be tested on a real machine, then "
        "commit. Batching untested changes has cost this project time before. Commit messages record why a "
        "change was made and what remains unverified, since the reasoning is what a later reader needs and "
@@ -437,19 +512,26 @@ d.body("Collaboration is by branch and pull request within the shared repository
        "looking at Sangala Blocks belongs to Sangala Blocks.")
 
 # ---------------------------------------------------------------- 17
-d.heading("18. Glossary")
+d.heading("19. Glossary")
 d.table("Table 3. Terms Used in This Manual",
         ["Term", "Meaning"],
-        [["Base", "Where a part's mounting face sits: in a relief, how many plates it stands proud of the "
+        [["Backdrop", "The field of tiles a photograph builds around its subject, left behind when a "
+                      "photo-full mosaic is imported"],
+         ["Base", "Where a part's mounting face sits: in a relief, how many plates it stands proud of the "
                   "backdrop; in a standing figure, how far it stands from the midline, in studs"],
          ["Bridge", "The local program that serves the page and runs the renderer"],
          ["Closure", "The set of files reached by following every reference from a starting part"],
          ["Course", "One horizontal layer of a standing build"],
          ["Depth", "How far a part stands from the midline of a standing figure, positive toward the "
                    "viewer and negative away from them"],
-         ["Frame", "The outline brought in from a Sangala Studio design, built against but never built"],
+         ["Element", "One selectable piece of the frame: a shape of the Studio design, or a mass of the "
+                     "mosaic, it came from"],
+         ["Frame", "The outline brought in from a Sangala Studio design or a Sangala Mosaic, built "
+                   "against but never built"],
          ["Half step", "Half a stud of depth, which places a part on the midline of a figure whose "
                        "courses are a whole stud deep"],
+         ["Kit", "The parts of a finished design saved by element as a .kit file, opened beside a "
+                 "project to build from"],
          ["LDraw unit", "0.4 mm. A stud is 20, a plate 8, a brick 24"],
          ["Midline", "The plane a standing figure is built about. Depth is counted from it, and it is "
                      "zero and carries no course of its own"],
@@ -463,7 +545,9 @@ d.table("Table 3. Terms Used in This Manual",
          ["Stud", "The 8 mm module everything is measured in"],
          ["Tipped", "Brought to rest against the face of the figure, studs toward the viewer, rather "
                    "than standing upright. Set by Flip Vertical; still recorded in a saved design as "
-                   "the field named turn, which the rename did not touch"]],
+                   "the field named turn, which the rename did not touch"],
+         ["View", "Which way the builder is looking: Side (plates) or Top-down (studs). The stored "
+                  "values keep the older names, standing and relief, so saved files open unchanged"]],
         weights=[24, 76])
 
 d.heading("Appendix A. Other Platforms")
