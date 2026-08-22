@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-22.174 -->
+<!-- SANGALA_VERSION: 2026-08-22.175 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -233,6 +233,7 @@
     <button class="tbtn" id="bOpen" title="Open a Sangala Studio design (.model) to build against, a design you saved (.block), or a parts library (.library)"><span class="glyph">&#128194;</span><small>Open</small></button>
     <button class="tbtn" id="bSave" title="Save your design (.block)"><span class="glyph">&#128190;</span><small>Save</small></button>
     <button class="tbtn" id="bSnap" title="Snapshot: keep a picture of the build as it stands now - rendered, or the plan as you see it"><span class="glyph">&#128247;</span><small>Snapshot</small></button>
+    <button class="tbtn" id="bSee" title="Transparent: make the bricks translucent so the frame shows through underneath"><span class="glyph">🌗</span><small>Transparent</small></button>
     <button class="tbtn" id="bSettings" title="Setup: what the workspace shows &mdash; click to show or hide"><span class="glyph">&#9881;&#65039;</span><small>Settings</small></button>
   </div>
   <div class="spacer"></div>
@@ -494,6 +495,7 @@
         <span style="font-weight:700">Show</span>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the frame outline you are building against"><input type="checkbox" id="ckFrame" checked style="width:auto;margin:0"> Frame</label>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the stud grid"><input type="checkbox" id="ckGrid" checked style="width:auto;margin:0"> Grid</label>
+        <label id="seeRow" style="display:none;align-items:center;gap:.35rem;width:100%;margin-top:.25rem" title="How much the frame shows through the bricks in Transparent mode">Transparency<input type="range" id="optSee" min="10" max="90" value="55" style="flex:1"></label>
         <!-- "Other Side" used to sit here as a third checkbox under Show, beside Frame and Grid, and
              it never belonged: Frame and Grid say what is DRAWN over the design, and this says where
              the builder is STANDING. It is on the Toolbar now, and it names the side rather than
@@ -799,6 +801,11 @@ let rotNext = 0;
    rather than a capability: a part just placed IS the selected one, so the spinner is already
    pointing at it and one step puts it where the jumper plate's centred stud carries it. */
 let tool = "select", showGuide = true, showGrid = true;
+/* TRANSPARENT, Mosaic's feature carried over (SangalaMosaic.html:141): there the TILES go
+   translucent so the photo shows through underneath; here the BRICKS do, so the frame shows
+   through the build - the contrast problem Glen was solving by recoloring regions. View state,
+   not design state: it travels in no file, like the inset window's place. */
+let seeThrough = false, seeAlpha = 0.45;   /* brick opacity in Transparent mode; the slider sets it */
 let selFrame=[];   /* the frame-element selection - declared with the early state because draw()
                       can run during script load, and a let further down sits in its dead zone */
 /* WHICH SIDE OF THE FIGURE YOU ARE STANDING ON. Glen, 2026-08-18: "we need a way to flip the crane
@@ -1381,13 +1388,18 @@ function drawBrick(b,ghost){
      ring works on Studio's unfilled white shapes and disappears on a filled black one, which is
      how a black brick came out as a blob with nothing legible on it. */
   const T=tones(c.hex), edge=T.edge, studFace=T.studFace, studEdge=T.studEdge, hi=T.hi, sh=T.sh;
-  ctx.globalAlpha = ghost?.5:1;
+  /* Transparent (Mosaic's tracing view, SangalaMosaic.html:420): a placed brick's whole body
+     draws translucent so the frame shows through underneath. Set HERE, not around the brick
+     pass in draw() - this line already owned globalAlpha, so an outer setting was stomped for
+     every brick. The hover ghost keeps its own look, and the selection rings draw outside this
+     function at full strength. */
+  ctx.globalAlpha = ghost ? .5 : (seeThrough ? seeAlpha : 1);
 
   /* A PLACED BRICK STANDS PROUD OF WHAT IS BEHIND IT, so it casts a small shadow, and the
      further out it is stacked the further the shadow falls. Flat colour alone is what made a
      black brick read as a mass: nothing said it was an object sitting on something. */
   const off=Math.max(1, mx(0.7)+depthOf(b)*mx(0.22));
-  ctx.save(); ctx.globalAlpha=(ghost?.12:.22); ctx.translate(off,off);
+  ctx.save(); ctx.globalAlpha=(ghost?.12:.22)*(seeThrough&&!ghost?seeAlpha:1); ctx.translate(off,off);   /* the shadow fades with its brick */
   shape(p,b.col,b.row,fl,fc,rt,aw); ctx.fillStyle="#000"; ctx.fill(); ctx.restore();
 
   shape(p,b.col,b.row,fl,fc,rt,aw);
@@ -1565,7 +1577,7 @@ function draw(){
   const order=bricks.slice().sort(mode==="standing"
     ? (a,b)=>(nearFace(a)-nearFace(b)) || away*(depthOf(a)-depthOf(b)) || ((b.row||0)-(a.row||0))
     : (a,b)=>(nearFace(a)-nearFace(b)) || away*(depthOf(a)-depthOf(b)));
-  order.forEach(b=>drawBrick(b,false));
+  order.forEach(b=>drawBrick(b,false));   /* Transparent mode is honored inside drawBrick, which owns globalAlpha */
   /* THE SELECTED BRICK IS OUTLINED, because a selection you cannot see is not a selection - and
      Delete would then be a keystroke that takes off a part the builder cannot identify. Drawn after
      every brick so it is never covered by a neighbour, and in the blue this application already uses
@@ -3465,6 +3477,15 @@ $("pagesize").onchange=e=>{ setPageSize(e.target.value);
   say("Page is now "+pageLabel()+". The design is unchanged.");
   offPageWarning(); commit(); };
 $("ckFrame").onchange=e=>{showGuide=e.target.checked;draw();};
+$("bSee").onclick=()=>{ seeThrough=!seeThrough;
+  $("bSee").classList.toggle("on", seeThrough);
+  $("seeRow").style.display = seeThrough ? "flex" : "none";
+  say(seeThrough ? "Transparent: the frame shows through the translucent bricks. Toggle it off for solid bricks."
+                 : "Solid bricks.");
+  draw(); };
+/* the slider reads as "how transparent": more = more frame, so brick opacity is the complement -
+   Mosaic's own rule (SangalaMosaic.html:1943) */
+$("optSee").oninput=e=>{ seeAlpha=1-(+e.target.value/100); draw(); };
 /* Studio's magnet, in Studio's place - governing Snap to Studs, the lattice snap */
 $("bSnapTog").onclick=()=>{ snapOn=!snapOn; $("bSnapTog").classList.toggle("on",snapOn);
   say(snapOn ? "Snap to Studs is on - a dragged frame element lands on the stud-and-plate lattice (hold Alt to drag free)."
