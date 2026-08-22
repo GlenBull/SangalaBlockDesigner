@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-22.175 -->
+<!-- SANGALA_VERSION: 2026-08-22.178 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -620,7 +620,7 @@
   <button data-kind="wedge">&#9699; Wedge Plate</button>
 </div>
 
-<input type="file" id="fOpen" accept=".block,.model,.library,.parts,.kit,.json" style="display:none">
+<input type="file" id="fOpen" accept=".block,.model,.mosaic,.library,.parts,.kit,.json" style="display:none">
 
 <div class="modal" id="snapview">
   <div class="card" style="max-width:none;width:auto">
@@ -5791,6 +5791,172 @@ $("saveSnaps").onclick=async()=>{
 
 $("bOpen").onclick=()=>$("fOpen").click();
 
+/* ---------- Sangala Mosaic (.mosaic) import: the mosaic straight into the workspace ----------
+   Studio's importer carried over whole (SangalaStudio.html:1421, the Chapter 4 -> Chapter 5
+   handoff): each named mass - grouped in Sangala Mosaic with Select Area / Wand -> Group -
+   becomes one frame region whose outline is the mass's tiles; tiles in no mass import as
+   background regions, so nothing in the mosaic silently disappears. Here the pieces land as
+   the FRAME rather than as parts: Blocks designs in real bricks over a guide, so the mosaic
+   IS the guide. Glen, 2026-08-22: "I want to be able to import a .mosaic file into blocks" -
+   the Studio hop comes out of the mosaic-to-brick-figure chain. The one Studio nicety not
+   carried: the odd-tile record (data-tiles) that keeps an eye's white tile in Studio's flat
+   view - a frame region carries its mass's dominant color only.
+   The mosaic's coordinates are carried UNCHANGED (cell 0,0 = 0,0 mm, no normalizing): where a
+   mosaic sits on its baseplate is part of the design, and Mosaic's tile pitch is the stud
+   pitch, so tiles land on this workspace's own lattice. The page follows Studio's rule too:
+   a mosaic is brick work, so the plate is its page (setPageSize "baseplate" - :914 already
+   anticipated this import). */
+const MOSAIC_TILE_MM=8;
+const MOSAIC_COLORS=["#f2f3f2","#1b2a34","#c4281c","#7b2e2f","#fe8a18","#f5cd30","#d7c59a","#958a73",
+  "#cc8e68","#694027","#372115","#4b9f4a","#287f46","#004526","#789082","#a6ca38","#0d69ab","#20325a",
+  "#6e99c9","#078bc9","#a0a5a9","#595d60","#342b75","#9c006b","#e891c0","#cdd0ce","#6c6e68"];   // Sangala Mosaic's LEGO palette, in index order (saved cells index this table by position - append-only over there, so positions hold)
+function importMosaic(p){
+  const b=p&&p.built;
+  if(!b||!b.idx||!b.gw){ say("That file has no mosaic in it yet - press Build It! in Sangala Mosaic, save, and open the saved file here."); return; }
+  const gw=b.gw, gh=b.gh, idx=b.idx, T=MOSAIC_TILE_MM;
+  // mass id per cell (0 = in no mass); saved only when the student grouped masses at this grid size
+  const grp=(p.grp&&p.grpW===gw&&p.grpH===gh&&p.grp.length===gw*gh)?p.grp:null;
+  const names={}; (Array.isArray(p.masses)?p.masses:[]).forEach(m=>{ names[m.id]=m.name||("Mass "+m.id); });
+  const inGrid=(r,c)=>r>=0&&c>=0&&r<gh&&c<gw;
+  /* THE BACKDROP STAYS BEHIND - Mosaic's own Remove Background rule, applied to tiles: that
+     button floods from the corners, clearing pixels near the corner color (SangalaMosaic.html:909).
+     A photograph's sky builds into tiles like everything else, so Crane 5 arrived here as one
+     520-tile field of plate blue covering the page - Glen: "It should not import the baseplate,
+     just the mosaic." The import floods from the built area's four corner tiles: every tile the
+     flood reaches in that corner's own color is backdrop, left behind and counted in the status
+     line. A pocket the figure encloses survives (the flood cannot reach it - the button behaves
+     the same on a photo), and a corner the student put in a NAMED mass is design, never backdrop.
+     THE FLOOD RUNS ONLY ON A PHOTO-FULL BAND - every cell of the bounding box tiled, which is
+     Build's signature on a photograph. A sparse mosaic means the background was already taken
+     out by hand or by the button, and it is not touched. This gate is not a nicety: the first
+     cut ran the flood on corners alone, and Crane.mosaic - already background-free - lost its
+     GRASS, whose band owned the sparse figure's bottom corner. Measured, not supposed. */
+  const drop=new Set();
+  {
+    let mnC=1e9,mnR=1e9,mxC=-1,mxR=-1,filled=0;
+    for(let r=0;r<gh;r++) for(let c=0;c<gw;c++)
+      if(idx[r]&&idx[r][c]!=null&&idx[r][c]>=0){ filled++; if(c<mnC)mnC=c; if(c>mxC)mxC=c; if(r<mnR)mnR=r; if(r>mxR)mxR=r; }
+    const full = filled===(mxC-mnC+1)*(mxR-mnR+1);
+    for(const [r0,c0] of full?[[mnR,mnC],[mnR,mxC],[mxR,mnC],[mxR,mxC]]:[]){
+      if(!inGrid(r0,c0)||!idx[r0]||idx[r0][c0]==null||idx[r0][c0]<0) continue;
+      const col=idx[r0][c0], k0=r0*gw+c0;
+      if(drop.has(k0) || (grp&&grp[k0])) continue;
+      const q=[k0]; drop.add(k0);
+      while(q.length){ const cur=q.pop(), r=(cur/gw)|0, c=cur%gw;
+        for(const [rr,cc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){
+          if(!inGrid(rr,cc)) continue;
+          const kk=rr*gw+cc;
+          if(drop.has(kk) || (grp&&grp[kk])) continue;
+          if(!(idx[rr]&&idx[rr][cc]===col)) continue;
+          drop.add(kk); q.push(kk); } }
+    }
+  }
+  const byMass=new Map(); let tiles=0;   // mass id -> [cell keys]; key = r*gw+c
+  for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){
+    if(!idx[r]||idx[r][c]==null||idx[r][c]<0) continue;
+    if(drop.has(r*gw+c)) continue;
+    tiles++; const m=grp?(grp[r*gw+c]||0):0;
+    if(!byMass.has(m)) byMass.set(m,[]); byMass.get(m).push(r*gw+c);
+  }
+  if(!tiles){ say("That mosaic is empty - nothing to import."); return; }
+  function comps(cells){   // 4-connected components; diagonal-only touch = separate pieces (a corner cannot carry material)
+    const set=new Set(cells), seen=new Set(), out=[];
+    for(const k of cells){ if(seen.has(k)) continue;
+      const q=[k], comp=[]; seen.add(k);
+      while(q.length){ const cur=q.pop(); comp.push(cur);
+        const r=(cur/gw)|0, c=cur%gw;
+        for(const [rr,cc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){
+          if(!inGrid(rr,cc)) continue;
+          const kk=rr*gw+cc; if(set.has(kk)&&!seen.has(kk)){ seen.add(kk); q.push(kk); } } }
+      out.push(comp); }
+    return out;
+  }
+  function traceRings(comp){   // boundary of a cell set -> rings in grid units. Outer rings come out with positive shoelace area, holes negative.
+    const set=new Set(comp), segs=new Map(), key=(x,y)=>x+","+y;
+    const add=(x0,y0,x1,y1)=>{ const k0=key(x0,y0); if(!segs.has(k0)) segs.set(k0,[]); segs.get(k0).push([x1,y1]); };
+    for(const cell of comp){ const r=(cell/gw)|0, c=cell%gw;
+      const has=(rr,cc)=>inGrid(rr,cc)&&set.has(rr*gw+cc);
+      if(!has(r-1,c)) add(c,r,c+1,r);       // top edge, walked left->right: the tile sits on the +y side of the walk
+      if(!has(r,c+1)) add(c+1,r,c+1,r+1);   // right, top->bottom
+      if(!has(r+1,c)) add(c+1,r+1,c,r+1);   // bottom, right->left
+      if(!has(r,c-1)) add(c,r+1,c,r); }     // left, bottom->up
+    const rings=[], used=new Set(), ekey=(a,b)=>a[0]+","+a[1]+">"+b[0]+","+b[1];
+    for(const [k0,ends] of segs){ const start=k0.split(",").map(Number);
+      for(const e0 of ends){
+        if(used.has(ekey(start,e0))) continue;
+        const ring=[[start[0],start[1]]]; let prev=start, cur=e0; used.add(ekey(start,e0));
+        let guard=gw*gh*8, ok=true;
+        while(!(cur[0]===start[0]&&cur[1]===start[1])){
+          if(--guard<0){ ok=false; break; }
+          ring.push([cur[0],cur[1]]);
+          const cands=(segs.get(key(cur[0],cur[1]))||[]).filter(q=>!used.has(ekey(cur,q)));
+          if(!cands.length){ ok=false; break; }
+          const dx=cur[0]-prev[0], dy=cur[1]-prev[1];
+          let pick=null, best=-9;   // where four edges meet (tiles touching only at a corner), turn TOWARD the tiles - keeps each ring hugging its own material instead of crossing into the neighbor's
+          for(const q of cands){ const qx=q[0]-cur[0], qy=q[1]-cur[1];
+            const s=(qx===-dy&&qy===dx)?2:(qx===dx&&qy===dy)?1:(qx===dy&&qy===-dx)?0:-1;   // toward the tile side first, straight second, away last, never backward
+            if(s>best){ best=s; pick=q; } }
+          used.add(ekey(cur,pick)); prev=cur; cur=pick;
+        }
+        if(ok&&ring.length>=4) rings.push(ring);
+      } }
+    return rings;
+  }
+  const slim=ring=>{ const n=ring.length, out=[];   // drop collinear midpoints so a straight tile run is one segment
+    for(let i=0;i<n;i++){ const a=ring[(i+n-1)%n], q=ring[i], c=ring[(i+1)%n];
+      if((q[0]-a[0])*(c[1]-q[1])!==(q[1]-a[1])*(c[0]-q[0])) out.push(q); }
+    return out; };
+  const areaOf=ring=>{ let s=0; for(let i=0;i<ring.length;i++){ const a=ring[i], q=ring[(i+1)%ring.length]; s+=a[0]*q[1]-q[0]*a[1]; } return s/2; };
+  /* A TILE'S HEIGHT FOLLOWS THE VIEW. Top-down, a tile is a stud square - 8 x 8 mm. From the
+     side, the vertical lattice is plates, and 8 mm is 2.5 of them - so a square-tile region can
+     NEVER rest both its top and its base on plate lines, and Glen's first brick overlapped the
+     crown's base by the half plate that proves it (2026-08-22: "look at the overlap between the
+     brick and the base of the crown"). In the side view a tile therefore imports as one stud
+     wide by TWO PLATES tall (6.4 mm) - the reading Part 30 settled for the crane's frame and
+     the workflow document's own eight-tenths - and every tile edge lands on a line a brick can
+     land on, wherever the region is dragged. */
+  const VY = mode==="standing" ? PLATE*2 : T;
+  const toMM=ring=>{ const r=ring.map(q=>[q[0]*T,q[1]*VY]); r.push([r[0][0],r[0][1]]); return r; };   // grid units -> design mm, first point repeated (the app's closed-ring convention)
+  // build the regions: background (no-mass) tiles first, then masses in id order, so masses draw on top
+  const g=[];
+  const massIds=[...byMass.keys()].sort((a,q)=>a-q);
+  for(const mid of massIds){
+    const nm=mid?names[mid]:null;
+    /* UNNAMED TILES KEEP THEIR COLORS - one region per same-color blob. This is the one place
+       the import departs from Studio's (which lumps ungrouped tiles by connectivity alone,
+       dominant color): a frame is the picture the builder works against, and lumping turned
+       Crane 5's whole figure into a single blob in the grass's green. A named mass still
+       arrives whole, under its name, in its dominant color. */
+    let cellSets;
+    if(mid) cellSets=[byMass.get(mid)];
+    else{ const byCol=new Map();
+      for(const cell of byMass.get(0)){ const v=idx[(cell/gw)|0][cell%gw];
+        if(!byCol.has(v)) byCol.set(v,[]); byCol.get(v).push(cell); }
+      cellSets=[...byCol.values()]; }
+    for(const cells of cellSets) for(const comp of comps(cells)){
+      const rings=traceRings(comp).map(r=>({ring:slim(r)})).filter(r=>r.ring.length>=3);
+      rings.forEach(r=>r.area=areaOf(r.ring));
+      const outers=rings.filter(r=>r.area>0), holes=rings.filter(r=>r.area<0);
+      if(!outers.length) continue;
+      const outer=outers.reduce((a,q)=>Math.abs(q.area)>Math.abs(a.area)?q:a);   // a 4-connected component has one outer ring; guard by taking the largest
+      const counts={}; let bestC=0, bestN=-1;   // the region's color = its most common tile color
+      for(const cell of comp){ const v=idx[(cell/gw)|0][cell%gw]; counts[v]=(counts[v]||0)+1; if(counts[v]>bestN){ bestN=counts[v]; bestC=v; } }
+      g.push({name:nm||"", fill:MOSAIC_COLORS[bestC]||"#a0a5a9",
+              depth:3, base:0,   // Studio gives a mosaic piece 9.6 mm of depth and no lift (:1515); 9.6 mm is 3 plates
+              poly:toMM(outer.ring), holes:holes.map(h=>toMM(h.ring))});
+    }
+  }
+  if(!g.length){ say("No pieces could be read from that mosaic."); return; }
+  placeX=0; placeY=0;                                    // plate coordinates, carried unchanged
+  $("pagesize").value="baseplate"; setPageSize("baseplate");   // a mosaic is brick work; a 32 x 32 design overflows Letter
+  frameScale=1; $("frScale").value=100; selFrame=[];
+  guideRaw=g; applyFrameScale();
+  hist=[]; redoStack=[]; commit();
+  say('Frame brought in from "'+(docName||"an unnamed mosaic")+'": '+g.length+" outlines from "
+      +tiles+" tiles"+(drop.size?" ("+drop.size+" backdrop tiles left behind)":"")
+      +(mode==="standing"?", each tile one stud wide and two plates tall":"")
+      +". Saves will be offered under that name.");
+}
 function loadModel(j){
   const objs=j&&j.state&&j.state.objs;
   if(!Array.isArray(objs)) return alert("That is not a Sangala Studio .model file.");
@@ -6155,8 +6321,11 @@ $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new Fil
     if(d.sangala==="kit") return loadKit(d, f.name);
     if(d.sangala==="library" || d.sangala==="parts") return loadParts(d, f.name);
     setDocName(f.name, true);
+    /* A SANGALA MOSAIC, routed the way Studio routes it (SangalaStudio.html:1723): by the file's
+       name or by the built grid inside it - a .mosaic carries no sangala marker of its own. */
+    if(/\.mosaic$/i.test(f.name) || (d.built&&d.built.idx&&d.built.gw)) return importMosaic(d);
     if(d.sangala==="project" || (d.state&&d.state.objs)) return loadModel(d);   /* a Studio .model */
-    if(d.sangala!=="block") throw new Error("not a Block Designer, Studio or parts file");
+    if(d.sangala!=="block") throw new Error("not a Block Designer, Studio, Mosaic or parts file");
     /* The project's OWN name wins over the file's. A design imported from Studio as "Crane
        (Relief 8)" and saved as "Test.block" is still the crane. A file written before the name was
        stored has no `project`, and its file name is the best that is known of it. */
