@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-21.172 -->
+<!-- SANGALA_VERSION: 2026-08-22.173 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1049,6 +1049,31 @@ function drawGrid(){
   }
   ctx.restore();
 }
+/* THE RESIZE BOX around the selected frame elements - Studio's boxHandles carried over
+   (SangalaStudio.html:5771), in the same scaled design-mm space the guide is drawn and
+   dragged in. CORNER = uniform scale, EDGE = one axis: the corner keeps a figure's
+   proportions, the edge is the deliberate "taller, not bigger" move - which is exactly
+   the per-mass proportion experiment the frame-scaling night showed no global factor
+   can perform (Glen, 2026-08-22: "adding the ability to use the selection handles to
+   an object to scale it"). Bricks never get handles: real parts do not scale. */
+function frameHandles(){
+  if(!selFrame.length || !showGuide) return null;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  selFrame.forEach(ix=>{ const g=guide[ix]; if(!g||!g.poly) return;
+    g.poly.forEach(q=>{ if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1]; }); });
+  if(x1-x0<0.2 && y1-y0<0.2) return null;
+  const hs=[{ix:-1,iy:-1,c:"nwse-resize"},{ix:1,iy:-1,c:"nesw-resize"},{ix:1,iy:1,c:"nwse-resize"},{ix:-1,iy:1,c:"nesw-resize"},
+            {ix:0,iy:-1,c:"ns-resize"},{ix:1,iy:0,c:"ew-resize"},{ix:0,iy:1,c:"ns-resize"},{ix:-1,iy:0,c:"ew-resize"}];
+  const X=t=>t<0?x0:t>0?x1:(x0+x1)/2, Y=t=>t<0?y0:t>0?y1:(y0+y1)/2;
+  hs.forEach(h=>{ h.x=X(h.ix); h.y=Y(h.iy); });
+  return {x0:x0,y0:y0,x1:x1,y1:y1,handles:hs};
+}
+/* frame sizes are said in the lattice's own units: studs across, and the view's unit up -
+   plates from the side, studs top-down */
+function fmtStudPlate(wmm,hmm){
+  const f=v=>{ const r=Math.round(v*10)/10; return (r%1?r.toFixed(1):String(r)); };
+  return f(wmm/STUD)+" studs x "+f(hmm/vUnit())+(mode==="standing"?" plates":" studs");
+}
 function drawGuide(){
   guide.forEach(g=>{
     if(!g.poly.length) return;
@@ -1082,6 +1107,16 @@ function drawGuide(){
       g.poly.forEach((p,i)=> i?ctx.lineTo(mx(p[0]),mx(p[1])):ctx.moveTo(mx(p[0]),mx(p[1])));
       ctx.closePath(); ctx.stroke();
     });
+    /* Studio's resize box (SangalaStudio.html:1074): dashed frame + white square handles,
+       drawn last so no fill can cover them - the grammar must LOOK the same in both
+       applications, not merely act the same */
+    const fh=frameHandles();
+    if(fh){ const u=Math.max(1, DPR||1);
+      ctx.save(); ctx.strokeStyle="#1a5fb4"; ctx.lineWidth=u; ctx.setLineDash([4*u,3*u]);
+      ctx.strokeRect(mx(fh.x0), mx(fh.y0), mx(fh.x1-fh.x0), mx(fh.y1-fh.y0)); ctx.setLineDash([]);
+      ctx.fillStyle="#fff"; ctx.lineWidth=1.5*u;
+      fh.handles.forEach(h=>{ ctx.beginPath(); ctx.rect(mx(h.x)-4*u, mx(h.y)-4*u, 8*u, 8*u); ctx.fill(); ctx.stroke(); });
+      ctx.restore(); }
   }
 }
 /* THE FOOTPRINT, SEEN FACE ON - both axes in studs, because the figure is built in RELIEF: the
@@ -4046,6 +4081,7 @@ function nameGroup(){
    snapshot, the Frame scale control - and no new field exists to fall out of step.
    Not built yet, deliberately: Group on frame elements, and Delete of one. */
 let frameDrag=null;   /* selFrame is declared with the early state above */
+let frameResize=null; /* a handle drag - separate from frameDrag, as Studio keeps its modes apart */
 function mmAt(e){
   const p=canvasPt(e);
   let x=(p[0]-view.panX)/PX - MX - placeX;
@@ -4121,6 +4157,26 @@ function frameGrab(pt){
 cv.addEventListener("mousedown",(e)=>{
   if(view3D || e.button!==0 || spaceHeld || panDrag) return;   /* 3D, pan and the middle button come first */
   if(tool!=="select") return;
+  /* THE RESIZE HANDLES COME BEFORE EVERY BODY TEST - Studio's ordering (SangalaStudio.html:5823):
+     a handle sits ON the outline it would otherwise move, and can sit over a brick as well.
+     Shift is set-building, never a resize. */
+  if(selFrame.length && !e.shiftKey){
+    const fh=frameHandles();
+    if(fh){ const pt=mmAt(e);
+      let hh=null, bd=9*Math.max(1, DPR||1)/PX;               /* nine screen pixels, in mm at this zoom */
+      fh.handles.forEach(h=>{ const d=Math.hypot(h.x-pt[0], h.y-pt[1]); if(d<bd){bd=d;hh=h;} });
+      if(hh){
+        /* Anchor = the far side, which stays put; a mid-edge handle pins the opposite edge and
+           the other axis keeps its own center (SangalaStudio.html:5829) */
+        const ax=hh.ix<0?fh.x1:hh.ix>0?fh.x0:(fh.x0+fh.x1)/2;
+        const ay=hh.iy<0?fh.y1:hh.iy>0?fh.y0:(fh.y0+fh.y1)/2;
+        const cp2=P=>P.map(q=>[q[0],q[1]]);
+        frameResize={h:hh, ax:ax, ay:ay, x0:fh.x0, y0:fh.y0, x1:fh.x1, y1:fh.y1, moved:false,
+          base:selFrame.map(ix=>({ix:ix, poly:cp2(guide[ix].poly||[]), holes:(guide[ix].holes||[]).map(cp2),
+                                   rp:cp2(guideRaw[ix].poly||[]), rh:(guideRaw[ix].holes||[]).map(cp2)}))};
+        cv.style.cursor=hh.c; e.preventDefault(); return;
+      } }
+  }
   const c=cell(e), i=hit(c);
   if(i<0){ const pt=mmAt(e), gi=frameIdxAt(pt);
            if(gi>=0){
@@ -4189,6 +4245,40 @@ cv.addEventListener("mousedown",(e)=>{
   e.preventDefault();
 });
 window.addEventListener("mousemove",(e)=>{
+  if(frameResize){
+    const pt=mmAt(e), d=frameResize, h=d.h;
+    const w0=d.x1-d.x0, h0=d.y1-d.y0;
+    const hx=h.ix<0?d.x0:d.x1, hy=h.iy<0?d.y0:d.y1;         /* where the grabbed handle started */
+    let sx=1, sy=1;
+    if(h.ix&&h.iy){   /* corner: uniform - the pointer projected onto the original diagonal,
+                         so drifting off it does not make the scale wobble (SangalaStudio.html:5952) */
+      const vx=hx-d.ax, vy=hy-d.ay, L2=vx*vx+vy*vy;
+      if(L2>1e-9) sx=sy=((pt[0]-d.ax)*vx+(pt[1]-d.ay)*vy)/L2;
+    } else if(h.ix){ const dd=hx-d.ax; if(Math.abs(dd)>1e-9) sx=(pt[0]-d.ax)/dd; }
+    else            { const dd=hy-d.ay; if(Math.abs(dd)>1e-9) sy=(pt[1]-d.ay)/dd; }
+    /* floored short of zero: dragging back through the anchor would mirror the frame, and a
+       silent flip mid-drag is a nasty surprise (SangalaStudio.html:5957) */
+    const loX=w0>1e-6?1/w0:0.01, loY=h0>1e-6?1/h0:0.01;
+    if(h.ix&&h.iy){ const lo=Math.max(loX,loY); if(sx<lo) sx=sy=lo; }
+    else { if(sx<loX) sx=loX; if(sy<loY) sy=loY; }
+    /* every position re-derived from the copies taken at the press, like the move drag above it;
+       the raw frame scales by the SAME factors about the raw-space anchor, so save and undo see
+       the identical shape the screen shows */
+    const k=frameScale||1;
+    const S=q=>[d.ax+(q[0]-d.ax)*sx, d.ay+(q[1]-d.ay)*sy];
+    const R=q=>[d.ax/k+(q[0]-d.ax/k)*sx, d.ay/k+(q[1]-d.ay/k)*sy];
+    d.base.forEach(b=>{
+      const g=guide[b.ix], rw=guideRaw[b.ix]; if(!g||!rw) return;
+      b.poly.forEach((q,i2)=>{ const p=S(q); g.poly[i2][0]=p[0]; g.poly[i2][1]=p[1]; });
+      b.holes.forEach((hh2,hi)=>hh2.forEach((q,i2)=>{ const p=S(q); g.holes[hi][i2][0]=p[0]; g.holes[hi][i2][1]=p[1]; }));
+      b.rp.forEach((q,i2)=>{ const p=R(q); rw.poly[i2][0]=p[0]; rw.poly[i2][1]=p[1]; });
+      b.rh.forEach((hh2,hi)=>hh2.forEach((q,i2)=>{ const p=R(q); rw.holes[hi][i2][0]=p[0]; rw.holes[hi][i2][1]=p[1]; }));
+    });
+    if(sx!==1||sy!==1) d.moved=true;
+    draw();
+    say("Resizing: "+fmtStudPlate(w0*sx, h0*sy)
+        +(h.ix&&h.iy ? " — corner keeps the proportions." : " — edge stretches this way only."));
+    return; }
   if(frameDrag){
     const pt=mmAt(e);
     let dx=pt[0]-frameDrag.x, dy=pt[1]-frameDrag.y;
@@ -4231,6 +4321,23 @@ window.addEventListener("mousemove",(e)=>{
   moveDrag.moved=true; draw();
 });
 window.addEventListener("mouseup",()=>{
+  if(frameResize){
+    const fr=frameResize; frameResize=null; cv.style.cursor="default";
+    if(fr.moved){
+      suppressClick=true;                        /* the click this drag ends on must not reselect */
+      /* bricks rest against the frame's indexed top, so the index follows the new shape */
+      buildFrameTop(); draw(); commit();
+      let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+      fr.base.forEach(b=>{ const g=guide[b.ix]; if(!g||!g.poly) return;
+        g.poly.forEach(q=>{ if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1]; }); });
+      const one = fr.base.length===1 ? guide[fr.base[0].ix] : null;
+      say((one && one.name ? 'Resized "'+one.name+'"' :
+           "Resized "+fr.base.length+" frame element"+(fr.base.length===1?"":"s"))
+          +" to "+fmtStudPlate(x1-x0, y1-y0)+". Ctrl-Z undoes it.");
+    }
+    /* a press that never moved keeps the selection, exactly as the move drag below */
+    return;
+  }
   if(frameDrag){
     const fd=frameDrag; frameDrag=null; cv.style.cursor="default";
     if(fd.moved){
