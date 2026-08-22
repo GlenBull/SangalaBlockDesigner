@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-22.173 -->
+<!-- SANGALA_VERSION: 2026-08-22.174 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -4213,6 +4213,16 @@ cv.addEventListener("mousedown",(e)=>{
     selMulti=set; selBrick=null; draw();
     say(set.length+" bricks selected — Group binds them.");
     e.preventDefault(); return;
+  }
+  /* A PRESS ON A MEMBER OF THE SELECTED SET DRAGS THE WHOLE SET - the frame's elements already
+     work this way (frameGrab takes selFrame whole), and Studio's groupmove is the same rule for
+     shapes. The bricks did not: the press cleared the set and dragged the one brick under the
+     hand (Glen, 2026-08-22: "When I select multiple frame items I can drag as a group. That
+     does not work for bricks."). Checked BEFORE the group branch, so a set larger than one
+     group is not silently collapsed to the group that happened to be pressed. */
+  if(selMulti.length && selMulti.indexOf(b)>=0){
+    moveDrag={members:selMulti.slice(), lead:b, dcol:c.col-b.col, drow:c.row-b.row, moved:false};
+    cv.style.cursor="grabbing"; e.preventDefault(); return;
   }
   /* A CLICK ON ANY MEMBER TAKES THE WHOLE GROUP, and the drag that follows carries all of it. */
   if(b.group!=null){
