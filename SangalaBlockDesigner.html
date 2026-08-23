@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-23.184 -->
+<!-- SANGALA_VERSION: 2026-08-23.186 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -603,7 +603,7 @@
        not print - it writes a file - which made it a second Save (Glen, 2026-08-15: "Why Print?
        Should this be under the Save menu?"). Mosaic had already settled it: its menu is Project /
        Image / Tile List, with the bill of materials as a Save item. This is the same three. -->
-  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), a kit file that reopens in Sangala Blocks (.kit), or an Excel order form (.xlsx), chosen in the Save dialog">Parts List <small>.txt / .docx / .kit / .xlsx</small></button>
+  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), a kit file that reopens in Sangala Blocks (.kit), or a LEGO Pick a Brick order (.csv) to upload on LEGO's own page">Parts List <small>.txt / .docx / .kit / .csv</small></button>
   <!-- A LIBRARY CAN NOW BE WRITTEN, NOT ONLY READ. Until today one arrived from tools/parts_library.py
        and there was no way back out, so a catalog assembled by opening two libraries could not be kept.
        It saves what the Library panel holds - everything loaded, merged - so the file that goes out
@@ -4996,69 +4996,32 @@ function partsListText(){
     rows.map(r=>[r.p.name,r.p.id,r.col.name,r.col.code,r.n].join("\t")).join("\n")+
     "\n\nTotal pieces\t"+built+"\nDistinct parts\t"+rows.length+"\n";
 }
-/* THE ORDER FORM, in the columns of Jo Watts's own parts sheets (Crane Parts.xlsx, 2026-08-21):
-   Qty | Part | Color | Blocks Part # | Design ID | Element ID. The Design ID is the number an
-   order is placed by, and it is usually the Blocks number with any mold suffix stripped
-   (2453b -> 2453); the renames in the table below are the ones Jo verified against a real order.
-   A number covered by neither is carried as it stands - a number to check beats a guess. The
-   Element ID (the part-in-one-color number) is not derivable from anything shipped here, so the
-   column is emitted empty for the person ordering to fill. 43712 -> 48933 on Jo's sheet was a
-   SUBSTITUTION of a different part, not a renumbering, and is deliberately not mapped. */
-const DESIGN_ID={"4073":"6141", "4589":"59900", "2456":"44237", "3007":"93888"};
-function partsListXlsx(){
-  const enc=new TextEncoder(), XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-  const rows=tally();
-  const designId=id=>{ const s=String(id), t=s.replace(/[a-z]+$/,"");
-    return DESIGN_ID[s] || DESIGN_ID[t] || t; };
-  const cs=(ref,v,st)=>'<c r="'+ref+'" t="inlineStr"'+(st?' s="'+st+'"':'')
-    +'><is><t xml:space="preserve">'+xesc(String(v))+'</t></is></c>';
-  const cn=(ref,v)=>'<c r="'+ref+'"><v>'+v+'</v></c>';
-  let sheet='<row r="1">'+["Qty","Part","Color","Blocks Part #","Design ID","Element ID"]
-      .map((h,i)=>cs(String.fromCharCode(65+i)+"1",h,1)).join("")+'</row>';
-  rows.forEach((r,ix)=>{ const R=ix+2;
-    sheet+='<row r="'+R+'">'+cn("A"+R,r.n)
-      +cs("B"+R,r.p.name||r.p.id)
-      +cs("C"+R,r.col.name)
-      +cs("D"+R,r.p.id)
-      +cs("E"+R,designId(r.p.id))
-      +cs("F"+R,"")+'</row>';
+/* THE ORDER IS LEGO'S OWN FILE. An .xlsx order form in the columns of Jo Watts's hand-order
+   sheet lived here for a day and was retired by Glen (2026-08-23): "Jo Watts built his
+   spreadsheet to order by hand so that we could be ready for NTLS... We need our spreadsheet to
+   be in the form that LEGO will want to see it for ordering multiple items" - and the end users
+   are seventh-grade students, who will never revise a spreadsheet by hand. LEGO's Pick a Brick
+   accepts an uploaded CSV of exactly two columns, elementId and quantity (LEGO's own template;
+   up to 400 distinct items, 999 of each), and fills the cart from it. The element IDs come from
+   the ELEMENT_ID table below; a part the table cannot supply is NAMED in the status line and
+   left out, never guessed - an element ID names shape AND color, and a wrong one orders the
+   right brick in the wrong color, a mistake that arrives in a box weeks later. */
+/* GENERATED - do not edit by hand. tools/elements_table.py builds this from the validated
+   element ID list (Rebrickable's elements table, checked against the 24 rows of Jo's real LEGO
+   order): every part the application can place, in every palette color LEGO has made it in.
+   Key is pageId|ldrawColorCode; the value is the newest element for the pair, except where a
+   real order proved an older element is the one the store sells. */
+const ELEMENT_ID={"11211|0":"6138173","11211|1":"6189191","11211|14":"6119197","11211|15":"6550150","11211|19":"6024495","11211|2":"6129807","11211|4":"6019155","11211|70":"6397820","11211|71":"6015344","11211|72":"6230233","14716|0":"6065496","14716|1":"6469934","14716|14":"6560995","14716|15":"6548277","14716|19":"6057517","14716|4":"6061700","14716|70":"6177699","14716|71":"6061702","14716|72":"6396489","15573|0":"6092585","15573|1":"6092582","15573|14":"6092583","15573|15":"6550152","15573|19":"6092587","15573|2":"6092586","15573|4":"6092565","15573|70":"6092590","15573|71":"6066097","15573|72":"6092572","2434|0":"4494850","2434|1":"4168944","2434|14":"243424","2434|15":"243401","2434|19":"243405","2434|2":"243428","2434|4":"4108115","2434|72":"6337521","2453b|0":"4566308","2453b|1":"4614741","2453b|14":"6377005","2453b|15":"6550132","2453b|19":"4112980","2453b|2":"245328","2453b|4":"4212410","2453b|70":"4226966","2453b|71":"4211362","2453b|72":"4210690","2456|0":"4181144","2456|1":"4181139","2456|14":"4181143","2456|15":"6552122","2456|19":"4181134","2456|2":"4181135","2456|4":"4181138","2456|70":"4286200","2456|71":"4274668","2456|72":"4282819","3001|0":"300126","3001|1":"300173","3001|14":"300124","3001|15":"6552094","3001|19":"4114319","3001|2":"4106356","3001|4":"300121","3001|70":"4211201","3001|71":"4211385","3001|72":"4211085","3002|0":"300226","3002|1":"300223","3002|14":"300224","3002|15":"6550133","3002|19":"4159739","3002|2":"4109674","3002|4":"300271","3002|70":"4216668","3002|71":"4211386","3002|72":"4211105","3003|0":"4103587","3003|1":"4103589","3003|14":"4103588","3003|15":"6552095","3003|19":"4114306","3003|2":"300328","3003|4":"4103590","3003|70":"4211210","3003|71":"4211387","3003|72":"4211060","3004|0":"300426","3004|1":"4613959","3004|14":"4613966","3004|15":"6548257","3004|19":"4109995","3004|2":"4107736","3004|4":"4613961","3004|70":"4613963","3004|71":"4211388","3004|72":"4211088","3005|0":"300526","3005|1":"300523","3005|14":"300524","3005|15":"6552096","3005|19":"4113915","3005|2":"300528","3005|4":"300521","3005|70":"4211242","3005|71":"4211389","3005|72":"4211098","3007|0":"6037390","3007|1":"6037384","3007|14":"4639693","3007|15":"6619309","3007|19":"6037398","3007|2":"4513287","3007|4":"6036408","3007|70":"6096701","3007|71":"6037399","3007|72":"6187438","3008|0":"300826","3008|1":"300823","3008|14":"300824","3008|15":"6550134","3008|19":"4159774","3008|2":"4143953","3008|4":"300821","3008|70":"4263776","3008|71":"4211392","3008|72":"4211099","3009|0":"300926","3009|1":"300923","3009|14":"300924","3009|15":"6552097","3009|19":"4112982","3009|2":"4111844","3009|4":"300921","3009|70":"4211193","3009|71":"4211393","3009|72":"4211100","3010|0":"301026","3010|1":"301023","3010|14":"301024","3010|15":"6550135","3010|19":"4113916","3010|2":"4112838","3010|4":"301021","3010|70":"4211225","3010|71":"4211394","3010|72":"4211103","3020|0":"302026","3020|1":"302023","3020|14":"302024","3020|15":"6552098","3020|19":"4114309","3020|2":"302028","3020|4":"302021","3020|70":"4211186","3020|71":"4211395","3020|72":"4211065","3021|0":"302126","3021|1":"302123","3021|14":"302124","3021|15":"6550136","3021|19":"4118790","3021|2":"302128","3021|4":"302121","3021|70":"4211189","3021|71":"4211396","3021|72":"4211043","3022|0":"302226","3022|1":"4613973","3022|14":"4613978","3022|15":"6552099","3022|19":"4114084","3022|2":"302228","3022|4":"4613974","3022|70":"4613975","3022|71":"4211397","3022|72":"4211094","3023|0":"302326","3023|1":"302323","3023|14":"302324","3023|15":"6552100","3023|19":"4113917","3023|2":"302328","3023|4":"302321","3023|70":"4211150","3023|71":"4211398","3023|72":"4211063","3024|0":"302426","3024|1":"302423","3024|14":"302424","3024|15":"6548262","3024|19":"4159553","3024|2":"302428","3024|4":"302421","3024|70":"4221744","3024|71":"4211399","3024|72":"4210719","3034|0":"303426","3034|1":"303423","3034|14":"303424","3034|15":"6552101","3034|19":"4113988","3034|2":"303428","3034|4":"303421","3034|70":"4211211","3034|71":"4211406","3034|72":"4210997","3037|0":"303726","3037|1":"4107437","3037|14":"4219911","3037|15":"6552102","3037|19":"6186258","3037|2":"4141737","3037|4":"303721","3037|70":"4211205","3037|71":"4211409","3037|72":"4211127","3039|0":"303926","3039|1":"303923","3039|14":"303924","3039|15":"6552103","3039|19":"4114322","3039|2":"303928","3039|4":"303921","3039|70":"4211202","3039|71":"4211410","3039|72":"4211054","3040|0":"4121966","3040|1":"4121936","3040|14":"4121965","3040|15":"6552115","3040|19":"4121972","3040|2":"4121969","3040|4":"4121934","3040|70":"4211199","3040|71":"4211614","3040|72":"4211135","3062|0":"306226","3062|1":"306223","3062|14":"306844","3062|15":"6619283","3062|19":"4117070","3062|2":"306228","3062|4":"306221","3062|70":"4211183","3062|71":"4211412","3062|72":"4211090","3460|0":"346026","3460|1":"346023","3460|14":"346024","3460|15":"6550141","3460|19":"4114324","3460|2":"346028","3460|4":"346021","3460|70":"4216945","3460|71":"4211425","3460|72":"4210998","3622|0":"362226","3622|1":"362223","3622|14":"362224","3622|15":"6550143","3622|19":"4162465","3622|2":"4109679","3622|4":"362221","3622|70":"4245312","3622|71":"4211428","3622|72":"4211104","3623|0":"362326","3623|1":"362323","3623|14":"362324","3623|15":"6552105","3623|19":"4121921","3623|2":"4107758","3623|4":"362321","3623|70":"4211152","3623|71":"4211429","3623|72":"4211133","3660|0":"366026","3660|1":"366023","3660|14":"366024","3660|15":"366001","3660|19":"4118866","3660|2":"4142717","3660|4":"366021","3660|70":"4211221","3660|71":"4211436","3660|72":"4211000","3665|0":"366526","3665|1":"366523","3665|14":"366524","3665|15":"6552106","3665|19":"4159196","3665|2":"4142989","3665|4":"366521","3665|70":"4211222","3665|71":"4211437","3665|72":"4211096","3666|0":"366626","3666|1":"366623","3666|14":"366624","3666|15":"6552107","3666|19":"4124067","3666|2":"366628","3666|4":"366621","3666|70":"4221590","3666|71":"4211438","3666|72":"4211056","3710|0":"371026","3710|1":"371023","3710|14":"371024","3710|15":"6552108","3710|19":"4113233","3710|2":"371028","3710|4":"371021","3710|70":"4211190","3710|71":"4211445","3710|72":"4211001","3795|0":"379526","3795|1":"379523","3795|14":"379524","3795|15":"6550146","3795|19":"4113993","3795|2":"379528","3795|4":"379521","3795|70":"4211247","3795|71":"4211452","3795|72":"4211002","4073|0":"614126","4073|1":"614123","4073|14":"614124","4073|15":"614101","4073|19":"4161734","4073|2":"4569058","4073|4":"614121","4073|70":"4216581","4073|71":"4211525","4073|72":"4210633","41769|0":"4160869","41769|1":"6430076","41769|14":"4160868","41769|15":"6552118","41769|19":"6177890","41769|2":"4543259","41769|4":"4160866","41769|70":"4205469","41769|71":"4211732","41769|72":"4210782","41770|0":"4161332","41770|1":"6430083","41770|14":"4161331","41770|15":"6552119","41770|19":"6177891","41770|2":"4543262","41770|4":"4161329","41770|70":"4205470","41770|71":"4211735","41770|72":"4210788","4286|0":"428626","4286|1":"428623","4286|14":"428624","4286|15":"428601","4286|19":"6058090","4286|2":"4107637","4286|4":"428621","4286|70":"4211197","4286|71":"4211488","4286|72":"4211045","43712|0":"6621861","43712|1":"6109995","43712|14":"6097645","43712|15":"4179869","43712|19":"6390162","43712|2":"4655332","43712|4":"6621800","43712|70":"6109997","43712|71":"6101104","43712|72":"6621862","4589|0":"4529236","4589|1":"4529235","4589|14":"4525464","4589|15":"6601844","4589|19":"4529237","4589|2":"4529239","4589|4":"4529234","4589|70":"4529242","4589|71":"4529241","4589|72":"4529240","48933|0":"6055158","48933|1":"6030195","48933|14":"4520562","48933|15":"6299775","48933|4":"6331852","48933|70":"6248941","48933|71":"6030235","48933|72":"6356488","52107|0":"4253815","52107|1":"6431331","52107|14":"6289719","52107|15":"6548274","52107|4":"4569056","52107|70":"6223599","52107|71":"4657459","6069|0":"606926","6069|14":"606924","6069|15":"4184152","6069|19":"4184155","6069|2":"4125274","6069|4":"4184153","87087|0":"4558954","87087|1":"4583862","87087|14":"4624985","87087|15":"6550190","87087|19":"4579260","87087|2":"6385644","87087|4":"4558886","87087|70":"6062574","87087|71":"4558953","87087|72":"4558955","92438|0":"6094066","92438|1":"4610354","92438|14":"6377014","92438|15":"4598523","92438|19":"4609726","92438|2":"4610602","92438|4":"6013675","92438|71":"4598522","92438|72":"4654613"};
+function partsListCsv(){
+  /* LEGO's template exactly: a header line, then elementId,quantity - nothing else. */
+  const rows=tally(), lines=["elementId,quantity"], missing=[]; let clamped=0;
+  rows.forEach(r=>{
+    const el=ELEMENT_ID[String(r.p.id)+"|"+r.col.code];
+    if(!el){ missing.push(r.p.name+" in "+r.col.name); return; }
+    let n=r.n; if(n>999){ n=999; clamped++; }        /* LEGO's own per-element ceiling */
+    lines.push(el+","+n);
   });
-  const ws=XML+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    +'<cols><col min="1" max="1" width="6" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/>'
-    +'<col min="3" max="3" width="20" customWidth="1"/><col min="4" max="6" width="14" customWidth="1"/></cols>'
-    +'<sheetData>'+sheet+'</sheetData></worksheet>';
-  const wb=XML+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
-    +' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    +'<sheets><sheet name="Parts" sheetId="1" r:id="rId1"/></sheets></workbook>';
-  const wbrels=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
-    +'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-    +'</Relationships>';
-  const styles=XML+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    +'<fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts>'
-    +'<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
-    +'<borders count="1"><border/></borders>'
-    +'<cellStyleXfs count="1"><xf/></cellStyleXfs>'
-    +'<cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>';
-  const ct=XML+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-    +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-    +'<Default Extension="xml" ContentType="application/xml"/>'
-    +'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-    +'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-    +'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
-    +'</Types>';
-  const root=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
-    +'</Relationships>';
-  const T=s=>enc.encode(s);
-  /* [Content_Types].xml first - snapsToDocx's rule, for the same readers */
-  return zipStore([{name:"[Content_Types].xml",bytes:T(ct)},
-                   {name:"_rels/.rels",bytes:T(root)},
-                   {name:"xl/workbook.xml",bytes:T(wb)},
-                   {name:"xl/_rels/workbook.xml.rels",bytes:T(wbrels)},
-                   {name:"xl/styles.xml",bytes:T(styles)},
-                   {name:"xl/worksheets/sheet1.xml",bytes:T(ws)}],
-                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  return {csv:lines.join("\r\n")+"\r\n", missing:missing, clamped:clamped, items:lines.length-1};
 }
 /* THE PARTS LIST AS A WORD DOCUMENT, ORGANIZED BY THE ELEMENTS OF THE FIGURE (Glen, 2026-08-21).
    The .txt list is one line per part across the whole design - what a build is ORDERED from. The
@@ -5147,9 +5110,13 @@ $("savePartsList").onclick=async()=>{
       build:async()=>partsListDocx()},
      {ext:".kit", desc:"Kit - reopens in Sangala Blocks, by element",
       build:async()=>new Blob([kitJSON()],{type:"application/json"})},
-     {ext:".xlsx", desc:"Order form (Excel)",
-      build:async()=>{ note=" Design ID is the number an order is placed by; the Element ID column is left to fill in.";
-        return partsListXlsx(); }}]);
+     {ext:".csv", desc:"Order (LEGO Pick a Brick)",
+      build:async()=>{ const r=partsListCsv();
+        note=" Upload it on LEGO's Pick a Brick page and the cart fills - "+r.items+" item"+(r.items===1?"":"s")+".";
+        if(r.clamped) note+=" "+r.clamped+" line"+(r.clamped===1?"":"s")+" capped at LEGO's 999-per-element limit.";
+        if(r.missing.length) note+=" Left out - no LEGO element ID recorded for: "+r.missing.join(", ")+".";
+        if(r.items>400) note+=" NOTE: LEGO accepts 400 distinct items per upload; this list has "+r.items+".";
+        return new Blob([r.csv],{type:"text/csv"}); }}]);
   if(name) say("Parts list saved as "+name+"."+note);
 };
 /* ---------- Snapshot: the build as LEGO documentation draws it ----------------------------------
