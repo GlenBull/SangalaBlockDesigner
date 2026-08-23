@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-22.178 -->
+<!-- SANGALA_VERSION: 2026-08-23.184 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -603,7 +603,7 @@
        not print - it writes a file - which made it a second Save (Glen, 2026-08-15: "Why Print?
        Should this be under the Save menu?"). Mosaic had already settled it: its menu is Project /
        Image / Tile List, with the bill of materials as a Save item. This is the same three. -->
-  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), a kit file that reopens in Sangala Blocks (.kit), or a BrickLink Wanted List to order from (.xml), chosen in the Save dialog">Parts List <small>.txt / .docx / .kit / .xml</small></button>
+  <button id="savePartsList" title="Save the parts list - a list to read (.txt), a Word document organized by the elements of the figure (.docx), a kit file that reopens in Sangala Blocks (.kit), or an Excel order form (.xlsx), chosen in the Save dialog">Parts List <small>.txt / .docx / .kit / .xlsx</small></button>
   <!-- A LIBRARY CAN NOW BE WRITTEN, NOT ONLY READ. Until today one arrived from tools/parts_library.py
        and there was no way back out, so a catalog assembled by opening two libraries could not be kept.
        It saves what the Library panel holds - everything loaded, merged - so the file that goes out
@@ -2096,6 +2096,21 @@ function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRe
   pv.style.width=w+"px"; pv.style.height=h+"px"; }
 
 let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvPlate=false, pvZbuf=null, pvGuide=null;
+/* THE 3D VIEW PANS, with the workspace's own gestures. It had orbit and zoom only, so the model
+   stayed pinned wherever the camera fit centered it - on a tall window that is small and far
+   from the control panel, and nothing could bring it closer (Glen, 2026-08-23: "controls that
+   are very usable in the 2D view are so far away in the 3D view... This is an issue with or
+   without an import"). Space-drag and middle-drag move the picture, exactly as they move the
+   plan; a re-fit re-centers deliberately and clears the pan. Screen pixels, full view only -
+   the mini viewer is itself a window and is carried by its title bar instead. */
+let pvPanX=0, pvPanY=0, pvSpan=1;   /* pvSpan: the fitted content's largest dimension in mm, for the 3D bars' world */
+/* The pan is bounded the way clampPan bounds the plan: the model can be pushed one full window
+   off center in any direction and no further, so it can always be dragged back. */
+function pvClampPan(){
+  const el=$("pv"), S=pvSpan*pvBase*pvZoom;
+  const lx=(S+el.width)/2, ly=(S+el.height)/2;
+  pvPanX=Math.max(-lx,Math.min(lx,pvPanX)); pvPanY=Math.max(-ly,Math.min(ly,pvPanY));
+}
 let pvGhost=null;   // loose holes, drawn as the shape they would remove
 let pvPart=null, pvIdBuf=null, pvNrm=null, pvEdge=null;   // which PIECE each triangle belongs to, the piece under each pixel, the surface normal there, and the line weight drawn over it - see the outline pass
 let pvSel=0;   // the piece the workspace has selected, 1-based as pvIdBuf counts them; 0 = none. Set by renderPreview from selPiece() on every frame - never stored between them
@@ -2156,7 +2171,7 @@ function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=
   const el=cvEl||$("pv");
   const center=[(bx0+bx1)/2,(by0+by1)/2,(bz0+bz1)/2];
   const span=Math.max(bx1-bx0,by1-by0,bz1-bz0)||1, base=Math.min(el.width,el.height)*0.62/span;
-  if(!cvEl){ pvCenter=center; pvBase=base; }
+  if(!cvEl){ pvCenter=center; pvBase=base; pvSpan=span; pvPanX=0; pvPanY=0; }   /* a re-fit re-centers deliberately */
   return {center:center, base:base};
 }
 
@@ -2185,7 +2200,7 @@ function renderPreview(o){
   const bg=g.createLinearGradient(0,0,0,H); bg.addColorStop(0,"#dfe7ef"); bg.addColorStop(1,"#c3cedb");
   g.fillStyle=bg; g.fillRect(0,0,W,H);
   const ca=Math.cos(o?o.yaw:pvYaw),sa=Math.sin(o?o.yaw:pvYaw),ce=Math.cos(o?o.pitch:pvPitch),se=Math.sin(o?o.pitch:pvPitch);
-  const scale=(o?o.base*o.zoom:pvBase*pvZoom), cx=W/2, cy=H/2, C=o?o.center:pvCenter;
+  const scale=(o?o.base*o.zoom:pvBase*pvZoom), cx=W/2+(o?0:pvPanX), cy=H/2+(o?0:pvPanY), C=o?o.center:pvCenter;
   const proj=p=>{ const x=p[0]-C[0], y=p[1]-C[1], z=p[2]-C[2];
     const rx=x*ca-y*sa, ry=x*sa+y*ca;                 // yaw about Z (up)
     const pz=ry*se + z*ce;                            // pitch about X: pz = vertical on screen
@@ -2452,11 +2467,21 @@ function renderPreview(o){
 }
 
 (function(){ const pv=$("pv");
-  pv.addEventListener("mousedown",e=>{ pvDrag=[e.clientX,e.clientY,pvYaw,pvPitch]; e.preventDefault(); });
+  pv.addEventListener("mousedown",e=>{
+    /* the workspace's own pan gestures: hold Space, or the middle button, and the picture moves;
+       a plain drag turns the model as it always has */
+    if(spaceHeld || e.button===1){ pvDrag={pan:true, sx:e.clientX, sy:e.clientY, px:pvPanX, py:pvPanY};
+      pv.style.cursor="grabbing"; e.preventDefault(); return; }
+    pvDrag=[e.clientX,e.clientY,pvYaw,pvPitch]; e.preventDefault(); });
   window.addEventListener("mousemove",e=>{ if(!pvDrag)return;
+    if(pvDrag.pan){
+      /* client px -> canvas px, so the picture stays under the hand at any buffer scale */
+      const k=pv.width/Math.max(1,pv.getBoundingClientRect().width);
+      pvPanX=pvDrag.px+(e.clientX-pvDrag.sx)*k; pvPanY=pvDrag.py+(e.clientY-pvDrag.sy)*k;
+      pvClampPan(); renderPreview(); return; }
     pvYaw=pvDrag[2]+(e.clientX-pvDrag[0])*0.01;
     pvPitch=Math.max(pvPlate?0.05:-1.45,Math.min(1.45,pvDrag[3]+(e.clientY-pvDrag[1])*0.01)); renderPreview(); });   // plate shown: stay at/above it; hidden: orbit under to see the underside
-  window.addEventListener("mouseup",()=>{ pvDrag=null; });
+  window.addEventListener("mouseup",()=>{ if(pvDrag&&pvDrag.pan) pv.style.cursor=""; pvDrag=null; });
   pv.addEventListener("wheel",e=>{ e.preventDefault(); pvZoom=Math.max(0.25,Math.min(6,pvZoom*Math.exp(-e.deltaY*0.0012))); renderPreview(); },{passive:false});
   window.addEventListener("resize",()=>{ draw(); if(pvOn){ sizePvToCv(); pvBounds(); renderPreview(); } });   // re-fit the board canvas; keep the overlay glued to it
 })();
@@ -2691,12 +2716,18 @@ function frameToGuideTris(){
     let ax=1e9, ay=1e9, bx=-1e9, by=-1e9;
     g.poly.forEach(q=>{ ax=Math.min(ax,q[0]); ay=Math.min(ay,q[1]); bx=Math.max(bx,q[0]); by=Math.max(by,q[1]); });
     const y1=-base*PLATE, y0=y1-depth*PLATE;
-    for(let sy=Math.floor(ay/STUD); sy<=Math.ceil(by/STUD); sy++)
+    /* THE CELL IS THE VIEW'S OWN - the Part 28 note ("the massing guide is measured in PLATES
+       while standing depth is in STUDS") finally paid for: from the side a guide cell is a stud
+       across and a PLATE tall, the same 8 x 3.2 lattice the bricks land on, and its height is
+       anchored the way bricksToTris anchors a brick (z = modelH - row * vUnit). Top-down keeps
+       the stud square this always rasterized. */
+    const vu=vUnit();
+    for(let sy=Math.floor(ay/vu); sy<=Math.ceil(by/vu); sy++)
       for(let sx=Math.floor(ax/STUD); sx<=Math.ceil(bx/STUD); sx++){
-        const cx=(sx+0.5)*STUD, cy=(sy+0.5)*STUD;
+        const cx=(sx+0.5)*STUD, cy=(sy+0.5)*vu;
         if(!inPoly(cx,cy,g.poly)) continue;
         if((g.holes||[]).some(h=>inPoly(cx,cy,h))) continue;
-        boxTris(sx*STUD,(sx+1)*STUD, y0,y1, H-(sy+1)*STUD, H-sy*STUD, out);
+        boxTris(sx*STUD,(sx+1)*STUD, y0,y1, H-(sy+1)*vu, H-sy*vu, out);
       }
   });
   return out;
@@ -3567,9 +3598,32 @@ view.zoom=fitZoom(); updateZoomUI();     /* open fitted, reported truthfully */
    when the park-able world (page + WS_MARGIN of cork, clampPan's own bounds) overflows the
    window. Dragging a thumb pans; the SAME control, by the same names, is in Sangala Studio. */
 function syncScrollbars(){
-  const rct=cv.getBoundingClientRect();
   const hs=$("sbH"), vs=$("sbV");
-  if(rct.width<40 || view3D){ hs.style.display="none"; vs.style.display="none"; return; }
+  /* THE SAME TWO BARS SERVE THE 3D VIEW - they used to hide there, which put the 3D View back
+     where the plan was before Part 30: pannable only by invisible gestures. Glen, 2026-08-23:
+     "I don't see a pan control in 3D view." The world the bars describe is the fitted model
+     with a full window of margin each side - the same reach pvClampPan allows - so the thumbs
+     are always visible in 3D, always showing where the model is, and dragging one brings it
+     wherever the hand wants it, controls included. */
+  if(view3D){
+    const el=$("pv"), rct=el.getBoundingClientRect();
+    if(rct.width<40){ hs.style.display="none"; vs.style.display="none"; return; }
+    const S=pvSpan*pvBase*pvZoom;
+    const wpx=S+2*el.width, hpx=S+2*el.height;
+    const winX=(wpx-el.width)/2 - pvPanX, winY=(hpx-el.height)/2 - pvPanY;
+    hs.style.display=""; vs.style.display="";
+    hs.style.left=(rct.left+3)+"px"; hs.style.width=(rct.width-18)+"px";
+    hs.style.top=(rct.top+rct.height-12)+"px";
+    let len=Math.max(8,(el.width/wpx)*100), pos=Math.max(0,Math.min(100-len,(winX/wpx)*100));
+    $("sbHt").style.width=len+"%"; $("sbHt").style.left=pos+"%";
+    vs.style.top=(rct.top+3)+"px"; vs.style.height=(rct.height-18)+"px";
+    vs.style.left=(rct.left+rct.width-12)+"px";
+    len=Math.max(8,(el.height/hpx)*100); pos=Math.max(0,Math.min(100-len,(winY/hpx)*100));
+    $("sbVt").style.height=len+"%"; $("sbVt").style.top=pos+"%";
+    return;
+  }
+  const rct=cv.getBoundingClientRect();
+  if(rct.width<40){ hs.style.display="none"; vs.style.display="none"; return; }
   const wpx=(modelW+2*WS_MARGIN)*PX, hpx=(modelH+2*WS_MARGIN)*PX;
   const x0=(MX-WS_MARGIN)*PX+view.panX, y0=(MY-WS_MARGIN)*PX+view.panY;
   const fx=cv.width/wpx, fy=cv.height/hpx;
@@ -3593,13 +3647,16 @@ function sbDrag(thumb, horiz){
     e.preventDefault(); e.stopPropagation();
     thumb.setPointerCapture(e.pointerId); thumb.style.cursor="grabbing";
     const track=thumb.parentElement.getBoundingClientRect();
-    const world=horiz ? (modelW+2*WS_MARGIN)*PX : (modelH+2*WS_MARGIN)*PX;
+    const in3D=view3D, el=$("pv");
+    const world=in3D ? (horiz ? pvSpan*pvBase*pvZoom+2*el.width : pvSpan*pvBase*pvZoom+2*el.height)
+                     : (horiz ? (modelW+2*WS_MARGIN)*PX : (modelH+2*WS_MARGIN)*PX);
     const start=horiz ? e.clientX : e.clientY;
-    const pan0=horiz ? view.panX : view.panY;
+    const pan0=in3D ? (horiz ? pvPanX : pvPanY) : (horiz ? view.panX : view.panY);
     const move=ev=>{
       const d=(horiz?ev.clientX:ev.clientY)-start;
       const track_len=horiz ? track.width : track.height;
       const np=pan0 - d/track_len*world;
+      if(in3D){ if(horiz) pvPanX=np; else pvPanY=np; pvClampPan(); renderPreview(); return; }
       if(horiz) view.panX=np; else view.panY=np;
       clampPan(); draw();
     };
@@ -3611,6 +3668,9 @@ function sbDrag(thumb, horiz){
 sbDrag($("sbHt"),true); sbDrag($("sbVt"),false);
 /* every path that changes the view already ends in draw(); the bars follow it */
 const __draw_sb=draw; draw=function(){ __draw_sb(); syncScrollbars(); };
+/* and every 3D pan, orbit or zoom ends in renderPreview - the bars follow the full view the
+   same way (the mini passes its options object and is skipped: it is its own window) */
+const __rp_sb=renderPreview; renderPreview=function(o){ __rp_sb(o); if(!o) syncScrollbars(); };
 let spaceHeld=false, panDrag=null, suppressClick=false;
 window.addEventListener("keydown",(e)=>{ if(e.code!=="Space") return; const t=e.target, tag=t&&t.tagName&&t.tagName.toLowerCase();
   if(tag==="input"||tag==="textarea"||tag==="select"||(t&&t.isContentEditable)) return;
@@ -4924,33 +4984,81 @@ $("saveDesign").onclick=async()=>{
    ONE OF THEM IS A LIST TO READ AND THE OTHER IS AN ORDER TO PLACE. Glen, 2026-08-15: "No one is
    going to go through a list of dozens of parts and order them one by one. If they attempted to do
    this, there would be many transcription errors and mistakes." He is right, and nobody does: a
-   BrickLink Wanted List is uploaded as XML, once, and their own tools then find sellers who can fill
-   it - so a design of forty parts becomes an order or two and the student types no numbers at all.
-
-   THE ONE THING THAT MUST NOT BE GUESSED IS THE COLOR. BrickLink's color ids are not LDraw's, and
-   a wrong one orders the right brick in the wrong color - a mistake that arrives in a box weeks
-   later. They are read off BrickLink's own guide in the COLORS table above, and a color without one
-   is left out and reported. Item ids need no such table: BrickLink catalogues basic parts by the
-   design number the list already carries, which is also why the library stores the number a builder
-   ORDERED by rather than the mould variant the geometry came from. */
+   BrickLink Wanted List was built here on that reasoning, and then DIED ON CONTACT WITH A REAL
+   ORDER - Glen, 2026-08-22, after Jo placed the NTLS kit order: "you can't submit a mass order
+   form for bricklink because orders are fulfilled by dozens of different vendors." The .xml
+   export is gone from the Save dialog for that reason, replaced by the order form below, in the
+   exact columns Jo's own parts sheets use. The BrickLink color ids stay in the COLORS table
+   above: they cost nothing to keep, and removing them would be a second decision. */
 function partsListText(){
   const rows=tally(), built=bricks.filter(b=>!parked(b)).length;
   return "Part\tDesign\tColor\tLDraw\tQty\n"+
     rows.map(r=>[r.p.name,r.p.id,r.col.name,r.col.code,r.n].join("\t")).join("\n")+
     "\n\nTotal pieces\t"+built+"\nDistinct parts\t"+rows.length+"\n";
 }
-function partsListXml(){
-  const rows=tally(), skipped=[];
-  const items=rows.map(r=>{
-    if(typeof r.col.bl!=="number"){ skipped.push(r.col.name); return ""; }
-    return " <ITEM>\n"
-         + "  <ITEMTYPE>P</ITEMTYPE>\n"
-         + "  <ITEMID>"+xesc(r.p.id)+"</ITEMID>\n"
-         + "  <COLOR>"+r.col.bl+"</COLOR>\n"
-         + "  <MINQTY>"+r.n+"</MINQTY>\n"
-         + " </ITEM>\n";
-  }).join("");
-  return {xml:"<INVENTORY>\n"+items+"</INVENTORY>\n", skipped:skipped};
+/* THE ORDER FORM, in the columns of Jo Watts's own parts sheets (Crane Parts.xlsx, 2026-08-21):
+   Qty | Part | Color | Blocks Part # | Design ID | Element ID. The Design ID is the number an
+   order is placed by, and it is usually the Blocks number with any mold suffix stripped
+   (2453b -> 2453); the renames in the table below are the ones Jo verified against a real order.
+   A number covered by neither is carried as it stands - a number to check beats a guess. The
+   Element ID (the part-in-one-color number) is not derivable from anything shipped here, so the
+   column is emitted empty for the person ordering to fill. 43712 -> 48933 on Jo's sheet was a
+   SUBSTITUTION of a different part, not a renumbering, and is deliberately not mapped. */
+const DESIGN_ID={"4073":"6141", "4589":"59900", "2456":"44237", "3007":"93888"};
+function partsListXlsx(){
+  const enc=new TextEncoder(), XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const rows=tally();
+  const designId=id=>{ const s=String(id), t=s.replace(/[a-z]+$/,"");
+    return DESIGN_ID[s] || DESIGN_ID[t] || t; };
+  const cs=(ref,v,st)=>'<c r="'+ref+'" t="inlineStr"'+(st?' s="'+st+'"':'')
+    +'><is><t xml:space="preserve">'+xesc(String(v))+'</t></is></c>';
+  const cn=(ref,v)=>'<c r="'+ref+'"><v>'+v+'</v></c>';
+  let sheet='<row r="1">'+["Qty","Part","Color","Blocks Part #","Design ID","Element ID"]
+      .map((h,i)=>cs(String.fromCharCode(65+i)+"1",h,1)).join("")+'</row>';
+  rows.forEach((r,ix)=>{ const R=ix+2;
+    sheet+='<row r="'+R+'">'+cn("A"+R,r.n)
+      +cs("B"+R,r.p.name||r.p.id)
+      +cs("C"+R,r.col.name)
+      +cs("D"+R,r.p.id)
+      +cs("E"+R,designId(r.p.id))
+      +cs("F"+R,"")+'</row>';
+  });
+  const ws=XML+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    +'<cols><col min="1" max="1" width="6" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/>'
+    +'<col min="3" max="3" width="20" customWidth="1"/><col min="4" max="6" width="14" customWidth="1"/></cols>'
+    +'<sheetData>'+sheet+'</sheetData></worksheet>';
+  const wb=XML+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    +' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    +'<sheets><sheet name="Parts" sheetId="1" r:id="rId1"/></sheets></workbook>';
+  const wbrels=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    +'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    +'</Relationships>';
+  const styles=XML+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    +'<fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts>'
+    +'<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+    +'<borders count="1"><border/></borders>'
+    +'<cellStyleXfs count="1"><xf/></cellStyleXfs>'
+    +'<cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>';
+  const ct=XML+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    +'<Default Extension="xml" ContentType="application/xml"/>'
+    +'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    +'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    +'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    +'</Types>';
+  const root=XML+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+    +'</Relationships>';
+  const T=s=>enc.encode(s);
+  /* [Content_Types].xml first - snapsToDocx's rule, for the same readers */
+  return zipStore([{name:"[Content_Types].xml",bytes:T(ct)},
+                   {name:"_rels/.rels",bytes:T(root)},
+                   {name:"xl/workbook.xml",bytes:T(wb)},
+                   {name:"xl/_rels/workbook.xml.rels",bytes:T(wbrels)},
+                   {name:"xl/styles.xml",bytes:T(styles)},
+                   {name:"xl/worksheets/sheet1.xml",bytes:T(ws)}],
+                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 /* THE PARTS LIST AS A WORD DOCUMENT, ORGANIZED BY THE ELEMENTS OF THE FIGURE (Glen, 2026-08-21).
    The .txt list is one line per part across the whole design - what a build is ORDERED from. The
@@ -5039,13 +5147,9 @@ $("savePartsList").onclick=async()=>{
       build:async()=>partsListDocx()},
      {ext:".kit", desc:"Kit - reopens in Sangala Blocks, by element",
       build:async()=>new Blob([kitJSON()],{type:"application/json"})},
-     {ext:".xml", desc:"BrickLink Wanted List",
-      build:async()=>{ const r=partsListXml();
-        note = r.skipped.length
-          ? " "+r.skipped.length+" line(s) left out: BrickLink has no color recorded here for "
-              +r.skipped.join(", ")+"."
-          : " Upload it on BrickLink under Wanted List, and their own tools will find sellers for it.";
-        return new Blob([r.xml],{type:"application/xml"}); }}]);
+     {ext:".xlsx", desc:"Order form (Excel)",
+      build:async()=>{ note=" Design ID is the number an order is placed by; the Element ID column is left to fill in.";
+        return partsListXlsx(); }}]);
   if(name) say("Parts list saved as "+name+"."+note);
 };
 /* ---------- Snapshot: the build as LEGO documentation draws it ----------------------------------
@@ -5915,8 +6019,15 @@ function importMosaic(p){
      wide by TWO PLATES tall (6.4 mm) - the reading Part 30 settled for the crane's frame and
      the workflow document's own eight-tenths - and every tile edge lands on a line a brick can
      land on, wherever the region is dragged. */
-  const VY = mode==="standing" ? PLATE*2 : T;
-  const toMM=ring=>{ const r=ring.map(q=>[q[0]*T,q[1]*VY]); r.push([r[0][0],r[0][1]]); return r; };   // grid units -> design mm, first point repeated (the app's closed-ring convention)
+  /* THE IMPORT SCALE IS 0.5, SETTLED BY GLEN'S OWN EXPERIMENT (2026-08-22, his one-constant
+     test over my objection - and his eyes won: "This is genuinely exciting"). The reason it is
+     right: his mosaics are drawn at TWO CELLS PER STUD of the intended build, so at 0.5 two
+     columns make one stud and ONE ROW MAKES ONE PLATE - the true vertical LEGO unit, three
+     rows to a brick course. The crown trio wraps the imported crown exactly. Tile-equals-stud
+     was only ever this import's convention, not a fact about mosaics. */
+  const IMPORT_SCALE = 0.5;
+  const VY = (mode==="standing" ? PLATE*2 : T) * IMPORT_SCALE, VX = T * IMPORT_SCALE;
+  const toMM=ring=>{ const r=ring.map(q=>[q[0]*VX,q[1]*VY]); r.push([r[0][0],r[0][1]]); return r; };   // grid units -> design mm, first point repeated (the app's closed-ring convention)
   // build the regions: background (no-mass) tiles first, then masses in id order, so masses draw on top
   const g=[];
   const massIds=[...byMass.keys()].sort((a,q)=>a-q);
@@ -5949,12 +6060,27 @@ function importMosaic(p){
   if(!g.length){ say("No pieces could be read from that mosaic."); return; }
   placeX=0; placeY=0;                                    // plate coordinates, carried unchanged
   $("pagesize").value="baseplate"; setPageSize("baseplate");   // a mosaic is brick work; a 32 x 32 design overflows Letter
+  /* A STANDING FIGURE STANDS ON THE GROUND. In the side view the page bottom is the ground -
+     3D height is measured up from it - so a figure left at its mosaic coordinates near the
+     page TOP hangs two hundred millimeters in the air: the 3D View framed the build plate and
+     the floating figure together and the model became a speck at the bottom of an empty column
+     (Glen, 2026-08-22: "the location of the parts in 3D is far below the location in 2D...
+     that makes the program unusable"). So the figure is translated DOWN, a whole number of
+     plate rows, until its lowest edge rests on the page bottom. Top-down keeps its plate
+     coordinates untouched: there the page is a surface, not a sky. */
+  if(mode==="standing"){
+    let maxY=-1e9;
+    g.forEach(r=>r.poly.forEach(q=>{ if(q[1]>maxY) maxY=q[1]; }));
+    const vu=vUnit(), dy=Math.floor((modelH-maxY)/vu)*vu;
+    if(dy>0) g.forEach(r=>{ r.poly.forEach(q=>{ q[1]+=dy; });
+                            (r.holes||[]).forEach(h=>h.forEach(q=>{ q[1]+=dy; })); });
+  }
   frameScale=1; $("frScale").value=100; selFrame=[];
   guideRaw=g; applyFrameScale();
   hist=[]; redoStack=[]; commit();
   say('Frame brought in from "'+(docName||"an unnamed mosaic")+'": '+g.length+" outlines from "
       +tiles+" tiles"+(drop.size?" ("+drop.size+" backdrop tiles left behind)":"")
-      +(mode==="standing"?", each tile one stud wide and two plates tall":"")
+      +(mode==="standing"?", each tile half a stud wide and one plate tall":"")
       +". Saves will be offered under that name.");
 }
 function loadModel(j){
