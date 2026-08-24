@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-23.186 -->
+<!-- SANGALA_VERSION: 2026-08-24.190 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -495,13 +495,17 @@
         <span style="font-weight:700">Show</span>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the frame outline you are building against"><input type="checkbox" id="ckFrame" checked style="width:auto;margin:0"> Frame</label>
         <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer" title="Show or hide the stud grid"><input type="checkbox" id="ckGrid" checked style="width:auto;margin:0"> Grid</label>
-        <label id="seeRow" style="display:none;align-items:center;gap:.35rem;width:100%;margin-top:.25rem" title="How much the frame shows through the bricks in Transparent mode">Transparency<input type="range" id="optSee" min="10" max="90" value="55" style="flex:1"></label>
         <!-- "Other Side" used to sit here as a third checkbox under Show, beside Frame and Grid, and
              it never belonged: Frame and Grid say what is DRAWN over the design, and this says where
              the builder is STANDING. It is on the Toolbar now, and it names the side rather than
              asking about it (Glen, 2026-08-18). Nothing under Show is a view. -->
       </div>
     </div>
+
+    <!-- The Transparency slider sits OUTSIDE the Workspace panel: pressing Transparent in the menu
+         bar must surface it by itself, with no trip to Settings (Glen, 2026-08-24). Mosaic keeps
+         its slider in the open control panel flow the same way. -->
+    <label id="seeRow" style="display:none;align-items:center;gap:.35rem;width:100%;margin-top:.55rem" title="How much the frame shows through the bricks in Transparent mode">Transparency<input type="range" id="optSee" min="10" max="90" value="55" style="flex:1"></label>
 
     <!-- PARTS FOLDS AWAY, AND STARTS FOLDED. Glen, 2026-08-15: the parts list is consulted rarely but
          is tall, so left open it pushes the Snapshots strip - which is looked at constantly - below the
@@ -2090,8 +2094,17 @@ function bom(){
    that. This pins the same way round - the box is set to the buffer - because the 3D renderer treats
    its buffer pixels as screen pixels when it orbits and when it reads the depth buffer back, so the
    two must stay one to one. */
+/* THE 3D VIEW IS THE WORKSPACE'S OWN SIZE - the 2D canvas's, not the board's. The board is a grid
+   item that stretches to the control panel's height, so on a design with a long parts list it runs
+   far below the window; sizing #pv to it hung the model's centre below the fold with only the crown
+   in sight (Glen, 2026-08-24, the third report of it). The 2D canvas takes its height from the
+   VIEWPORT (the `canvas` rule: calc(100vh - 178px)) - so measure the 2D canvas itself while it is
+   on screen, and mirror its rule when it is hidden (the resize-while-3D path). The 178 here and the
+   178 in that CSS rule must agree. */
 function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRect();   /* 40 = the board's border + padding, both sides */
-  const w=Math.max(120,Math.round(bd.width-40)), h=Math.max(120,Math.round(bd.height-40));
+  const cvr=cv.getBoundingClientRect();
+  const w=Math.max(120,Math.round(cvr.width || bd.width-40));
+  const h=Math.max(120,Math.round(cvr.height || window.innerHeight-178));
   pv.width=w; pv.height=h;
   pv.style.width=w+"px"; pv.style.height=h+"px"; }
 
@@ -2112,7 +2125,8 @@ function pvClampPan(){
   pvPanX=Math.max(-lx,Math.min(lx,pvPanX)); pvPanY=Math.max(-ly,Math.min(ly,pvPanY));
 }
 let pvGhost=null;   // loose holes, drawn as the shape they would remove
-let pvPart=null, pvIdBuf=null, pvNrm=null, pvEdge=null;   // which PIECE each triangle belongs to, the piece under each pixel, the surface normal there, and the line weight drawn over it - see the outline pass
+let pvPart=null, pvIdBuf=null, pvNrm=null, pvEdge=null;
+let pvBox=null, pvOvl=null, pvHide=null, pvNP=0;   /* per-piece world boxes, the shared-space pair table, and the swallowed pieces - see pvSetTris */   // which PIECE each triangle belongs to, the piece under each pixel, the surface normal there, and the line weight drawn over it - see the outline pass
 let pvSel=0;   // the piece the workspace has selected, 1-based as pvIdBuf counts them; 0 = none. Set by renderPreview from selPiece() on every frame - never stored between them
 /* THE ONE ANSWER TO "WHICH PIECE IS SELECTED", for every picture that draws in 3D. bricksToTris
    numbers the pieces by walking `bricks` and skipping the ones parked on the cork, so the count has
@@ -2151,8 +2165,39 @@ const PIECE_COLORS=[[214,74,48],[62,116,178],[86,150,90],[196,150,54],[142,96,16
 function pvSetTris(b){   // parts are concatenated in order by buildTris, so a per-triangle color array lines up
   pvTris=b.tris; pvCol=[]; pvPart=[]; pvGuide=b.guides&&b.guides.length?b.guides:null;
   pvGhost=b.ghosts&&b.ghosts.length?b.ghosts:null;   // holes that carve nothing yet
+  const boxes=[null];   // per-piece world bounds, 1-based like the piece numbers
   (b.parts||[]).forEach((tris,i)=>{ const c=(b.cols&&b.cols[i])||PIECE_COLORS[i%PIECE_COLORS.length];   // a mosaic mass wears its tile color; everything else keeps the piece cycle (which is how a Fuse stays visible)
-    for(let k=0;k<tris.length;k++){ pvCol.push(c); pvPart.push(i+1); } });   // piece number, 1-based: 0 is left for "no piece here" in the pixel id buffer
+    const bx=[1e9,1e9,1e9,-1e9,-1e9,-1e9];
+    for(let k=0;k<tris.length;k++){ pvCol.push(c); pvPart.push(i+1);   // piece number, 1-based: 0 is left for "no piece here" in the pixel id buffer
+      for(const p of tris[k]) for(let a=0;a<3;a++){ if(p[a]<bx[a])bx[a]=p[a]; if(p[a]>bx[3+a])bx[3+a]=p[a]; } }
+    boxes.push(tris.length?bx:null); });
+  pvBox=boxes; pvNP=boxes.length;
+  /* THE SHARED-SPACE TABLE: pairs of pieces whose volumes interpenetrate - an arrangement no
+     real bricks could hold, and the one place the 2D and 3D views could disagree.
+     Two gates keep ordinary building out of it: the boxes must overlap deeper than a stud's
+     engagement (1.6 mm) on EVERY axis, AND the shared volume must be a real fraction of the
+     smaller piece - so stacked bricks, studs in sockets, face contact and the mesh bleed of a
+     slope past its footprint all stay out. Two outcomes:
+       - SWALLOWED (shared volume >= 0.9 of the smaller piece): the smaller piece lies inside the
+         other. It is invisible in the 2D view from either side, so it is not drawn in 3D at all,
+         at any angle (pvHide).
+       - PARTIAL (>= 0.35): the pair is marked, and at contested pixels the renderer applies the
+         2D view's own covering rule - see renderPreview. */
+  pvOvl=new Uint8Array(pvNP*pvNP);
+  pvHide=new Uint8Array(pvNP);
+  const DEEP=1.8;   /* mm: just past stud clutch, so ordinary building never trips it */
+  for(let a=1;a<pvNP;a++){ const A=boxes[a]; if(!A) continue;
+    for(let b2=a+1;b2<pvNP;b2++){ const B=boxes[b2]; if(!B) continue;
+      const ox=Math.min(A[3],B[3])-Math.max(A[0],B[0]),
+            oy=Math.min(A[4],B[4])-Math.max(A[1],B[1]),
+            oz=Math.min(A[5],B[5])-Math.max(A[2],B[2]);
+      if(ox>DEEP&&oy>DEEP&&oz>DEEP){
+        const vA=(A[3]-A[0])*(A[4]-A[1])*(A[5]-A[2]),
+              vB=(B[3]-B[0])*(B[4]-B[1])*(B[5]-B[2]),
+              fr=(ox*oy*oz)/Math.max(1e-9,Math.min(vA,vB));
+        if(fr>=0.9) pvHide[vA<=vB?a:b2]=1;
+        else if(fr>=0.35){ pvOvl[a*pvNP+b2]=1; pvOvl[b2*pvNP+a]=1; }
+      } } }
 }
 const A1_BED=180;   // Bambu Lab A1 Mini build plate: 180 x 180 mm
 const pvBed=(mn,mx)=>{ const cx=(mn[0]+mx[0])/2, cy=(mn[1]+mx[1])/2, h=A1_BED/2; return {x0:cx-h,y0:cy-h,x1:cx+h,y1:cy+h}; };   // bed centered under the footprint (slicer centers the part too)
@@ -2171,7 +2216,24 @@ function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=
   const el=cvEl||$("pv");
   const center=[(bx0+bx1)/2,(by0+by1)/2,(bz0+bz1)/2];
   const span=Math.max(bx1-bx0,by1-by0,bz1-bz0)||1, base=Math.min(el.width,el.height)*0.62/span;
-  if(!cvEl){ pvCenter=center; pvBase=base; pvSpan=span; pvPanX=0; pvPanY=0; }   /* a re-fit re-centers deliberately */
+  if(!cvEl){
+    /* THE FULL VIEW OPENS AS THE PLAN STANDS - same scale, same place, facing the page (Glen,
+       2026-08-24: "The 2D and 3D workspace need to be the same size, and the object should not
+       shift on the page in the transition"). So instead of fitting-and-centering, the camera takes
+       the 2D view's own framing: one mm is SCALE100*view.zoom of these CSS pixels, the view opens
+       front-on (the very elevation the plan draws), and the model's centre is pinned to the screen
+       point the plan shows it at. Orbit, wheel and the bars then move off that anchor; the fitted
+       `base` below still serves the inset, which passes cvEl. */
+    pvCenter=center; pvSpan=span;
+    /* Opened TURNED, not dead front-on - about a quarter turn, so the viewer can see 3D mode is
+       enabled (Glen, 2026-08-24). The turn is about the model's own centre, which stays pinned
+       to its 2D screen point, so nothing shifts; these two angles are the only knobs. */
+    pvBase=SCALE100*view.zoom; pvZoom=1; pvYaw=-0.7; pvPitch=0.4;
+    const xPage=placeX+center[0], yPage=placeY+(modelH-center[2]);   /* world -> page mm: z runs up from the page bottom */
+    pvPanX=(view.panX+(MX+xPage)*PX)/DPR - el.width/2;
+    pvPanY=(view.panY+(MY+yPage)*PX)/DPR - el.height/2;
+    pvClampPan();
+  }
   return {center:center, base:base};
 }
 
@@ -2205,6 +2267,23 @@ function renderPreview(o){
     const rx=x*ca-y*sa, ry=x*sa+y*ca;                 // yaw about Z (up)
     const pz=ry*se + z*ce;                            // pitch about X: pz = vertical on screen
     return [cx+rx*scale, cy-pz*scale, ry*ce - z*se]; };   // 3rd = depth into screen (bigger = farther)
+  /* THE 2D VIEW'S COVERING RULE, applied in the one place the two views could disagree (Glen,
+     2026-08-24: "If you can't see the underlying bricks in the 2D view, you should not be able to
+     see them in the 3D view"). For a pair of parts that occupy SHARED SPACE (pvOvl - a recorded
+     arrangement real bricks could not hold), the part whose nearest surface is nearer the viewer
+     covers the other WHOLE - the workspace's own nearest-surface part ordering, the same rule that
+     keeps a stud in a socket from showing through (2026-08-16). Everywhere else the per-pixel
+     depth buffer stays the judge, so ordinary occlusion and orbiting are untouched. Nearness is
+     each piece's nearest box corner along the CURRENT view axis, so the rule follows the camera:
+     from the front the near wing covers its plates, from behind the far wing covers its own. */
+  let pvNear=null;
+  if(pvBox && pvOvl){
+    pvNear=new Float64Array(pvNP); pvNear.fill(Infinity);
+    for(let pi=1;pi<pvNP;pi++){ const bx=pvBox[pi]; if(!bx) continue; let m=Infinity;
+      for(let k=0;k<8;k++){ const qx=bx[k&1?3:0], qy=bx[k&2?4:1], qz=bx[k&4?5:2];
+        const d=(qx*sa+qy*ca)*ce - qz*se; if(d<m)m=d; }
+      pvNear[pi]=m; }
+  }
   if(plate){   // ---- build plate (A1 Mini bed) at z=0: gridded plane so Base reads as the gap object-to-bed; toggle off to orbit under the object ----
   let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
   for(const t of pvTris) for(const p of t){ if(p[0]<mnx)mnx=p[0]; if(p[1]<mny)mny=p[1]; if(p[0]>mxx)mxx=p[0]; if(p[1]>mxy)mxy=p[1]; }
@@ -2244,6 +2323,7 @@ function renderPreview(o){
     const s = lit>0.72 ? 1.0 : lit>0.34 ? 0.80 : 0.62;
     const R=(base[0]*s)|0, G=(base[1]*s)|0, B=(base[2]*s)|0;
     const pid=(pvPart && pvPart[ti])||0;
+    if(pvHide && pvHide[pid]) continue;   // swallowed whole by another part: invisible in the 2D view, so never drawn here
     // A PIECE-SIZED DEPTH BIAS, a thousandth of a millimetre per piece. Where two pieces share a surface -
     // a column standing with its top flush against a box, say - the two faces are at the SAME depth, and
     // rounding decides which wins at each pixel, so the overlap came out in stripes (Glen, 2026-08-10).
@@ -2262,7 +2342,10 @@ function renderPreview(o){
         const w1=((c[1]-a[1])*(fx-c[0])+(a[0]-c[0])*(fy-c[1]))*inv; if(w1<-1e-6) continue;
         const w2=1-w0-w1; if(w2<-1e-6) continue;
         const z=w0*a[2]+w1*b[2]+w2*c[2], i=y*W+x;
-        if(z-bias>=pvZbuf[i]) continue;               // something nearer is already there
+        const cur=pvIdBuf[i];
+        if(pvNear && cur && cur!==pid && pvOvl[cur*pvNP+pid]){
+          if(pvNear[pid]>=pvNear[cur]) continue;      // shared space: the nearer PART covers whole (the 2D rule)
+        } else if(z-bias>=pvZbuf[i]) continue;        // something nearer is already there
         pvZbuf[i]=z-bias; pvIdBuf[i]=pid; const q=i*3; pvNrm[q]=qnx; pvNrm[q+1]=qny; pvNrm[q+2]=qnz;
         const p=i<<2; px[p]=R; px[p+1]=G; px[p+2]=B; px[p+3]=255;
       } }
@@ -2482,7 +2565,9 @@ function renderPreview(o){
     pvYaw=pvDrag[2]+(e.clientX-pvDrag[0])*0.01;
     pvPitch=Math.max(pvPlate?0.05:-1.45,Math.min(1.45,pvDrag[3]+(e.clientY-pvDrag[1])*0.01)); renderPreview(); });   // plate shown: stay at/above it; hidden: orbit under to see the underside
   window.addEventListener("mouseup",()=>{ if(pvDrag&&pvDrag.pan) pv.style.cursor=""; pvDrag=null; });
-  pv.addEventListener("wheel",e=>{ e.preventDefault(); pvZoom=Math.max(0.25,Math.min(6,pvZoom*Math.exp(-e.deltaY*0.0012))); renderPreview(); },{passive:false});
+  /* The wheel range widened when the base stopped being the fit: pvBase is now the 2D view's own
+     scale at whatever zoom the plan was at, so the wheel must be able to reach well past it both ways. */
+  pv.addEventListener("wheel",e=>{ e.preventDefault(); pvZoom=Math.max(0.05,Math.min(20,pvZoom*Math.exp(-e.deltaY*0.0012))); renderPreview(); },{passive:false});
   window.addEventListener("resize",()=>{ draw(); if(pvOn){ sizePvToCv(); pvBounds(); renderPreview(); } });   // re-fit the board canvas; keep the overlay glued to it
 })();
 
@@ -3463,11 +3548,12 @@ $("bView3D").onclick=()=>{
   view3D=!view3D; pvOn=view3D;
   $("bView3D").classList.toggle("on", view3D);
   closeMenus(); hover=null;
+  if(view3D) sizePvToCv();                 /* measure the 2D canvas while it is still on screen */
   $("cv").style.display = view3D ? "none" : "";
   $("pv").style.display = view3D ? "" : "none";
   if(view3D){
     setTool("select");
-    sizePvToCv(); syncView3D(true);        /* built and framed: the view is being opened */
+    syncView3D(true);                      /* built and framed: the view is being opened */
     say("");
   } else { say(""); draw(); }
 };
