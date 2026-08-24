@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-24.193 -->
+<!-- SANGALA_VERSION: 2026-08-24.194 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -544,11 +544,11 @@
          new button on the Part flyout. The Parts section above is the DESIGN's bill of materials;
          this is the collection it is being built from. Same disclosure control, same marks. -->
     <div id="libpanel" style="margin-top:.8rem;border-top:1px solid #d8c4a0;padding-top:.6rem;display:none">
-      <h2 class="marker" id="libhead" title="Hide the library"
+      <h2 class="marker" id="libhead" title="Show the library"
           style="margin-top:0;cursor:pointer;user-select:none">
-        <span id="libtog" style="color:#8a7350;font-size:.8rem;margin-right:.3rem">&#9662;</span>Library<!--
+        <span id="libtog" style="color:#8a7350;font-size:.8rem;margin-right:.3rem">&#9656;</span>Library<!--
      --><span id="libcount" style="font-family:inherit;font-size:.82rem;color:#8a7350"></span></h2>
-      <div id="libbody">
+      <div id="libbody" style="display:none">
         <div class="hint" id="libnote" style="margin-top:0"></div>
         <table class="bom" id="libtable"><tbody></tbody></table>
       </div>
@@ -6233,7 +6233,12 @@ const libColorOf = g => {
   if(g.id in libColor) return libColor[g.id];
   return COLORS.findIndex(x=>x.code===g.colors[0].code);   /* -1 if the library's color is not in the palette */
 };
-let libOpen = true;                      /* opened when a library is loaded: the point is to be seen */
+/* THE LIBRARY STARTS FOLDED, like Parts above it (Glen, 2026-08-24: "open the app with the
+   library closed"). It is a tall catalog consulted now and then, and left open it pushes
+   everything below it down the control panel. A library the designer OPENS by hand still
+   unfolds - see loadParts - because then being seen is the point; one that merely arrives with
+   a project does not. */
+let libOpen = false;
 /* THE LIBRARY AND THE PARTS LIST ANSWER DIFFERENT QUESTIONS, and Glen drew the line (2026-08-17):
    "the library is what can be used in the design space for a specific project. the parts list is the
    list of parts on the workspace. the parts list can be used to order the parts to build the physical
@@ -6500,7 +6505,7 @@ function loadParts(lib, fileName, quiet){
      shape; "14 already offered" is a fact about the MENU, not about the collection. */
   (lib.parts||[]).forEach(p=>{ if(!libParts.some(q=>q.id===p.id && q.colorCode===p.colorCode))
                                  libParts.push(p); });
-  libOpen = true;
+  if(!quiet) libOpen = true;   /* opened BY HAND: the point is to be seen. Arriving with a project, it stays folded */
   drawLibrary();
   if(quiet) return;
   say('Library "'+name+'" loaded: '+added.length+" part"+(added.length===1?"":"s")+" added to the menu"
