@@ -1,0 +1,309 @@
+{
+ "sangala": "library",
+ "version": 1,
+ "name": "Crane",
+ "parts": [
+  {
+   "id": "4589",
+   "name": "Cone 1 x 1",
+   "kind": "cone",
+   "w": 1,
+   "d": 1,
+   "h": 3,
+   "shape": "cone"
+  },
+  {
+   "id": "3665",
+   "name": "Slope Brick 45 2 x 1 Inverted without Inner Stopper Ring",
+   "kind": "invslope",
+   "w": 1,
+   "d": 1,
+   "h": 3,
+   "shape": "invslope",
+   "geometry": "3665a"
+  },
+  {
+   "id": "3623",
+   "name": "Plate 1 x 3",
+   "kind": "plate",
+   "w": 3,
+   "d": 1,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "11211",
+   "name": "Brick 1 x 2 with Two Studs on One Side",
+   "kind": "brick",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "rect"
+  },
+  {
+   "id": "3040",
+   "name": "Slope Brick 45 2 x 1",
+   "kind": "slope",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "slope",
+   "geometry": "3040b"
+  },
+  {
+   "id": "4286",
+   "name": "Slope Brick 33 3 x 1",
+   "kind": "slope",
+   "w": 3,
+   "d": 1,
+   "h": 3,
+   "shape": "slope"
+  },
+  {
+   "id": "3040",
+   "name": "Slope Brick 45 2 x 1",
+   "kind": "slope",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "slope",
+   "geometry": "3040b"
+  },
+  {
+   "id": "87087",
+   "name": "Brick 1 x 1 with Stud on 1 Side",
+   "kind": "brick",
+   "w": 1,
+   "d": 1,
+   "h": 3,
+   "shape": "rect"
+  },
+  {
+   "id": "11211",
+   "name": "Brick 1 x 2 with Two Studs on One Side",
+   "kind": "brick",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "rect"
+  },
+  {
+   "id": "52107",
+   "name": "Brick 1 x 2 with Studs on Sides",
+   "kind": "brick",
+   "w": 2,
+   "d": 1,
+   "h": 3,
+   "shape": "rect"
+  },
+  {
+   "id": "3020",
+   "name": "Plate 2 x 4",
+   "kind": "plate",
+   "w": 4,
+   "d": 2,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3001",
+   "name": "Brick 2 x 4",
+   "kind": "brick",
+   "w": 4,
+   "d": 2,
+   "h": 3,
+   "shape": "rect"
+  },
+  {
+   "id": "3710",
+   "name": "Plate 1 x 4",
+   "kind": "plate",
+   "w": 4,
+   "d": 1,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3010",
+   "name": "Brick 1 x 4",
+   "kind": "brick",
+   "w": 4,
+   "d": 1,
+   "h": 3,
+   "shape": "rect"
+  },
+  {
+   "id": "2453b",
+   "name": "Brick 1 x 1 x 5 with Solid Stud",
+   "kind": "brick",
+   "w": 1,
+   "d": 1,
+   "h": 15,
+   "shape": "rect"
+  },
+  {
+   "id": "4073",
+   "name": "Plate 1 x 1 Round",
+   "kind": "round",
+   "w": 1,
+   "d": 1,
+   "h": 1,
+   "shape": "round",
+   "geometry": "6141"
+  },
+  {
+   "id": "2434",
+   "name": "Brick 2 x 4 x 2 with Studs on Sides",
+   "kind": "brick",
+   "w": 4,
+   "d": 2,
+   "h": 6,
+   "shape": "rect",
+   "side": [
+    [
+     3.5,
+     1.25
+    ],
+    [
+     2.5,
+     1.25
+    ],
+    [
+     1.5,
+     1.25
+    ],
+    [
+     0.5,
+     1.25
+    ],
+    [
+     3.5,
+     3.75
+    ],
+    [
+     2.5,
+     3.75
+    ],
+    [
+     1.5,
+     3.75
+    ],
+    [
+     0.5,
+     3.75
+    ]
+   ]
+  },
+  {
+   "id": "15573",
+   "name": "Plate 1 x 2 with Groove with 1 Centre Stud, without Understud",
+   "kind": "plate",
+   "w": 2,
+   "d": 1,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "6069",
+   "name": "Wedge 4 x 4 Triple",
+   "kind": "wedge",
+   "w": 4,
+   "d": 4,
+   "h": 3,
+   "shape": "wedge",
+   "top": [
+    [
+     2.5,
+     0.5
+    ],
+    [
+     1.5,
+     0.5
+    ]
+   ]
+  },
+  {
+   "id": "48933",
+   "name": "Wedge 4 x 4 Triple with Stud Notches",
+   "kind": "wedge",
+   "w": 4,
+   "d": 4,
+   "h": 3,
+   "shape": "wedge",
+   "top": [
+    [
+     2.5,
+     0.5
+    ],
+    [
+     1.5,
+     0.5
+    ]
+   ]
+  },
+  {
+   "id": "43712",
+   "name": "Wedge 6 x 4 Triple Curved",
+   "kind": "wedge",
+   "w": 4,
+   "d": 6,
+   "h": 3,
+   "shape": "wedge",
+   "top": [
+    [
+     2.5,
+     0.5
+    ],
+    [
+     2.5,
+     1.5
+    ],
+    [
+     1.5,
+     0.5
+    ],
+    [
+     1.5,
+     1.5
+    ]
+   ]
+  },
+  {
+   "id": "14716",
+   "name": "Brick 1 x 1 x 3",
+   "kind": "brick",
+   "w": 1,
+   "d": 1,
+   "h": 9,
+   "shape": "rect"
+  },
+  {
+   "id": "92438",
+   "name": "Plate 8 x 16",
+   "kind": "plate",
+   "w": 16,
+   "d": 8,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3039",
+   "name": "Slope Brick 45 2 x 2",
+   "kind": "slope",
+   "w": 2,
+   "d": 2,
+   "h": 3,
+   "shape": "slope",
+   "top": [
+    [
+     0.5,
+     0.5
+    ],
+    [
+     0.5,
+     1.5
+    ]
+   ]
+  }
+ ]
+}

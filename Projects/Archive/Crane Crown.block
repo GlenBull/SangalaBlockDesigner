@@ -1,0 +1,57 @@
+{
+ "sangala": "block",
+ "version": 1,
+ "project": "",
+ "stud": 8,
+ "plate": 3.2,
+ "mode": "standing",
+ "pageSize": "baseplate",
+ "frameScale": 1,
+ "placeX": 0,
+ "placeY": 0,
+ "guide": [],
+ "libraries": [
+  "Crane"
+ ],
+ "bricks": [
+  {
+   "id": "4589",
+   "name": "Cone 1 x 1",
+   "w": 1,
+   "d": 1,
+   "h": 3,
+   "shape": "cone",
+   "color": 14,
+   "col": 14,
+   "row": 23,
+   "base": 0,
+   "flip": false
+  },
+  {
+   "id": "3665",
+   "name": "Slope Brick 45 2 x 1 Inverted without Inner Stopper Ring",
+   "w": 1,
+   "d": 2,
+   "h": 3,
+   "shape": "invslope",
+   "color": 14,
+   "col": 13,
+   "row": 23,
+   "base": 0,
+   "flip": false
+  },
+  {
+   "id": "3665",
+   "name": "Slope Brick 45 2 x 1 Inverted without Inner Stopper Ring",
+   "w": 1,
+   "d": 2,
+   "h": 3,
+   "shape": "invslope",
+   "color": 14,
+   "col": 15,
+   "row": 23,
+   "base": 0,
+   "flip": true
+  }
+ ]
+}
