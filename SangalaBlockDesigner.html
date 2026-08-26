@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-26.195 -->
+<!-- SANGALA_VERSION: 2026-08-26.196 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -394,8 +394,8 @@
                      font-size:.64rem;letter-spacing:.02em;color:#907c5c">
           Depth
           <span class="spin">
-            <button id="spUp" title="Move this brick half a layer towards you">&#9650;</button>
-            <button id="spDn" title="Move this brick half a layer away from you">&#9660;</button>
+            <button id="spUp" title="Move the selection half a layer towards you">&#9650;</button>
+            <button id="spDn" title="Move the selection half a layer away from you">&#9660;</button>
           </span>
         </span>
         <!-- MINI 3D VIEWER, HARD RIGHT, pushed there by the auto margin rather than by a spacer, so
@@ -3510,17 +3510,23 @@ $("tRot").onclick   =()=>{
    Hidden with the whole block when nothing is selected, and in relief mode, where a half step has
    no meaning because the layers are plates. */
 function syncHalf(){ const b=selNow();
-  const show = !!b && mode==="standing";
+  const show = (!!b || selMulti.length>0) && mode==="standing";
   $("selLayer").style.display = show ? "flex" : "none";
   /* No margin to hand over: the auto margin sits on the pair, which stays whether or not the
      spinner inside it does, so the button cannot fall back to the left of the row. */
 }
 function jogHalf(dir){
   if(mode!=="standing"){ say("Half Step belongs to a standing figure, where layers are studs deep."); return; }
-  const b = selNow();
-  if(b){
-    const nd = depthOf(b) + dir, fl = Math.floor(nd);
-    b.base = fl; b.half = (nd - fl) ? 0.5 : 0;
+  /* THE WHOLE SELECTION MOVES BY THE SAME HALF LAYER (Glen, 2026-08-26, testing the group paste
+     live with Jo Watts: "there doesn't appear to be a depth control for grouped objects"). A leg
+     is placed in depth as a leg: every member shifts together, so their relative depths cannot
+     shear. One brick is a set of one, exactly as it was. */
+  const set = selectedBricks();
+  if(set.length){
+    set.forEach(b=>{
+      const nd = depthOf(b) + dir, fl = Math.floor(nd);
+      b.base = fl; b.half = (nd - fl) ? 0.5 : 0;
+    });
     commit(); drawSelection();
   }
   syncHalf(); draw();
@@ -4143,9 +4149,11 @@ function syncGroup(){
 function drawSelection(){
   const on = !!selBrick && bricks.indexOf(selBrick)>=0;
   syncFace(); syncFlip(); syncRot(); syncHalf(); syncGroup();   /* the five follow the selection */
-  /* A BUNDLE READS AS A COUNT. With several bricks selected there is no one part to name, and no one
-     answer for Depth, Flip or Rotate either - so those controls go dark, which is Studio's behaviour
-     for a multi-selection. Jogging a whole group's depth is its own decision, not part of the port. */
+  /* A BUNDLE READS AS A COUNT. With several bricks selected there is no one part to name, and no
+     one answer for Flip or Rotate - those stay dark, Studio's behaviour for a multi-selection.
+     DEPTH is the exception, decided 2026-08-26 (Glen, testing the group paste live with Jo Watts):
+     the half-layer jog serves the whole selection, every member shifting together, because a leg
+     is placed in depth as a leg. syncHalf above already ran, so the control is showing. */
   if(selMulti.length){
     /* THE NAME IS THE READING when there is one - "wing", not "Group of 4 bricks". The count is what
        the panel falls back to while the group is still nameless, and the whole reading is the button:
