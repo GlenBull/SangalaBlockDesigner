@@ -1,0 +1,169 @@
+{
+ "sangala": "parts",
+ "version": 1,
+ "name": "large_plates",
+ "parts": [
+  {
+   "id": "4477",
+   "name": "Plate 1 x 10",
+   "kind": "plate",
+   "w": 10,
+   "d": 1,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "60479",
+   "name": "Plate 1 x 12",
+   "kind": "plate",
+   "w": 12,
+   "d": 1,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3832",
+   "name": "Plate 2 x 10",
+   "kind": "plate",
+   "w": 10,
+   "d": 2,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "2445",
+   "name": "Plate 2 x 12",
+   "kind": "plate",
+   "w": 12,
+   "d": 2,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3031",
+   "name": "Plate 4 x 4",
+   "kind": "plate",
+   "w": 4,
+   "d": 4,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3032",
+   "name": "Plate 4 x 6",
+   "kind": "plate",
+   "w": 6,
+   "d": 4,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3035",
+   "name": "Plate 4 x 8",
+   "kind": "plate",
+   "w": 8,
+   "d": 4,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3030",
+   "name": "Plate 4 x 10",
+   "kind": "plate",
+   "w": 10,
+   "d": 4,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3029",
+   "name": "Plate 4 x 12",
+   "kind": "plate",
+   "w": 12,
+   "d": 4,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3958",
+   "name": "Plate 6 x 6",
+   "kind": "plate",
+   "w": 6,
+   "d": 6,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3036",
+   "name": "Plate 6 x 8",
+   "kind": "plate",
+   "w": 8,
+   "d": 6,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3033",
+   "name": "Plate 6 x 10",
+   "kind": "plate",
+   "w": 10,
+   "d": 6,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3028",
+   "name": "Plate 6 x 12",
+   "kind": "plate",
+   "w": 12,
+   "d": 6,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3456",
+   "name": "Plate 6 x 14",
+   "kind": "plate",
+   "w": 14,
+   "d": 6,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3027",
+   "name": "Plate 6 x 16",
+   "kind": "plate",
+   "w": 16,
+   "d": 6,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "41539",
+   "name": "Plate 8 x 8",
+   "kind": "plate",
+   "w": 8,
+   "d": 8,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "92438",
+   "name": "Plate 8 x 16",
+   "kind": "plate",
+   "w": 16,
+   "d": 8,
+   "h": 1,
+   "shape": "rect"
+  },
+  {
+   "id": "3867",
+   "name": "Baseplate 16 x 16",
+   "kind": "other",
+   "w": 16,
+   "d": 16,
+   "h": 1,
+   "shape": "rect"
+  }
+ ]
+}

@@ -1,0 +1,22 @@
+# The large plates the Part menu stops short of (it ends at 2 x 8).
+# Asked for by Glen and Jo Watts live on 2026-08-26, sizing the buffalo's body:
+# the widest 12-stud plate LEGO makes is 6 x 12, so a 12 x 9 body is plated in
+# combinations. Rebuild with: python parts_library.py large_plates.txt -o "..\Projects\Large Plates.library"
+4477    # Plate 1 x 10
+60479   # Plate 1 x 12
+3832    # Plate 2 x 10
+2445    # Plate 2 x 12
+3031    # Plate 4 x 4
+3032    # Plate 4 x 6
+3035    # Plate 4 x 8
+3030    # Plate 4 x 10
+3029    # Plate 4 x 12
+3958    # Plate 6 x 6
+3036    # Plate 6 x 8
+3033    # Plate 6 x 10
+3028    # Plate 6 x 12
+3456    # Plate 6 x 14
+3027    # Plate 6 x 16
+41539   # Plate 8 x 8
+92438   # Plate 8 x 16
+3867    # Baseplate 16 x 16
