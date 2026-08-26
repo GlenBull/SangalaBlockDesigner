@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-24.194 -->
+<!-- SANGALA_VERSION: 2026-08-26.195 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -4750,32 +4750,39 @@ window.addEventListener("keydown",(e)=>{
    every other respect - same row, same layer, same colour, same turn, same flip, same quarter turn.
    A twin at the original's own depth is what "another one of these" means; settling it onto whatever
    happens to be under the new column would move it in the one direction hardest to see. */
-let clipBrick=null, clipFrom=null, clipMade=[], pasteN=0;
+let clipSet=[], clipMade=[], pasteN=0;
 const PASTE_STEP=1;                      /* studs to the right per paste - on the grid, and visible */
+/* THE COPY IS THE SELECTION, WHICH MAY BE A GROUP - Studio's copySel has always taken the whole
+   selection, and this port originally took one brick, which is why Ctrl+C on a selected group
+   answered "Select a brick first". A builder who has grouped a leg copies the LEG (Glen,
+   2026-08-26: "If parts are grouped, we need to be able to copy and paste groups"). */
 function copyBrick(){
-  const b=selNow();
-  if(!b){ say("Select a brick first, then Ctrl+C."); return; }
-  clipBrick={p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row, flip:b.flip,
-             base:b.base, turn:b.turn, rot:b.rot, half:b.half};
-  /* THE CLIPBOARD REMEMBERS THE BRICK, NOT JUST ITS READING - and the paste follows it. The record
-     above is a snapshot, and a snapshot is wrong for the way this application is actually used:
-     Glen moves a part OFF the figure to reach the one underneath, copies that one, and moves it
-     back. Copied where it had been dragged to, the part is mounted on nothing, so the mirror fell
-     back to the midline and the copy took the position it had had out there too. Replayed against
-     his own file the paste landed at column 18, row 37, layer -2 - exactly the brick he saved, and
-     nine columns and ten rows from the body (2026-08-19).
-     So `clipFrom` holds the brick itself. If it is still in the design the paste reads its CURRENT
+  const set=selectedBricks();
+  if(!set.length){ say("Select a brick first, then Ctrl+C."); return; }
+  clipSet=set.map(b=>({from:b,
+    snap:{p:{...b.p}, colorIdx:b.colorIdx, col:b.col, row:b.row, flip:b.flip,
+          base:b.base, turn:b.turn, rot:b.rot, half:b.half,
+          gpath:gpathOf(b).slice(), gnames:gnamesOf(b).slice()}}));
+  /* THE CLIPBOARD REMEMBERS THE BRICKS, NOT JUST THEIR READINGS - and the paste follows them. The
+     snapshot alone is wrong for the way this application is actually used: Glen moves a part OFF
+     the figure to reach the one underneath, copies that one, and moves it back. Copied where it
+     had been dragged to, the part is mounted on nothing, so the mirror fell back to the midline
+     and the copy took the position it had had out there too. Replayed against his own file the
+     paste landed at column 18, row 37, layer -2 - exactly the brick he saved, and nine columns and
+     ten rows from the body (2026-08-19).
+     So each entry holds the brick itself. If it is still in the design the paste reads its CURRENT
      column, row and layer and mirrors about what it is mounted on NOW; only a brick that has since
      been deleted falls back to the snapshot. `clipMade` lists the copies this run has put down, so
      that a body brick pasted twice cannot mirror about its own first copy and march backwards
      through the figure - which is what taking the mirror at copy time was there to prevent. */
-  clipFrom = b; clipMade = [];
+  clipMade = [];
   pasteN=0;
   /* THE STATUS LINE SPEAKS HERE AND NOT ON THE PASTE, which is the rule this application already
      follows: it says what the designer cannot see. Copying changes nothing on the plate, so without a
      word there is no way to know it worked; a paste puts a brick down, selected and outlined, with the
      Selected block naming it - which says it better than a sentence would. */
-  say("Copied the "+b.p.name+" - Ctrl+V pastes a copy.");
+  say(set.length===1 ? "Copied the "+set[0].p.name+" - Ctrl+V pastes a copy."
+                     : "Copied "+set.length+" bricks - Ctrl+V pastes a copy.");
 }
 /* THE COPY IS MIRRORED ABOUT WHAT IT IS MOUNTED ON - not about the midline, and not settled against
    the whole figure. Two attempts stand behind this line and each was measured wrong on Glen's own
@@ -4832,13 +4839,8 @@ function mirrorHost(b, skip){
 }
 /* The plane to reflect about, doubled - so a span [r,f] maps to [m-f, m-r] with no halving. */
 const mirrorPlane = (b, skip) => { const h = mirrorHost(b, skip); return h ? rearB(h)+frontB(h) : 0; };
-function faceToViewer(b, mirror){
-  if(mode!=="standing") return;
-  /* A PART ALREADY ON THE BUILDER'S SIDE IS AN EXACT TWIN and is not touched - that is the near-side
-     behavior, which works and which Glen asked to have matched, not changed. */
+function mirrorBrick(b, m){
   const rear = rearB(b), front = frontB(b);
-  if((rear+front)/2 * (viewBack ? -1 : 1) >= 0) return;   /* on this side, or across the middle */
-  const m = mirror===undefined ? mirrorPlane(b) : mirror;
   if(faced(b)) b.turn = viewBack ? "back" : "face";       /* tipped: its studs face the builder */
   /* THE HALF STEP HAS TO COME BACK OUT. The reflected surface is a DEPTH, and `base` is not a depth
      - depthOf adds the half step to it - so writing the surface straight into base counted the half
@@ -4847,19 +4849,57 @@ function faceToViewer(b, mirror){
      part it went wrong on was the eye - the one piece Glen has never been able to get to sit down. */
   b.base = (facedAway(b) ? m-rear : m-front) - halfOf(b);
 }
+function faceToViewer(b, mirror){
+  if(mode!=="standing") return;
+  /* A PART ALREADY ON THE BUILDER'S SIDE IS AN EXACT TWIN and is not touched - that is the near-side
+     behavior, which works and which Glen asked to have matched, not changed. */
+  const rear = rearB(b), front = frontB(b);
+  if((rear+front)/2 * (viewBack ? -1 : 1) >= 0) return;   /* on this side, or across the middle */
+  mirrorBrick(b, mirror===undefined ? mirrorPlane(b) : mirror);
+}
+/* A SET MIRRORS AS ONE PIECE OR NOT AT ALL. Deciding member by member could bring half a leg round
+   and leave the rest behind, and mirroring each member about its own host could reflect them about
+   different planes and tear the assembly. So: one test, on the set's own span; one plane, named by
+   the first member with a host OUTSIDE the set (detail rides its body); and a set mounted on
+   nothing mirrors about the midline - the crane's two legs, already exact midline twins, are the
+   case that rule is read from. A single brick keeps the behavior measured on the crane, exactly. */
+function faceSetToViewer(nbs, srcs){
+  if(mode!=="standing") return;
+  if(nbs.length===1){ faceToViewer(nbs[0], mirrorPlane(srcs[0], clipMade)); return; }
+  const rear=Math.min.apply(null,nbs.map(rearB)), front=Math.max.apply(null,nbs.map(frontB));
+  if((rear+front)/2 * (viewBack ? -1 : 1) >= 0) return;   /* the whole set is on this side */
+  let m=0;
+  for(const s of srcs){
+    const h=mirrorHost(s, clipMade.concat(srcs.filter(x=>x!==s)));
+    if(h){ m=rearB(h)+frontB(h); break; }
+  }
+  nbs.forEach(nb=>mirrorBrick(nb, m));
+}
 function pasteBrick(){
-  if(!clipBrick){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
+  if(!clipSet.length){ say("Nothing copied yet - select a brick and press Ctrl+C."); return; }
   /* ONE STUD TO THE RIGHT AS SEEN, which is a column LOWER once you have walked round to the back:
      the workspace mirrors there, so stepping the column up marches the copy off to the left, away
      from the hand that pasted it. Every other thing this application draws is presented from where
      the builder is standing, and a copy that fans out backwards is the same mistake in a new place. */
-  const src = (clipFrom && bricks.indexOf(clipFrom)>=0) ? clipFrom : clipBrick;
+  const srcs = clipSet.map(c => (c.from && bricks.indexOf(c.from)>=0) ? c.from : c.snap);
   const step = (viewBack ? -PASTE_STEP : PASTE_STEP) * (++pasteN);
-  const nb={p:{...src.p}, colorIdx:src.colorIdx, col:src.col+step, row:src.row, flip:src.flip,
-            base:src.base, turn:src.turn, rot:src.rot, half:src.half};
-  faceToViewer(nb, mirrorPlane(src, clipMade));   /* brought to the side the builder is standing on */
-  bricks.push(nb); clipMade.push(nb);
-  selBrick=nb; say("");                    /* cleared, as placing a brick clears it - the copy has been used */
+  /* FRESH GROUP IDS, ONE REMAP ACROSS THE SET, so a copied group stays bound - as its OWN group,
+     not a new limb of the original's. Studio's pasteClip and this file's own .mosaic loader both
+     answer it with the same gmap; the names ride along, since the copy of a Leg is a leg. */
+  const gmap={};
+  const nbs = srcs.map(src=>{
+    const gp=gpathOf(src).map(id=>{ if(!(id in gmap)) gmap[id]=++groupSeq; return gmap[id]; });
+    const gn=gnamesOf(src).slice();
+    return {p:{...src.p}, colorIdx:src.colorIdx, col:src.col+step, row:src.row, flip:src.flip,
+            base:src.base, turn:src.turn, rot:src.rot, half:src.half,
+            group:gp.length?gp[0]:undefined, gpath:gp.length?gp:undefined,
+            gnames:gn.some(x=>x)?gn:undefined};
+  });
+  faceSetToViewer(nbs, srcs);              /* brought to the side the builder is standing on */
+  nbs.forEach(nb=>{ bricks.push(nb); clipMade.push(nb); });
+  if(nbs.length>1){ selMulti=nbs.slice(); selBrick=null; }
+  else { selBrick=nbs[0]; selMulti=[]; }
+  say("");                                 /* cleared, as placing a brick clears it - the copy has been used */
   draw(); commit();                      /* now, not on the usual delay: rapid pastes undo one at a time */
 }
 window.addEventListener("keydown",(e)=>{   // Ctrl-Z undo; Ctrl-Shift-Z or Ctrl-Y redo; Ctrl-C / Ctrl-V copy a brick (Cmd on a Mac)
