@@ -58,7 +58,7 @@ def resolve(design):
         return {"id": design, "name": tidy,
                 "error": "name does not start with a family this parser knows"}
 
-    nums = re.search(r"\b(\d+)\s*x\s*(\d+)(?:\s*x\s*(\d+))?", tidy, re.I)
+    nums = re.search(r"\b(\d+)\s*x\s*(\d+)(?:\s*x\s*(\d+(?:\.\d+)?))?", tidy, re.I)
     if not nums:
         return {"id": design, "name": tidy,
                 "error": "no 'A x B' stud dimensions in the name"}
@@ -70,7 +70,9 @@ def resolve(design):
     else:
         d, w = a, b
     if nums.group(3):
-        h = 3 * int(nums.group(3))   # third number is height in bricks
+        # Fractional on purpose: LDraw writes a two-plate slope as "x 0.667" of a brick,
+        # so 3x the value is the height in PLATES. The leading digit alone gave zero.
+        h = max(1, int(round(3 * float(nums.group(3)))))
 
     out = {"id": design, "name": tidy, "kind": kind,
            "w": w, "d": d, "h": h, "shape": shape}

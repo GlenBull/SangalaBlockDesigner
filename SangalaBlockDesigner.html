@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-27.197 -->
+<!-- SANGALA_VERSION: 2026-08-27.198 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -6646,13 +6646,16 @@ function dnParse(name, id){
   let fam=null;
   for(const f of DN_FAMILIES) if(f[0].test(name)){ fam=f; break; }
   if(!fam) return null;
-  const nums=/\b(\d+)\s*x\s*(\d+)(?:\s*x\s*(\d+))?/i.exec(name);
+  /* THE THIRD NUMBER CAN BE FRACTIONAL, and the fraction is the point: LDraw writes a two-plate
+     slope as "x 0.667" of a brick and a four-plate one as "x 1.333", so 3 x the value IS the
+     height in PLATES. Reading only the digits before the point made 0.667 a part zero plates tall. */
+  const nums=/\b(\d+)\s*x\s*(\d+)(?:\s*x\s*(\d+(?:\.\d+)?))?/i.exec(name);
   if(!nums) return null;
   const a=+nums[1], b=+nums[2];
   /* A slope names its run first; every other family names its depth first. */
   const w = (fam[1]==="slope"||fam[1]==="invslope") ? a : b;
   const d = (fam[1]==="slope"||fam[1]==="invslope") ? b : a;
-  const h = nums[3] ? 3*(+nums[3]) : fam[3];
+  const h = nums[3] ? Math.max(1, Math.round(3*(+nums[3]))) : fam[3];
   return {id:id, name:name, kind:fam[1], w:w, d:d, h:h, shape:fam[2]};
 }
 
