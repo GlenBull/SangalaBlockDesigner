@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-26.196 -->
+<!-- SANGALA_VERSION: 2026-08-27.197 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -549,6 +549,22 @@
         <span id="libtog" style="color:#8a7350;font-size:.8rem;margin-right:.3rem">&#9656;</span>Library<!--
      --><span id="libcount" style="font-family:inherit;font-size:.82rem;color:#8a7350"></span></h2>
       <div id="libbody" style="display:none">
+        <!-- ADD A PART BY ITS LEGO DESIGN NUMBER (Glen, 2026-08-27). His workflow: a student finds a
+             brick on LEGO's Pick a Brick, reads its design number off the page, and types it here to
+             put that brick in their own library - so the library is the parts THIS project needs
+             rather than a fixed menu, and the same numbers order the parts to build it for real.
+             The number is resolved against the LDraw parts folder beside the program, which already
+             supplies the geometry, so nothing is typed from memory and nothing is guessed. -->
+        <div id="dnrow" style="display:none;margin-bottom:.5rem">
+          <label for="dnum" style="font-size:.82rem;color:#8a7350">Design Number</label>
+          <div style="display:flex;gap:.3rem;margin-top:.2rem">
+            <input id="dnum" type="text" inputmode="numeric" autocomplete="off" maxlength="12"
+                   placeholder="3001" style="flex:1;min-width:0"
+                   title="The design number LEGO molds into the part, shown on Pick a Brick">
+            <button id="dnAdd" title="Look the number up in the LDraw parts folder and add that part to the library">Add</button>
+          </div>
+          <div class="hint" id="dnnote" style="margin-top:.25rem"></div>
+        </div>
         <div class="hint" id="libnote" style="margin-top:0"></div>
         <table class="bom" id="libtable"><tbody></tbody></table>
       </div>
@@ -6000,6 +6016,10 @@ $("saveSnaps").onclick=async()=>{
     const r=await fetch("/status",{cache:"no-store"});
     const j=await r.json();
     bridgeOK = j && j.sangala==="blocks";
+    /* THE PARTS FOLDER IS ASKED ABOUT SEPARATELY from the renderer. A snapshot needs both; looking a
+       design number up needs only the parts, so a machine without LDView can still build a library. */
+    ldrawOK = !!(j && j.sangala==="blocks" && j.ldraw);
+    if(ldrawOK) drawLibrary();            /* the panel offers the number box once it can answer */
     if(bridgeOK && !(j.ldview && j.ldraw)){
       bridgeOK=false;
       $("bSnap").title="Snapshot needs LDView and the LDraw parts folder beside the program.";
@@ -6394,7 +6414,11 @@ function drawLibrary(){
     ? " · "+groups.length+(groups.length===1?" part":" parts") : "";
   $("libnote").textContent = libraries.length
     ? (libraries.length===1 ? libraries[0] : libraries.join(", ")) : "";
-  $("libpanel").style.display = groups.length ? "" : "none";
+  /* THE PANEL IS ALSO THE WAY IN. It used to appear only once a library had been loaded, which left
+     the design-number box unreachable for a student who has no library yet - the very student it is
+     for. With no parts folder behind the page nothing here can be answered, and it stays hidden. */
+  $("libpanel").style.display = (groups.length || ldrawOK) ? "" : "none";
+  $("dnrow").style.display = ldrawOK ? "" : "none";
   $("libbody").style.display = libOpen ? "" : "none";
   $("libtog").innerHTML = libOpen ? "&#9662;" : "&#9656;";
   $("libhead").title = libOpen ? "Hide the library" : "Show the library";
@@ -6560,6 +6584,114 @@ function loadParts(lib, fileName, quiet){
       + (already.length ? ", "+already.length+" already offered" : "")
       + ". Pick one from the Part tool.");
 }
+/* ---------- A PART BY ITS LEGO DESIGN NUMBER -----------------------------------------------------
+   Glen's workflow (2026-08-27): the student finds a brick on LEGO's Pick a Brick, types its design
+   number here, and that brick joins THEIR library - which they can save and reopen. So a library is
+   assembled for the project in hand instead of being handed down whole.
+
+   NOTHING IS TYPED FROM MEMORY. The number is resolved against the LDraw parts folder that already
+   sits beside the program and already answers /part for the geometry: the part file's FIRST LINE is
+   its declared name, and the name carries the family and the stud dimensions. Tested against every
+   part in Crane.library and Large Plates.library - 39 numbers, 38 reproduced by hand exactly.
+
+   TWO THINGS THE TEST TAUGHT, both real:
+     * A RETIRED NUMBER ANSWERS "~Moved to 3040b" and must be followed - and the retired number is
+       exactly the one an older parts list or an older student note will carry.
+     * NAME ORDER DIFFERS BY FAMILY. "Plate 2 x 12" is depth 2, width 12; but a slope's first number
+       is its RUN, which these libraries store as the width. Getting this wrong turns a 3 x 1 slope
+       into a 1 x 3 one, which looks right in the panel and wrong on the workspace.
+
+   AND A SHAPE THIS APPLICATION CANNOT MAKE IS REFUSED BY NAME, never approximated. Of the 24,591
+   parts in the folder, 5,203 parse; the rest are minifigures, stickers, Technic, Duplo, wheels and
+   animals. Offering a box in place of a horse would be a wrong part in a real LEGO order. */
+let ldrawOK = false;                     /* the parts folder is behind the bridge, so lookups work */
+const DN_LIB = "Added by Design Number"; /* one source name however many parts are added this way */
+
+/* Name -> family, and how tall the family is in PLATES (a plate 1, a brick 3), which is the unit the
+   .library files already use. A trailing "x N" in the name overrides it and is counted in bricks. */
+const DN_FAMILIES = [
+  [/^Baseplate\b/i,                    "other",    "rect",     1],
+  [/^Plate\b.*\bRound\b/i,             "round",    "round",    1],
+  [/^Plate\b/i,                        "plate",    "rect",     1],
+  [/^Tile\b/i,                         "tile",     "rect",     1],
+  [/^Slope Brick\b.*\bInverted\b/i,    "invslope", "invslope", 3],
+  [/^Slope Brick\b/i,                  "slope",    "slope",    3],
+  [/^Wedge\b/i,                        "wedge",    "wedge",    3],
+  [/^Cone\b/i,                         "cone",     "cone",     3],
+  [/^Brick\b.*\bRound\b/i,             "round",    "round",    3],
+  [/^Brick\b/i,                        "brick",    "rect",     3]
+];
+
+/* The declared name of a part file, following a ~Moved to redirect to the number LEGO uses now. */
+async function dnName(id){
+  for(let hop=0; hop<5; hop++){
+    let j=null;
+    try{ const r=await fetch("/part?f="+encodeURIComponent(id)); if(r.ok) j=await r.json(); }
+    catch(e){ return {error:"the bridge did not answer"}; }
+    if(!j || !j.files) return {error:"no part "+id+" in the LDraw parts folder"};
+    const text=j.files[j.name];
+    if(!text) return {error:"no part "+id+" in the LDraw parts folder"};
+    const first=(text.split("\n")[0]||"").trim();
+    const name=(first[0]==="0" ? first.slice(1) : first).trim();
+    const moved=/^~Moved to (\S+)/.exec(name);
+    if(!moved) return {name:name.replace(/\s+/g," ").trim(), id:id};
+    id=moved[1];                          /* retired number: follow it and ask again */
+  }
+  return {error:"that number redirects too many times to follow"};
+}
+
+/* A declared name -> the fields a .library entry carries. Null when this application has no shape
+   for it, which is said by name rather than approximated. */
+function dnParse(name, id){
+  let fam=null;
+  for(const f of DN_FAMILIES) if(f[0].test(name)){ fam=f; break; }
+  if(!fam) return null;
+  const nums=/\b(\d+)\s*x\s*(\d+)(?:\s*x\s*(\d+))?/i.exec(name);
+  if(!nums) return null;
+  const a=+nums[1], b=+nums[2];
+  /* A slope names its run first; every other family names its depth first. */
+  const w = (fam[1]==="slope"||fam[1]==="invslope") ? a : b;
+  const d = (fam[1]==="slope"||fam[1]==="invslope") ? b : a;
+  const h = nums[3] ? 3*(+nums[3]) : fam[3];
+  return {id:id, name:name, kind:fam[1], w:w, d:d, h:h, shape:fam[2]};
+}
+
+async function addByDesignNumber(){
+  const raw=($("dnum").value||"").trim().toLowerCase().replace(/\.dat$/,"");
+  const note=$("dnnote");
+  if(!raw){ note.textContent="Type the design number printed on the part's Pick a Brick page."; return; }
+  if(!/^[0-9][0-9a-z]{0,11}$/.test(raw)){ note.textContent='"'+raw+'" is not a design number.'; return; }
+  $("dnAdd").disabled=true; note.textContent="Looking up "+raw+"\u2026";
+  try{
+    const got=await dnName(raw);
+    if(got.error){ note.textContent=got.error+"."; return; }
+    const part=dnParse(got.name, got.id);
+    if(!part){
+      note.textContent=raw+' is "'+got.name+'" \u2014 Sangala Blocks has no shape for that part.';
+      return;
+    }
+    const moved = got.id!==raw ? " (now "+got.id+")" : "";
+    /* A PART THE MENU ALREADY OFFERS STILL JOINS THE LIBRARY. loadParts settled this for files and it
+       holds here: the library is what the student HAS, so a 1 x 1 brick they looked up belongs in it
+       whether or not the Part tool already knew that shape. Only the menu entry is left alone. */
+    const known = !!(SIZES[part.kind] && SIZES[part.kind][part.d+"x"+part.w]);
+    const held  = libParts.some(q=>q.id===part.id);
+    loadParts({name:DN_LIB, parts:[part]}, null, true);
+    libOpen=true; drawLibrary();
+    /* SAY WHETHER IT CAN BE ORDERED. The Pick a Brick CSV needs an element ID, which names shape AND
+       color; a part the table cannot supply is left out of the order and named. Better to learn that
+       here, while the part is being chosen, than at the end of a build. */
+    const orderable=Object.keys(ELEMENT_ID).some(k=>k.slice(0,k.indexOf("|"))===part.id);
+    note.textContent = part.name + moved
+      + (held ? " is already in the library." : known ? " added — the Part tool already offered that size." : " added.")
+      + (orderable ? "" : " It is not in the element table, so a Pick a Brick order will list it as missing.");
+    say(part.name+" added to the library from design number "+raw+". Pick it from the Part tool.");
+    $("dnum").value="";
+  } finally { $("dnAdd").disabled=false; }
+}
+$("dnAdd").onclick=addByDesignNumber;
+$("dnum").onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); addByDesignNumber(); } };
+
 $("fOpen").onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
     /* A LIBRARY IS NOT A PROJECT, so it is routed BEFORE the file names anything. Naming was done
