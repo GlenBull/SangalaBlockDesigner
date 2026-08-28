@@ -292,6 +292,14 @@ namespace SangalaBlocksApp
                 else if (path == "/status") Respond(ns, "application/json", Status());
                 else if (method == "POST" && path == "/snapshot") DoSnapshot(ns, body, query);
                 else if (method == "GET" && path == "/part") ServePart(ns, query);
+                else if (method == "GET" && path == "/quit")
+                {
+                    // Closing the program is a thing the PAGE may ask for, and the updater
+                    // too - it currently has to taskkill, because there was no way to ask.
+                    // Loopback only, like every other route here.
+                    Respond(ns, "text/plain", "closing");
+                    TrayContext.QuitNow(null);
+                }
                 else Respond(ns, "text/plain", "not found", "404 Not Found");
             }
         }
@@ -372,7 +380,8 @@ namespace SangalaBlocksApp
                 string name = queue.Dequeue();
                 string key = PartKey(name);
                 if (files.ContainsKey(key)) continue;
-                string file = FindPartFile(ldrawDir, name);
+                string file = FindPartFile(ldrawDir, name)
+                               ?? FetchPartFile(ldrawDir, name);
                 if (file == null) { files[key] = ""; continue; }   // sent empty, so the page can say what is missing
                 string text = File.ReadAllText(file);
                 files[key] = text;
@@ -436,6 +445,69 @@ namespace SangalaBlocksApp
             return null;
         }
 
+        // A PART THAT IS NOT ON THIS MACHINE IS FETCHED ONCE AND KEPT.
+        //
+        // Sangala Blocks draws every part from its real LDraw geometry, so a part the folder does
+        // not hold cannot be drawn at all - the page falls back to a hand-drawn stand-in, which
+        // looks like a rendering fault and is not one. Before 2026-08-28 only 39 part files
+        // travelled with the application, so on any machine but the one that assembled the folder
+        // a curved bow came out a plain box. The parts now travel in the repository, but a folder
+        // that was copied BEFORE they did is only updated in its page and its program - the parts
+        // do not arrive that way. So the program fetches what it is missing, from the same
+        // repository the updater already uses, and writes it into the local folder so it is asked
+        // for only once.
+        //
+        // Offline this simply does nothing and the behavior is what it was: no part, stand-in
+        // shape. A file is a few kilobytes, which matters where bandwidth is scarce.
+        static readonly HashSet<string> _noPart = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        const string PARTS_URL =
+            "https://raw.githubusercontent.com/GlenBull/SangalaBlockDesigner/main/LDraw/ldraw/";
+
+        static string FetchPartFile(string ldrawDir, string name)
+        {
+            if (ldrawDir == null || name == null) return null;
+            string n = name.Replace('\\', '/');
+            if (_noPart.Contains(n)) return null;          // asked already, and it was not there
+
+            // The same folders FindPartFile searches, in the same order, so a fetched file lands
+            // where the next lookup will find it without going out again.
+            string[] dirs = { "p/48/", "parts/", "p/", "parts/s/" };
+            foreach (var d in dirs)
+            {
+                if (d == "p/48/" && n.StartsWith("48/", StringComparison.OrdinalIgnoreCase)) continue;
+                string text = HttpGet(PARTS_URL + d + n);
+                if (text == null) continue;
+                try
+                {
+                    string local = Path.Combine(ldrawDir, d.Replace('/', '\\') + n.Replace('/', '\\'));
+                    Directory.CreateDirectory(Path.GetDirectoryName(local));
+                    File.WriteAllText(local, text);
+                    return local;
+                }
+                catch { return null; }                     // read-only folder: draw the stand-in
+            }
+            _noPart.Add(n);
+            return null;
+        }
+
+        static string HttpGet(string url)
+        {
+            try
+            {
+                // .NET Framework still defaults to an older protocol on some machines, and GitHub
+                // refuses it - without this the download fails with nothing to show for it.
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                var req = (HttpWebRequest)WebRequest.Create(url);
+                req.Timeout = 8000;                        // a machine with no internet must not hang the page
+                req.ReadWriteTimeout = 8000;
+                req.UserAgent = "SangalaBlocks";
+                using (var resp = (HttpWebResponse)req.GetResponse())
+                using (var sr = new StreamReader(resp.GetResponseStream()))
+                    return resp.StatusCode == HttpStatusCode.OK ? sr.ReadToEnd() : null;
+            }
+            catch { return null; }
+        }
+
         static string JsonStr(string s)
         {
             var sb = new StringBuilder("\"");
@@ -479,19 +551,83 @@ namespace SangalaBlocksApp
             public TrayContext(int port)
             {
                 string url = "http://localhost:" + port + "/";
-                var menu = new ContextMenuStrip();
-                menu.Items.Add("Open Sangala Blocks", null, (a, b) => { try { Process.Start(url); } catch { } });
-                menu.Items.Add("Quit Sangala Blocks", null, (a, b) => { _icon.Visible = false; Application.Exit(); });
+                // THE TRAY MENU IS THE NATIVE ContextMenu, NOT ContextMenuStrip (2026-08-28).
+                //
+                // With a ContextMenuStrip the menu appeared and its items DID NOTHING AT ALL. That is
+                // measured, not surmised: the handler was instrumented, and choosing Quit from the tray
+                // never wrote a single line, while the very same handler reached through the /quit route
+                // wrote every line and closed the program. So the click was never arriving.
+                //
+                // A NotifyIcon shows a ContextMenuStrip without making its owner the foreground window,
+                // and the item click is delivered nowhere. NotifyIcon.ContextMenu uses the native popup,
+                // and its handlers run. It is the older API and it is the one that works here.
+                //
+                // THIS is why the bridge could not be closed, why an instance was found alive 35 hours
+                // after being quit - holding its port and locking its own .exe against an update - and
+                // why the updater resorts to taskkill. Every earlier attempt on this fault changed how
+                // the program EXITS, which was never the broken part.
+                var menu = new ContextMenu();
+                menu.MenuItems.Add(new MenuItem("Open Sangala Blocks",
+                                                (a, b) => { try { Process.Start(url); } catch { } }));
+                menu.MenuItems.Add(new MenuItem("Quit Sangala Blocks",
+                                                (a, b) => QuitNow(_icon)));
+                menu.Popup += (a, b) => Log("menu: opened");
                 _icon = new NotifyIcon
                 {
                     Icon = OwnIcon(),
-                    Text = "Sangala Blocks (running)",
+                    Text = "Sangala Blocks (running) " + Process.GetCurrentProcess().Id,
                     Visible = true,
-                    ContextMenuStrip = menu
+                    ContextMenu = menu
                 };
                 _icon.DoubleClick += (a, b) => { try { Process.Start(url); } catch { } };
                 _icon.ShowBalloonTip(4000, "Sangala Blocks", "Running in the tray. Right-click the icon to open or quit.", ToolTipIcon.Info);
             }
+            // QUIT MUST END THE PROGRAM, and it did not.
+            //
+            // The original wrote  _icon.Visible = false; Application.Exit();  which ends the message
+            // loop and NOT the process: an instance was found alive 35 hours after being quit, holding
+            // its port and locking its own .exe against an update. Replacing the exit with
+            // Environment.Exit(0) was not enough either - a probe built the same way (ApplicationContext,
+            // NotifyIcon, Application.Run) died on the spot when it called it, but the real program,
+            // called from a context-menu item, did not.
+            //
+            // So the exit is no longer trusted to be enough. The icon is hidden first (safe, and always
+            // was - it is why Quit LOOKED like it worked), the ordinary exit is attempted, and a watchdog
+            // ends the process outright if the program is still here a moment later. Whatever the menu is
+            // doing to the exit, the watchdog is on its own thread and is not part of it.
+            internal static void QuitNow(NotifyIcon icon)
+            {
+                Log("quit: handler entered");
+                try { if (icon != null) icon.Visible = false; Log("quit: icon hidden"); }
+                catch (Exception e) { Log("quit: hiding threw " + e.GetType().Name); }
+
+                var watchdog = new Thread(() =>
+                {
+                    Thread.Sleep(1200);
+                    Log("quit: still alive - forcing");
+                    try { Process.GetCurrentProcess().Kill(); } catch (Exception e) { Log("quit: kill threw " + e.GetType().Name); }
+                });
+                watchdog.IsBackground = false;
+                watchdog.Start();
+
+                Log("quit: calling Environment.Exit");
+                Environment.Exit(0);
+                Log("quit: Environment.Exit RETURNED");
+            }
+
+            // Temporary, while the quit fault is being pinned down.
+            static void Log(string m)
+            {
+                try
+                {
+                    File.AppendAllText(
+                        Path.Combine(Path.GetTempPath(), "sangala-quit.log"),
+                        DateTime.Now.ToString("HH:mm:ss.fff") + "  " + m + "\r\n");
+                }
+                catch { }
+            }
+
+
             protected override void Dispose(bool disposing)
             {
                 if (disposing && _icon != null) { _icon.Dispose(); _icon = null; }
