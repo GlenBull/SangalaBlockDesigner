@@ -1,9 +1,22 @@
-# The LDraw parts library lives beside the application so it is never lost again
-# (it used to sit in a session scratchpad, which does not survive a thread), but it
-# is 24,591 part files and a 145 MB archive - reference data, not this project's
-# source. Re-fetch with:
+# THE LDRAW PARTS THE APPLICATION CAN DRAW ARE TRACKED ON PURPOSE - do not "clean" them out.
+# Sangala Blocks draws every part from its real LDraw geometry, so a part that is not in this
+# folder cannot be drawn at all: the bridge returns an empty file and the page silently falls back
+# to a hand-drawn stand-in shape. That is exactly what happened before 2026-08-28, when only 39
+# part files were tracked - every primitive was here, but the parts that assemble them were not,
+# so a curved bow came out a plain box on any machine but the one that built the folder.
+#
+# What travels: every part the application can represent, plus the closure of everything those
+# parts reference. 9,582 files. Regenerate the list rather than editing it by hand:
+#     python tools\ship_parts.py > parts-to-ship.txt
+#     git add -f --pathspec-from-file=parts-to-ship.txt
+#
+# Everything ELSE under LDraw stays out - the other 19,000 parts the application has no shape for,
+# and the 145 MB archive. Re-fetch that with:
 #   curl -sL -o LDraw/complete.zip https://library.ldraw.org/library/updates/complete.zip
 LDraw/
+
+# The generated ship list is a build artifact, not source
+parts-to-ship.txt
 
 # Python bytecode from the tools scripts
 __pycache__/
