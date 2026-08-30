@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-28.199 -->
+<!-- SANGALA_VERSION: 2026-08-30.200 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2877,6 +2877,16 @@ function frameToGuideTris(){
 const LDU = 0.4;                       /* mm per LDraw unit: 20 of them to an 8 mm stud */
 const ldrMesh = Object.create(null);   /* part number -> {tris, box} in LDU; null while it loads, false when there is no such part */
 let ldrWaiting = 0;
+/* THE PARTS THAT COULD NOT BE READ, and how many of them have been said. A part the folder does not
+   hold is drawn as the hand-written stand-in, which looks like a brick and is not the part - so on
+   a machine whose LDraw folder is short, a design opens LOOKING built and is silently wrong. That
+   is not hypothetical: the crane opened on a freshly installed laptop on 30 August with its wings
+   drawn as flat slabs, because four of its parts had never been copied there, and nothing on the
+   page said so. LDView warns when it substitutes and LeoCAD tags its placeholder; this is the same
+   courtesy. Counting what has been said keeps one absent part from announcing itself again every
+   time the picture is rebuilt. */
+const ldrAbsent = new Set();
+let ldrSaid = 0;
 const ldrKey = n => (n || "").trim().replace(/\\/g, "/").toLowerCase();
 
 const ldrMul = (M, S) => {             /* M applied AFTER S, both as 9 rotation terms then 3 of translation */
@@ -2940,8 +2950,11 @@ function ldrLoad(id){
   ldrMesh[id] = null; ldrWaiting++;
   fetch("/part?f=" + encodeURIComponent(id))
     .then(r => r.ok ? r.json() : null)
-    .then(j => { ldrMesh[id] = j ? ldrFlatten(j.files, j.name) : false; })
-    .catch(() => { ldrMesh[id] = false; })
+    .then(j => { ldrMesh[id] = j ? ldrFlatten(j.files, j.name) : false;
+                 /* false covers both answers that matter: the bridge had no such file, and the file
+                    held no triangles. Either way the geometry is not there to draw. */
+                 if(ldrMesh[id] === false) ldrAbsent.add(id); })
+    .catch(() => { ldrMesh[id] = false; ldrAbsent.add(id); })
     .then(() => { if(--ldrWaiting === 0) ldrArrived(); });
   return null;
 }
@@ -2955,6 +2968,18 @@ function ldrArrived(){
      the plan asks for a part the first time it draws one. draw() ends by bringing whichever 3D
      picture is up up to date, so nothing more is needed here. */
   draw();
+  /* SAID AFTER draw(), so the drawing cannot clear the line it was just written on. */
+  if(ldrAbsent.size > ldrSaid){
+    ldrSaid = ldrAbsent.size;
+    /* sorted, because the set fills in whatever order the fetches happened to finish, and a list of
+       part numbers that reorders itself between two runs is harder to check against a folder */
+    const list = Array.from(ldrAbsent).sort().join(", ");
+    say(ldrAbsent.size === 1
+        ? "Part " + list + " is not in the LDraw folder — it is drawn as a stand-in shape, "
+          + "not its real geometry."
+        : ldrAbsent.size + " parts are not in the LDraw folder — " + list
+          + ". They are drawn as stand-in shapes, not their real geometry.");
+  }
 }
 
 /* WHICH WAY A PART MUST TURN to lie the way the page has placed it. Two rules, and the order
