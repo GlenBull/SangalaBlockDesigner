@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-30.201 -->
+<!-- SANGALA_VERSION: 2026-08-30.202 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2889,6 +2889,12 @@ const ldrAbsent  = new Set();   /* parts that yielded no geometry at all */
 const ldrPartial = new Set();   /* parts drawn from an INCOMPLETE set of files - the quiet case */
 const ldrGaps    = new Set();   /* the file names the bridge could not open */
 let ldrSaid = 0;
+/* THE WHOLE FOLDER MISSING IS A DIFFERENT FAULT AND NEEDS A DIFFERENT SENTENCE. FindLDrawDir
+   requires BOTH `parts` and `p` beside the program and returns nothing if either is absent, and
+   then every /part request is refused - so every brick becomes a stand-in and NO file name is ever
+   reported. Version 201 described that as "15 parts cannot be drawn correctly. 0 LDraw files they
+   need are not in the LDraw folder", which contradicts itself and points at nothing to fix. */
+let ldrNoFolder = false, ldrSaidFolder = false;
 const ldrKey = n => (n || "").trim().replace(/\\/g, "/").toLowerCase();
 
 const ldrMul = (M, S) => {             /* M applied AFTER S, both as 9 rotation terms then 3 of translation */
@@ -2951,7 +2957,8 @@ function ldrLoad(id){
   if(id in ldrMesh) return ldrMesh[id];
   ldrMesh[id] = null; ldrWaiting++;
   fetch("/part?f=" + encodeURIComponent(id))
-    .then(r => r.ok ? r.json() : null)
+    .then(r => { if(!r.ok) ldrNoFolder = true;   /* the bridge refused: there is no parts folder */
+                 return r.ok ? r.json() : null; })
     .then(j => { /* THE BRIDGE ALREADY SAYS WHAT IT COULD NOT FIND: it sends an EMPTY STRING for
                     every file it failed to open, and its own comment says that is so the page can
                     report them. A missing SUBFILE is the case that matters, and it is the one a
@@ -2984,17 +2991,30 @@ function ldrArrived(){
   /* SAID AFTER draw(), so the drawing cannot clear the line it was just written on. Sorted, because
      the sets fill in whatever order the fetches happened to finish, and a list of part numbers that
      reorders itself between two runs cannot be checked against a folder. */
+  if(ldrNoFolder){
+    if(!ldrSaidFolder){
+      ldrSaidFolder = true;
+      say("The LDraw parts folder was not found beside the program, so every brick is drawn as a "
+          + "stand-in shape rather than the real part. Copy the LDraw folder in beside "
+          + "SangalaBlockDesigner.exe — it must contain ldraw\\parts and ldraw\\p.");
+    }
+    return;                       /* naming individual parts here would be listing the whole design */
+  }
   const hurt = Array.from(new Set([...ldrAbsent, ...ldrPartial])).sort();
   if(hurt.length > ldrSaid){
     ldrSaid = hurt.length;
     /* The pronoun follows how many PARTS are hurt; the verb follows how many FILES are missing.
        Keyed both to the file count once, and a single part read "files they need". */
     const many = hurt.length !== 1, oneFile = ldrGaps.size === 1;
+    /* The file sentence is only added when there ARE files to name. A count of zero told the reader
+       that nothing was missing in the same breath as saying fifteen parts were wrong. */
     say((many ? hurt.length + " parts cannot be drawn correctly — " + hurt.join(", ")
               : "Part " + hurt[0] + " cannot be drawn correctly")
-        + ". " + ldrGaps.size + (oneFile ? " LDraw file " : " LDraw files ")
-        + (many ? "they need " : "it needs ") + (oneFile ? "is" : "are")
-        + " not in the LDraw folder.");
+        + "." + (ldrGaps.size
+                 ? " " + ldrGaps.size + (oneFile ? " LDraw file " : " LDraw files ")
+                   + (many ? "they need " : "it needs ") + (oneFile ? "is" : "are")
+                   + " not in the LDraw folder."
+                 : ""));
     /* The file names go to the console rather than the panel: a designer needs to know the part is
        wrong, while whoever fixes the folder needs the exact names, and the panel is not the place
        for twenty primitive filenames (Glen, 2026-08-17, on clutter). */
