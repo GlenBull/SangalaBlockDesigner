@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-30.200 -->
+<!-- SANGALA_VERSION: 2026-08-30.201 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2885,7 +2885,9 @@ let ldrWaiting = 0;
    page said so. LDView warns when it substitutes and LeoCAD tags its placeholder; this is the same
    courtesy. Counting what has been said keeps one absent part from announcing itself again every
    time the picture is rebuilt. */
-const ldrAbsent = new Set();
+const ldrAbsent  = new Set();   /* parts that yielded no geometry at all */
+const ldrPartial = new Set();   /* parts drawn from an INCOMPLETE set of files - the quiet case */
+const ldrGaps    = new Set();   /* the file names the bridge could not open */
 let ldrSaid = 0;
 const ldrKey = n => (n || "").trim().replace(/\\/g, "/").toLowerCase();
 
@@ -2950,10 +2952,21 @@ function ldrLoad(id){
   ldrMesh[id] = null; ldrWaiting++;
   fetch("/part?f=" + encodeURIComponent(id))
     .then(r => r.ok ? r.json() : null)
-    .then(j => { ldrMesh[id] = j ? ldrFlatten(j.files, j.name) : false;
-                 /* false covers both answers that matter: the bridge had no such file, and the file
-                    held no triangles. Either way the geometry is not there to draw. */
-                 if(ldrMesh[id] === false) ldrAbsent.add(id); })
+    .then(j => { /* THE BRIDGE ALREADY SAYS WHAT IT COULD NOT FIND: it sends an EMPTY STRING for
+                    every file it failed to open, and its own comment says that is so the page can
+                    report them. A missing SUBFILE is the case that matters, and it is the one a
+                    part-level test cannot see: 43712 built without its nineteen subfiles still
+                    yields 384 triangles out of 3308, so `ldrFlatten` returns a perfectly good mesh
+                    that happens to be 12% of the part. On the laptop that drew the crane's wings as
+                    flat slabs and said nothing, because the first version of this check only
+                    noticed a part that produced NOTHING. Read the gaps, not the total. */
+                 if(j && j.files) for(const n in j.files) if(j.files[n] === ""){
+                   ldrGaps.add(n);
+                   if(n !== j.name) ldrPartial.add(id);
+                 }
+                 ldrMesh[id] = j ? ldrFlatten(j.files, j.name) : false;
+                 /* false covers the rest: no such part, or a file holding no triangles at all. */
+                 if(ldrMesh[id] === false){ ldrAbsent.add(id); ldrPartial.delete(id); } })
     .catch(() => { ldrMesh[id] = false; ldrAbsent.add(id); })
     .then(() => { if(--ldrWaiting === 0) ldrArrived(); });
   return null;
@@ -2968,17 +2981,24 @@ function ldrArrived(){
      the plan asks for a part the first time it draws one. draw() ends by bringing whichever 3D
      picture is up up to date, so nothing more is needed here. */
   draw();
-  /* SAID AFTER draw(), so the drawing cannot clear the line it was just written on. */
-  if(ldrAbsent.size > ldrSaid){
-    ldrSaid = ldrAbsent.size;
-    /* sorted, because the set fills in whatever order the fetches happened to finish, and a list of
-       part numbers that reorders itself between two runs is harder to check against a folder */
-    const list = Array.from(ldrAbsent).sort().join(", ");
-    say(ldrAbsent.size === 1
-        ? "Part " + list + " is not in the LDraw folder — it is drawn as a stand-in shape, "
-          + "not its real geometry."
-        : ldrAbsent.size + " parts are not in the LDraw folder — " + list
-          + ". They are drawn as stand-in shapes, not their real geometry.");
+  /* SAID AFTER draw(), so the drawing cannot clear the line it was just written on. Sorted, because
+     the sets fill in whatever order the fetches happened to finish, and a list of part numbers that
+     reorders itself between two runs cannot be checked against a folder. */
+  const hurt = Array.from(new Set([...ldrAbsent, ...ldrPartial])).sort();
+  if(hurt.length > ldrSaid){
+    ldrSaid = hurt.length;
+    /* The pronoun follows how many PARTS are hurt; the verb follows how many FILES are missing.
+       Keyed both to the file count once, and a single part read "files they need". */
+    const many = hurt.length !== 1, oneFile = ldrGaps.size === 1;
+    say((many ? hurt.length + " parts cannot be drawn correctly — " + hurt.join(", ")
+              : "Part " + hurt[0] + " cannot be drawn correctly")
+        + ". " + ldrGaps.size + (oneFile ? " LDraw file " : " LDraw files ")
+        + (many ? "they need " : "it needs ") + (oneFile ? "is" : "are")
+        + " not in the LDraw folder.");
+    /* The file names go to the console rather than the panel: a designer needs to know the part is
+       wrong, while whoever fixes the folder needs the exact names, and the panel is not the place
+       for twenty primitive filenames (Glen, 2026-08-17, on clutter). */
+    console.warn("Sangala Blocks — LDraw files not found: " + Array.from(ldrGaps).sort().join(", "));
   }
 }
 
