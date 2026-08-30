@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SANGALA_VERSION: 2026-08-30.202 -->
+<!-- SANGALA_VERSION: 2026-08-30.203 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2895,6 +2895,13 @@ let ldrSaid = 0;
    reported. Version 201 described that as "15 parts cannot be drawn correctly. 0 LDraw files they
    need are not in the LDraw folder", which contradicts itself and points at nothing to fix. */
 let ldrNoFolder = false, ldrSaidFolder = false;
+/* AND THE PAGE OPENED ON ITS OWN IS A THIRD THING AGAIN. Double-clicking SangalaBlockDesigner.html
+   instead of the program opens it from file://, where /part cannot resolve at all - the fetch is
+   REJECTED rather than answered, so nothing is refused and no file is named, and every brick is a
+   stand-in. Glen hit exactly this on 30 August and found it himself; version 202 would have told
+   him the LDraw folder was missing and sent him to copy files that were already there. A transport
+   failure is not a refusal, so it is caught separately and says the one thing that fixes it. */
+let ldrNoBridge = false, ldrSaidBridge = false;
 const ldrKey = n => (n || "").trim().replace(/\\/g, "/").toLowerCase();
 
 const ldrMul = (M, S) => {             /* M applied AFTER S, both as 9 rotation terms then 3 of translation */
@@ -2958,7 +2965,8 @@ function ldrLoad(id){
   ldrMesh[id] = null; ldrWaiting++;
   fetch("/part?f=" + encodeURIComponent(id))
     .then(r => { if(!r.ok) ldrNoFolder = true;   /* the bridge refused: there is no parts folder */
-                 return r.ok ? r.json() : null; })
+                 return r.ok ? r.json() : null; },
+          () => { ldrNoBridge = true; return null; })   /* nothing answered at all: not running */
     .then(j => { /* THE BRIDGE ALREADY SAYS WHAT IT COULD NOT FIND: it sends an EMPTY STRING for
                     every file it failed to open, and its own comment says that is so the page can
                     report them. A missing SUBFILE is the case that matters, and it is the one a
@@ -2991,6 +2999,16 @@ function ldrArrived(){
   /* SAID AFTER draw(), so the drawing cannot clear the line it was just written on. Sorted, because
      the sets fill in whatever order the fetches happened to finish, and a list of part numbers that
      reorders itself between two runs cannot be checked against a folder. */
+  if(ldrNoBridge){
+    if(!ldrSaidBridge){
+      ldrSaidBridge = true;
+      say("Sangala Blocks is not running, so every brick is drawn as a stand-in shape rather than "
+          + "the real part. This page was opened on its own. Close it, double-click "
+          + "SangalaBlockDesigner.exe — or the Sangala Blocks icon on your Desktop — and open your "
+          + "design from the page that comes up.");
+    }
+    return;
+  }
   if(ldrNoFolder){
     if(!ldrSaidFolder){
       ldrSaidFolder = true;
