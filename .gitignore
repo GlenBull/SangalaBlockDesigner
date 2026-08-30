@@ -38,3 +38,8 @@ tools/designnum_table.json
 # they are simply not carried.
 Archive/
 .Archive/
+
+# Word exports of documents that are themselves tracked. The .docx is the source; a PDF beside it
+# is regenerated from Word whenever it is wanted, so carrying both stores the same document twice.
+Documents/Crane Snapshots 2.pdf
+Documents/Crane snapshots.pdf
