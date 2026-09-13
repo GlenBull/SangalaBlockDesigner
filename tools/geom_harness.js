@@ -101,4 +101,4 @@ function meshFor(G, id){
   gather(id + ".dat", files, 0);
   return G.ldrFlatten(files, (id + ".dat").toLowerCase());
 }
-module.exports = { load, meshFor };
+module.exports = { load, meshFor, gather };
