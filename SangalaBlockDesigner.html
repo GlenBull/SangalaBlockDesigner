@@ -2259,7 +2259,7 @@ function sizePvToCv(){ const pv=$("pv"), bd=pv.parentElement.getBoundingClientRe
   pv.width=w; pv.height=h;
   pv.style.width=w+"px"; pv.style.height=h+"px"; }
 
-let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvPlate=false, pvZbuf=null, pvGuide=null;
+let pvOn=false, pvTris=null, pvCol=null, pvYaw=-0.6, pvPitch=0.95, pvZoom=1, pvBase=1, pvCenter=[0,0,0], pvDrag=null, pvZbuf=null, pvGuide=null;
 /* THE 3D VIEW PANS, with the workspace's own gestures. It had orbit and zoom only, so the model
    stayed pinned wherever the camera fit centered it - on a tall window that is small and far
    from the control panel, and nothing could bring it closer (Glen, 2026-08-23: "controls that
@@ -2350,12 +2350,10 @@ function pvSetTris(b){   // parts are concatenated in order by buildTris, so a p
         else if(fr>=0.35){ pvOvl[a*pvNP+b2]=1; pvOvl[b2*pvNP+a]=1; }
       } } }
 }
-const A1_BED=180;   // Bambu Lab A1 Mini build plate: 180 x 180 mm
-const pvBed=(mn,mx)=>{ const cx=(mn[0]+mx[0])/2, cy=(mn[1]+mx[1])/2, h=A1_BED/2; return {x0:cx-h,y0:cy-h,x1:cx+h,y1:cy+h}; };   // bed centered under the footprint (slicer centers the part too)
 /* Fit and centre the camera on the model. Called with no argument it sets the 3D View's own camera,
    exactly as before; called with a canvas it MEASURES that one and returns the fit instead of assigning
    it, which is how the inset gets its own framing without disturbing the full view's. */
-function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=0, so the whole bed and the Base gap stay framed
+function pvBounds(cvEl){   // fit/center on the model
   let mn=[1e9,1e9,1e9], mx=[-1e9,-1e9,-1e9];
   // Frame the guides and the loose holes as well, or a design made only of those has nothing to fit to -
   // the camera lands on a degenerate box and they are projected off the canvas, which looks exactly like
@@ -2363,7 +2361,6 @@ function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=
   const framed = pvTris.concat(pvGuide || [], pvGhost || []);
   framed.forEach(t=>t.forEach(p=>{ for(let i=0;i<3;i++){ if(p[i]<mn[i])mn[i]=p[i]; if(p[i]>mx[i])mx[i]=p[i]; } }));
   let bx0=mn[0],bx1=mx[0],by0=mn[1],by1=mx[1],bz0=mn[2],bz1=mx[2];
-  if(pvPlate && !cvEl){ const b=pvBed(mn,mx); bx0=Math.min(bx0,b.x0);bx1=Math.max(bx1,b.x1);by0=Math.min(by0,b.y0);by1=Math.max(by1,b.y1);bz0=Math.min(0,bz0); }   // include the whole bed when it's shown
   const el=cvEl||$("pv");
   const center=[(bx0+bx1)/2,(by0+by1)/2,(bz0+bz1)/2];
   const span=Math.max(bx1-bx0,by1-by0,bz1-bz0)||1, base=Math.min(el.width,el.height)*0.62/span;
@@ -2406,7 +2403,6 @@ function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=
    rule (pvHide). Both made the 3D picture agree with the 2D view's drawing order for arrangements
    no real bricks could hold. With the 3D View the place the design is built, the depth of the
    surfaces is the drawing order, and a piece inside another is hidden by that other's own faces.
-   The A1 Mini bed (pvPlate) is not drawn either: nothing in this application switches it on.
    NO LIBRARY. The application is one file that runs with no internet, so this is WebGL written
    directly: three small shader programs, three render targets, one quad. */
 let pvUseGL = true;   /* false: the JavaScript renderer draws the full view - a switch for comparing the two, set before the first 3D frame */
@@ -2684,9 +2680,7 @@ function glRender(){
    nothing it behaves exactly as before, which is what the 3D View still does.
    The scratch buffers below (pvZbuf, pvIdBuf, pvNrm, pvEdge) stay shared and re-size themselves when
    the pixel count changes. That costs nothing here because the two views are never up at once - the
-   inset hides while the full view is open - so the buffers are allocated once per size, not per frame.
-   The BUILD PLATE is never drawn in the inset: it is 180 mm of bed around a figure a few studs wide,
-   and framing the whole of it would shrink the design to a speck. */
+   inset hides while the full view is open - so the buffers are allocated once per size, not per frame. */
 function renderPreview(o){
   /* WHICH PIECE WEARS THE RING IS ASKED HERE, EVERY FRAME, AND NOWHERE ELSE. It used to be assigned
      only by syncMini, which does nothing while the full 3D View is up or the inset is closed - so
@@ -2699,7 +2693,6 @@ function renderPreview(o){
   pvSel = selPiece();
   if(!o && pvUseGL && glReady()) return glRender();   /* the full view: the graphics card draws it - see the block above */
   const pv=(o&&o.cv)||$("pv"), g=pv.getContext("2d",{willReadFrequently:true}), W=pv.width, H=pv.height;   // the z-buffer reads back every frame - hint the browser so getImageData is fast
-  const plate = o ? false : pvPlate;
   /* THE FULL VIEW SITS ON THE CORK, like the 2D canvas: everything around the model stays
      transparent so the board shows through, and only the model itself is painted (Glen,
      2026-08-24: "make the portion over the cork board transparent in the 3D view in a manner
@@ -2744,22 +2737,10 @@ function renderPreview(o){
     g.fillStyle="#fff"; g.fillRect(pgx0,pgyT,pgx1-pgx0,pgyB-pgyT);
     g.strokeStyle="#cbb78f"; g.lineWidth=1; g.strokeRect(pgx0,pgyT,pgx1-pgx0,pgyB-pgyT);
   }
-  if(plate){   // ---- build plate (A1 Mini bed) at z=0: gridded plane so Base reads as the gap object-to-bed; toggle off to orbit under the object ----
-  let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
-  for(const t of pvTris) for(const p of t){ if(p[0]<mnx)mnx=p[0]; if(p[1]<mny)mny=p[1]; if(p[0]>mxx)mxx=p[0]; if(p[1]>mxy)mxy=p[1]; }
-  const bed=pvBed([mnx,mny],[mxx,mxy]), gx0=bed.x0,gy0=bed.y0,gx1=bed.x1,gy1=bed.y1, P0=(x,y)=>proj([x,y,0]);
-  const q00=P0(gx0,gy0),q10=P0(gx1,gy0),q11=P0(gx1,gy1),q01=P0(gx0,gy1);
-  g.fillStyle="#c9cfd8"; g.beginPath(); g.moveTo(q00[0],q00[1]); g.lineTo(q10[0],q10[1]); g.lineTo(q11[0],q11[1]); g.lineTo(q01[0],q01[1]); g.closePath(); g.fill();
-  g.strokeStyle="rgba(110,122,140,.45)"; g.lineWidth=1; g.beginPath();
-  for(let x=Math.ceil(gx0/10)*10; x<=gx1; x+=10){ const a=P0(x,gy0),b=P0(x,gy1); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); }   // 10 mm grid
-  for(let y=Math.ceil(gy0/10)*10; y<=gy1; y+=10){ const a=P0(gx0,y),b=P0(gx1,y); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); }
-  g.stroke();
-  g.strokeStyle="#8b95a4"; g.lineWidth=1.5; g.beginPath(); g.moveTo(q00[0],q00[1]); g.lineTo(q10[0],q10[1]); g.lineTo(q11[0],q11[1]); g.lineTo(q01[0],q01[1]); g.closePath(); g.stroke();   // plate edge
-  }
   const L=[0.38,-0.42,0.82], Ll=Math.hypot(L[0],L[1],L[2]); L[0]/=Ll;L[1]/=Ll;L[2]/=Ll;   // world light from upper-front
   // ---- model: rasterize with a PER-PIXEL depth buffer. Sorting whole triangles (painter's) mis-orders a small
   // stud against the large flat face it sits on, so the face paints over it. A z-buffer keeps whatever is nearest. ----
-  const img=g.getImageData(0,0,W,H), px=img.data;     // composite over the background + plate already drawn
+  const img=g.getImageData(0,0,W,H), px=img.data;     // composite over the background already drawn
   if(!pvZbuf || pvZbuf.length!==W*H) pvZbuf=new Float32Array(W*H);
   if(!pvIdBuf || pvIdBuf.length!==W*H) pvIdBuf=new Uint16Array(W*H);
   if(!pvNrm || pvNrm.length!==W*H*3) pvNrm=new Int8Array(W*H*3);   // the winning surface's normal, x/y/z scaled to +-127 - the crease test reads it
@@ -2988,25 +2969,6 @@ function renderPreview(o){
     for(let i=0;i<W*H;i++){ if(!ring[i]) continue; const p=i<<2; px[p]=26; px[p+1]=95; px[p+2]=180; px[p+3]=255; }
   }
   g.putImageData(img,0,0);
-  if(plate){
-    // The bed is drawn UNDER the model, so a design wider than 180 mm hides it completely and the plate
-    // looks as though it never came on. Re-draw its edge OVER the model, dashed where the model covers it:
-    // the outline is then always visible, and where it crosses the design it says plainly that the design
-    // runs off the bed. (A relief on a Letter page is 216 mm wide - it does not fit an A1 Mini.)
-    let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
-    for(const t of pvTris) for(const p of t){ if(p[0]<mnx)mnx=p[0]; if(p[1]<mny)mny=p[1]; if(p[0]>mxx)mxx=p[0]; if(p[1]>mxy)mxy=p[1]; }
-    const bed=pvBed([mnx,mny],[mxx,mxy]), Q=(x,y)=>proj([x,y,0]);
-    const c=[Q(bed.x0,bed.y0),Q(bed.x1,bed.y0),Q(bed.x1,bed.y1),Q(bed.x0,bed.y1)];
-    g.save();
-    g.setLineDash([6,4]); g.lineWidth=1.5; g.strokeStyle="rgba(58,72,90,.75)";
-    g.beginPath(); g.moveTo(c[0][0],c[0][1]); for(let k=1;k<4;k++) g.lineTo(c[k][0],c[k][1]); g.closePath(); g.stroke();
-    g.restore();
-    const over = mxx-mnx > bed.x1-bed.x0 + 0.01 || mxy-mny > bed.y1-bed.y0 + 0.01;
-    g.fillStyle="rgba(58,72,90,.85)"; g.textAlign="left"; g.textBaseline="alphabetic";
-    g.font="600 "+Math.max(11,Math.round(W*0.024))+"px 'Segoe UI',system-ui,sans-serif";
-    g.fillText("Bambu A1 Mini bed · 180 × 180 mm"
-      +(over?"  ·  this design is "+Math.round(mxx-mnx)+" × "+Math.round(mxy-mny)+" mm and runs off it":""), 12, H-12);
-  }
 }
 
 (function(){ const pv=$("pv");
@@ -3023,7 +2985,7 @@ function renderPreview(o){
       pvPanX=pvDrag.px+(e.clientX-pvDrag.sx)*k; pvPanY=pvDrag.py+(e.clientY-pvDrag.sy)*k;
       pvClampPan(); renderPreview(); return; }
     pvYaw=pvDrag[2]+(e.clientX-pvDrag[0])*0.01;
-    pvPitch=Math.max(pvPlate?0.05:-1.45,Math.min(1.45,pvDrag[3]+(e.clientY-pvDrag[1])*0.01)); renderPreview(); });   // plate shown: stay at/above it; hidden: orbit under to see the underside
+    pvPitch=Math.max(-1.45,Math.min(1.45,pvDrag[3]+(e.clientY-pvDrag[1])*0.01)); renderPreview(); });   // past level, to see the underside
   window.addEventListener("mouseup",()=>{ if(pvDrag&&pvDrag.pan) pv.style.cursor=""; pvDrag=null; });
   /* The wheel range widened when the base stopped being the fit: pvBase is now the 2D view's own
      scale at whatever zoom the plan was at, so the wheel must be able to reach well past it both ways. */
