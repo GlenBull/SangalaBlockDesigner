@@ -2388,6 +2388,295 @@ function pvBounds(cvEl){   // fit/center on the model PLUS the A1 Mini bed at z=
   return {center:center, base:base};
 }
 
+/* ---------- THE FULL 3D VIEW, DRAWN BY THE GRAPHICS CARD ----------------------------------------
+   The renderer below this block draws every pixel in JavaScript: it is Studio's viewer, and at a
+   laptop-sized window it takes about 45 ms a frame on the crane (tools/measure_render.js). That is
+   enough to look at a design and not enough to build in: with the 3D View becoming the place a part
+   is placed, dragged and turned (the orthographic branch), every movement of the hand is a frame.
+   So the full view is drawn here through WebGL2, and the block below stays for the inset window and
+   for a machine with no WebGL2, which the switch `pvUseGL` and the test `glReady()` decide.
+   IT IS THE SAME PICTURE. Same triangles (pvTris, pvCol, pvPart from pvSetTris; pvGuide; pvGhost),
+   same camera (pvYaw, pvPitch, pvZoom, pvBase, pvCenter, pvPanX/Y), same three flat tones off the
+   same light, same silhouette, seam and crease outlines at the same two weights, same guide veil,
+   same ghost blue, same selection ring - each rule carried over from the code below, where its
+   reason is written, and not re-derived. The GPU keeps the same per-pixel records the JavaScript
+   renderer kept in its arrays - depth, piece number, surface normal - as textures, and the outline
+   pass reads them the same way, one pixel against its four neighbours.
+   TWO RULES ARE NOT CARRIED: the shared-space covering rule (pvOvl/pvNear) and the swallowed-piece
+   rule (pvHide). Both made the 3D picture agree with the 2D view's drawing order for arrangements
+   no real bricks could hold. With the 3D View the place the design is built, the depth of the
+   surfaces is the drawing order, and a piece inside another is hidden by that other's own faces.
+   The A1 Mini bed (pvPlate) is not drawn either: nothing in this application switches it on.
+   NO LIBRARY. The application is one file that runs with no internet, so this is WebGL written
+   directly: three small shader programs, three render targets, one quad. */
+let pvUseGL = true;   /* false: the JavaScript renderer draws the full view - a switch for comparing the two, set before the first 3D frame */
+let gl = null, glFail = false, glR = null;   /* the context, whether one could not be made, and everything built on it */
+function glReady(){
+  if(glFail) return false;
+  if(gl) return !gl.isContextLost();
+  const pv = $("pv");
+  /* preserveDrawingBuffer: the picture stays readable after the frame, which is how a test compares
+     it and how a snapshot of the view could be taken; depth:false because the screen is only ever
+     given the finished quad - every depth test happens in the targets below */
+  gl = pv.getContext("webgl2", {alpha:true, antialias:false, premultipliedAlpha:true, preserveDrawingBuffer:true, depth:false, stencil:false});
+  if(!gl){ glFail = true; return false; }
+  pv.addEventListener("webglcontextlost", e => { e.preventDefault(); glR = null; });
+  pv.addEventListener("webglcontextrestored", () => { glR = null; renderPreview(); });
+  return true;
+}
+/* The camera, as the JavaScript renderer applies it: yaw about Z (up), then pitch about X, then
+   scale about the screen point the model's centre is pinned to. rx and pz land on the screen and
+   d is the depth into it, bigger farther - the third number proj() returns. A piece-sized depth
+   bias breaks the tie between two faces at one depth, exactly as below. */
+const GL_CAM = `
+uniform vec3 uC; uniform vec4 uRot; uniform vec2 uScr; uniform vec3 uCam; uniform vec2 uDep;
+vec4 place(vec3 p0, float pid, out float d){
+  vec3 p = p0 - uC;
+  float rx = p.x*uRot.x - p.y*uRot.y, ry = p.x*uRot.y + p.y*uRot.x;
+  float pz = ry*uRot.w + p.z*uRot.z;
+  d = ry*uRot.z - p.z*uRot.w - pid*1e-3;
+  float sx = uCam.y + rx*uCam.x, sy = uCam.z - pz*uCam.x;
+  return vec4(sx/uScr.x*2.0 - 1.0, 1.0 - sy/uScr.y*2.0, (d - uDep.x)/(uDep.y - uDep.x)*2.0 - 1.0, 1.0);
+}`;
+const GL_VS_MODEL = `#version 300 es
+in vec3 aPos; in vec3 aNrm; in vec3 aCol; in float aPid;
+${GL_CAM}
+flat out vec3 vNrm; flat out vec3 vCol; flat out float vPid; out float vDepth;
+void main(){ gl_Position = place(aPos, aPid, vDepth); vNrm = aNrm; vCol = aCol; vPid = aPid; }`;
+/* Three tones, not a gradient - the rule and its reason are in the renderer below. The piece
+   number and a 16-bit depth go out beside the colour, so a click can ask what is under it. */
+const GL_FS_MODEL = `#version 300 es
+precision highp float;
+flat in vec3 vNrm; flat in vec3 vCol; flat in float vPid; in float vDepth;
+uniform vec4 uRot; uniform vec3 uL; uniform vec2 uDep;
+layout(location=0) out vec4 oCol; layout(location=1) out vec4 oNrm; layout(location=2) out vec4 oId;
+void main(){
+  vec3 n = vNrm;
+  if((n.x*uRot.y + n.y*uRot.x)*uRot.z - n.z*uRot.w >= 0.0) discard;   /* faces away from the viewer */
+  float lit = max(0.0, dot(n, uL));
+  float s = lit > 0.72 ? 1.0 : lit > 0.34 ? 0.80 : 0.62;
+  oCol = vec4(floor(vCol*255.0*s)/255.0, 1.0);
+  oNrm = vec4(n*0.5 + 0.5, 1.0);
+  float lo = mod(vPid, 256.0), hi = floor(vPid/256.0);
+  float d16 = floor(clamp((vDepth - uDep.x)/(uDep.y - uDep.x), 0.0, 1.0)*65535.0);
+  float dhi = floor(d16/256.0), dlo = d16 - dhi*256.0;
+  oId = vec4(lo/255.0, hi/255.0, dhi/255.0, dlo/255.0);
+}`;
+/* A guide or a ghost: its own target, its own depth, one shade per face, composed below. */
+const GL_VS_FLAT = `#version 300 es
+in vec3 aPos; in vec3 aNrm;
+${GL_CAM}
+flat out vec3 vNrm; out float vDepth;
+void main(){ gl_Position = place(aPos, 0.0, vDepth); vNrm = aNrm; }`;
+const GL_FS_FLAT = `#version 300 es
+precision highp float;
+flat in vec3 vNrm; in float vDepth;
+uniform vec4 uRot; uniform vec3 uL;
+out vec4 o;
+void main(){
+  vec3 n = vNrm;
+  if((n.x*uRot.y + n.y*uRot.x)*uRot.z - n.z*uRot.w >= 0.0) discard;
+  o = vec4(0.55 + 0.45*max(0.0, dot(n, uL)), 0.0, 0.0, 1.0);
+}`;
+const GL_VS_QUAD = `#version 300 es
+in vec2 aQ; void main(){ gl_Position = vec4(aQ, 0.0, 1.0); }`;
+/* THE COMPOSITION, one pixel at a time, in the order the renderer below paints: the page, the
+   model, the guide where it is nearer, the ghost, the outlines, the ring. Every test reads the
+   pixel's four neighbours from the model's own records, as below; a neighbour off the edge of the
+   picture is not consulted, and a neighbour with nothing drawn is the background. */
+const GL_FS_COMP = `#version 300 es
+precision highp float;
+uniform sampler2D tCol, tNrm, tId, tDep, tGuide, tGDep, tGhost, tHDep;
+uniform vec2 uScr, uDep; uniform float uET, uSel, uHasG, uHasH; uniform vec4 uPage;
+out vec4 o;
+bool inside(ivec2 p){ return p.x >= 0 && p.y >= 0 && p.x < int(uScr.x) && p.y < int(uScr.y); }
+float dep(ivec2 p){ return texelFetch(tDep, p, 0).r; }           /* 1.0 = nothing drawn */
+float mm(float d01){ return uDep.x + d01*(uDep.y - uDep.x); }
+float id(ivec2 p){ vec4 v = texelFetch(tId, p, 0); return floor(v.r*255.0 + 0.5) + 256.0*floor(v.g*255.0 + 0.5); }
+vec3 nrm(ivec2 p){ return texelFetch(tNrm, p, 0).rgb*2.0 - 1.0; }
+const ivec2 DIRS[4] = ivec2[4](ivec2(1,0), ivec2(-1,0), ivec2(0,1), ivec2(0,-1));
+/* the silhouette: a drawn pixel with the background next to it */
+bool sil(ivec2 p){
+  if(dep(p) >= 1.0) return false;
+  for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(inside(k) && dep(k) >= 1.0) return true; }
+  return false;
+}
+/* a crease: the same piece next door, at the same depth or nearer, facing somewhere else */
+bool crease(ivec2 p, vec3 n, float z, float i, ivec2 k){
+  if(dep(k) >= 1.0 || id(k) != i) return false;
+  vec3 m = nrm(k);
+  if(dot(n, m) >= 0.85) return false;
+  float zk = mm(dep(k));
+  if(zk != z) return zk > z;
+  return n.z != m.z ? n.z > m.z : n.x != m.x ? n.x > m.x : n.y > m.y;
+}
+/* an interior line: a depth cliff, a seam with another piece on the nearer side, or a crease */
+bool line(ivec2 p){
+  float z = mm(dep(p)), i = id(p); vec3 n = nrm(p);
+  for(int j = 0; j < 4; j++){
+    ivec2 k = p + DIRS[j]; if(!inside(k) || dep(k) >= 1.0) continue;
+    float zk = mm(dep(k)), ik = id(k);
+    if(zk - z > uET || (ik != i && (zk > z || (zk == z && i < ik))) || crease(p, n, z, i, k)) return true;
+  }
+  return false;
+}
+/* the ring's outer pixel: the selected piece with anything else beside it, the picture's edge included */
+bool rim(ivec2 p){
+  for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(!inside(k) || id(k) != uSel) return true; }
+  return false;
+}
+void main(){
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  float px = gl_FragCoord.x, py = uScr.y - gl_FragCoord.y;      /* canvas pixels, y down */
+  vec4 col = vec4(0.0);
+  if(px >= uPage.x && px < uPage.z && py >= uPage.y && py < uPage.w){
+    bool edge = px < uPage.x + 1.0 || px >= uPage.z - 1.0 || py < uPage.y + 1.0 || py >= uPage.w - 1.0;
+    col = edge ? vec4(0.796, 0.718, 0.561, 1.0) : vec4(1.0);
+  }
+  float z01 = dep(p); bool drawn = z01 < 1.0;
+  if(drawn) col = vec4(texelFetch(tCol, p, 0).rgb, 1.0);
+  if(uHasG > 0.5){ vec4 g = texelFetch(tGuide, p, 0);
+    if(g.a > 0.0 && texelFetch(tGDep, p, 0).r < z01){
+      float s = g.r, a = drawn ? 0.42 : 1.0;
+      vec3 gc = vec3(104.0 + 62.0*s, 120.0 + 62.0*s, 142.0 + 58.0*s)/255.0;
+      col = vec4(mix(col.rgb, gc, a), 1.0); } }
+  if(uHasH > 0.5){ vec4 h = texelFetch(tGhost, p, 0);
+    if(h.a > 0.0){
+      float s = h.r;
+      vec3 hc = floor(vec3(26.0 + 70.0*s, 95.0 + 80.0*s, 180.0 + 50.0*s))/255.0;
+      col = drawn ? vec4(mix(col.rgb, hc, 0.55), 1.0) : vec4(hc, 1.0); } }
+  if(drawn){
+    bool heavy = sil(p);
+    if(!heavy) for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(inside(k) && sil(k)){ heavy = true; break; } }   /* widened inward by one pixel */
+    float f = heavy ? 0.35 : line(p) ? 0.55 : 1.0;
+    col.rgb = floor(col.rgb*255.0*f)/255.0;
+    if(uSel > 0.0 && id(p) == uSel){
+      bool ring = rim(p);
+      if(!ring) for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(inside(k) && id(k) == uSel && rim(k)){ ring = true; break; } }
+      if(ring) col = vec4(26.0, 95.0, 180.0, 255.0)/255.0;
+    }
+  }
+  o = vec4(col.rgb*col.a, col.a);
+}`;
+function glProgram(vs, fs){
+  const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error("shader: " + gl.getShaderInfoLog(s)); return s; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p); if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error("program: " + gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for(let i = 0; i < n; i++){ const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+  return {p, u};
+}
+function glTex(internal, fmt, type, W, H){
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, W, H, 0, fmt, type, null);
+  return t;
+}
+/* a render target: n colour textures and a depth texture the composition can read back */
+function glTarget(nCol, W, H){
+  const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  const col = [];
+  for(let i = 0; i < nCol; i++){ const t = glTex(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, W, H); col.push(t);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, t, 0); }
+  const dep = glTex(gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, W, H);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, dep, 0);
+  gl.drawBuffers(col.map((_, i) => gl.COLOR_ATTACHMENT0 + i));
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error("render target incomplete");
+  return {fb, col, dep};
+}
+/* one vertex array over separate buffers: position, normal, and for the model its colour and piece */
+function glMesh(withPiece){
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const buf = {}, attr = (name, loc, size, type, norm) => { buf[name] = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf[name]);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, type, norm, 0, 0); };
+  attr("pos", 0, 3, gl.FLOAT, false); attr("nrm", 1, 3, gl.FLOAT, false);
+  if(withPiece){ attr("col", 2, 3, gl.UNSIGNED_BYTE, true); attr("pid", 3, 1, gl.FLOAT, false); }
+  gl.bindVertexArray(null);
+  return {vao, buf, n: 0, box: null, maxPid: 0};
+}
+/* The triangles as the GPU takes them: every vertex carries its face's outward normal, computed the
+   way the renderer below computes it, so the tone and the backface test come out the same. */
+function glLoad(m, tris, cols, pids){
+  const T = tris ? tris.length : 0;
+  const pos = new Float32Array(T*9), nrm = new Float32Array(T*9);
+  const col = m.buf.col ? new Uint8Array(T*9) : null, pid = m.buf.pid ? new Float32Array(T*3) : null;
+  const bx = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]; let maxPid = 0;
+  for(let i = 0; i < T; i++){
+    const t = tris[i], o = i*9;
+    const ux = t[1][0]-t[0][0], uy = t[1][1]-t[0][1], uz = t[1][2]-t[0][2], vx = t[2][0]-t[0][0], vy = t[2][1]-t[0][1], vz = t[2][2]-t[0][2];
+    let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+    for(let v = 0; v < 3; v++){ const q = t[v], k = o + v*3;
+      pos[k] = q[0]; pos[k+1] = q[1]; pos[k+2] = q[2]; nrm[k] = nx; nrm[k+1] = ny; nrm[k+2] = nz;
+      for(let a = 0; a < 3; a++){ if(q[a] < bx[a]) bx[a] = q[a]; if(q[a] > bx[3+a]) bx[3+a] = q[a]; } }
+    if(col){ const c = (cols && cols[i]) || PIECE_COLORS[0]; for(let v = 0; v < 3; v++){ const k = o + v*3; col[k] = c[0]; col[k+1] = c[1]; col[k+2] = c[2]; } }
+    if(pid){ const p = (pids && pids[i]) || 0; if(p > maxPid) maxPid = p; pid[i*3] = pid[i*3+1] = pid[i*3+2] = p; }
+  }
+  const up = (name, data) => { gl.bindBuffer(gl.ARRAY_BUFFER, m.buf[name]); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); };
+  up("pos", pos); up("nrm", nrm); if(col) up("col", col); if(pid) up("pid", pid);
+  m.n = T*3; m.box = T ? bx : null; m.maxPid = maxPid;
+}
+function glBuild(){
+  const R = {W: 0, H: 0, trisRef: null, guideRef: null, ghostRef: null};
+  R.model = glProgram(GL_VS_MODEL, GL_FS_MODEL); R.flat = glProgram(GL_VS_FLAT, GL_FS_FLAT); R.comp = glProgram(GL_VS_QUAD, GL_FS_COMP);
+  R.mesh = glMesh(true); R.guide = glMesh(false); R.ghost = glMesh(false);
+  R.quad = gl.createVertexArray(); gl.bindVertexArray(R.quad);
+  const q = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, q);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
+  glR = R;
+}
+function glSize(W, H){
+  const R = glR;
+  [R.mt, R.gt, R.ht].forEach(t => { if(!t) return; t.col.forEach(c => gl.deleteTexture(c)); gl.deleteTexture(t.dep); gl.deleteFramebuffer(t.fb); });
+  R.mt = glTarget(3, W, H); R.gt = glTarget(1, W, H); R.ht = glTarget(1, W, H);
+  R.W = W; R.H = H;
+}
+function glRender(){
+  pvSel = selPiece();
+  const pv = $("pv"), W = pv.width, H = pv.height;
+  if(!W || !H) return;
+  if(!glR) glBuild();
+  const R = glR;
+  if(R.W !== W || R.H !== H) glSize(W, H);
+  if(R.trisRef !== pvTris){ glLoad(R.mesh, pvTris, pvCol, pvPart); R.trisRef = pvTris; }
+  if(R.guideRef !== pvGuide){ glLoad(R.guide, pvGuide, null, null); R.guideRef = pvGuide; }
+  if(R.ghostRef !== pvGhost){ glLoad(R.ghost, pvGhost, null, null); R.ghostRef = pvGhost; }
+  /* the camera, exactly as proj() below reads it */
+  const ca = Math.cos(pvYaw), sa = Math.sin(pvYaw), ce = Math.cos(pvPitch), se = Math.sin(pvPitch);
+  const scale = pvBase*pvZoom, cx = W/2 + pvPanX, cy = H/2 + pvPanY, C = pvCenter;
+  /* the depth range: a sphere about the pinned centre that holds everything drawn, at any turn */
+  let r = 1;
+  [R.mesh.box, R.guide.box, R.ghost.box].forEach(bx => { if(!bx) return;
+    for(let k = 0; k < 8; k++) r = Math.max(r, Math.hypot(bx[k&1?3:0] - C[0], bx[k&2?4:1] - C[1], bx[k&4?5:2] - C[2])); });
+  const dMin = -r - 2 - R.mesh.maxPid*1e-3, dMax = r + 2;
+  const L = [0.38, -0.42, 0.82], Ll = Math.hypot(L[0], L[1], L[2]);
+  const ceA = Math.abs(ce) || 1e-6, seA = Math.abs(se) || 1e-6;
+  const eT = Math.max(0.3, 1.8*Math.max(ceA/seA, seA/ceA)/scale);   /* the largest depth step a flat face can show across one pixel, and then some */
+  const cam = P => { gl.useProgram(P.p);
+    gl.uniform3f(P.u.uC, C[0], C[1], C[2]); gl.uniform4f(P.u.uRot, ca, sa, ce, se); gl.uniform2f(P.u.uScr, W, H);
+    gl.uniform3f(P.u.uCam, scale, cx, cy); gl.uniform2f(P.u.uDep, dMin, dMax); gl.uniform3f(P.u.uL, L[0]/Ll, L[1]/Ll, L[2]/Ll); };
+  const pass = (t, P, m) => { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if(!m.n) return; cam(P); gl.bindVertexArray(m.vao); gl.drawArrays(gl.TRIANGLES, 0, m.n); gl.bindVertexArray(null); };
+  gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true);
+  pass(R.mt, R.model, R.mesh);
+  if(R.guide.n) pass(R.gt, R.flat, R.guide);
+  if(R.ghost.n) pass(R.ht, R.flat, R.ghost);
+  /* the composition onto the screen */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.disable(gl.DEPTH_TEST);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  const P = R.comp; gl.useProgram(P.p);
+  [R.mt.col[0], R.mt.col[1], R.mt.col[2], R.mt.dep, R.gt.col[0], R.gt.dep, R.ht.col[0], R.ht.dep].forEach((t, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t); });
+  ["tCol", "tNrm", "tId", "tDep", "tGuide", "tGDep", "tGhost", "tHDep"].forEach((n, i) => gl.uniform1i(P.u[n], i));
+  gl.uniform2f(P.u.uScr, W, H); gl.uniform2f(P.u.uDep, dMin, dMax); gl.uniform1f(P.u.uET, eT); gl.uniform1f(P.u.uSel, pvSel);
+  gl.uniform1f(P.u.uHasG, R.guide.n ? 1 : 0); gl.uniform1f(P.u.uHasH, R.ghost.n ? 1 : 0);
+  /* the page, an upright rectangle that pans and zooms with the picture and never turns - see below */
+  gl.uniform4f(P.u.uPage, cx + (0 - C[0])*scale, cy - (modelH - C[2])*scale, cx + (modelW - C[0])*scale, cy - (0 - C[2])*scale);
+  gl.bindVertexArray(R.quad); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
+}
+
 /* ONE RENDERER, TWO VIEWS. It used to read the single camera off the module globals and draw into
    the single #pv canvas, which is all it needed while the 3D View was the only place 3D appeared.
    The inset is the same picture at another size and another angle, so what changes is the ARGUMENT,
@@ -2408,6 +2697,7 @@ function renderPreview(o){
      step: every 3D picture is drawn by this function, and it reads the selection the workspace holds
      at the moment it draws. */
   pvSel = selPiece();
+  if(!o && pvUseGL && glReady()) return glRender();   /* the full view: the graphics card draws it - see the block above */
   const pv=(o&&o.cv)||$("pv"), g=pv.getContext("2d",{willReadFrequently:true}), W=pv.width, H=pv.height;   // the z-buffer reads back every frame - hint the browser so getImageData is fast
   const plate = o ? false : pvPlate;
   /* THE FULL VIEW SITS ON THE CORK, like the 2D canvas: everything around the model stays
