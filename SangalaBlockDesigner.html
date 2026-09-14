@@ -2411,6 +2411,22 @@ function glReady(){
   if(glFail) return false;
   if(gl) return !gl.isContextLost();
   const pv = $("pv");
+  /* PROVE THE CARD FIRST, ON A CANVAS THAT DOES NOT MATTER. A canvas that has once drawn through
+     WebGL can never draw through the 2D context again, so the shaders and the render targets are
+     built on a scratch canvas before the real one is committed. Where the driver refuses any of it,
+     the JavaScript renderer keeps the view and the status line says why. */
+  try{
+    const probe = document.createElement("canvas").getContext("webgl2");
+    if(!probe) throw new Error("this browser offers no WebGL2");
+    gl = probe; glBuild(); glSize(4, 4); glR = null;
+    const lose = probe.getExtension("WEBGL_lose_context"); if(lose) lose.loseContext();
+    gl = null;
+  }catch(e){
+    gl = null; glR = null; glFail = true;
+    /* said after the click that opened the view has cleared the line, or it is wiped at once */
+    setTimeout(() => say("The 3D View is drawn without the graphics card: " + e.message), 0);
+    return false;
+  }
   /* preserveDrawingBuffer: the picture stays readable after the frame, which is how a test compares
      it and how a snapshot of the view could be taken; depth:false because the screen is only ever
      given the finished quad - every depth test happens in the targets below */
@@ -2434,8 +2450,12 @@ vec4 place(vec3 p0, float pid, out float d){
   float sx = uCam.y + rx*uCam.x, sy = uCam.z - pz*uCam.x;
   return vec4(sx/uScr.x*2.0 - 1.0, 1.0 - sy/uScr.y*2.0, (d - uDep.x)/(uDep.y - uDep.x)*2.0 - 1.0, 1.0);
 }`;
+/* THE ATTRIBUTE LOCATIONS ARE PINNED HERE, to the numbers glMesh binds the buffers to. Left to the
+   linker, a driver numbers them as it pleases - in order of declaration on one, alphabetically on
+   another - and a position buffer read as a colour draws nothing, which is what Jo's Mac showed
+   (2026-09-14) while the machine that wrote this happened to number them in order. */
 const GL_VS_MODEL = `#version 300 es
-in vec3 aPos; in vec3 aNrm; in vec3 aCol; in float aPid;
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec3 aCol; layout(location=3) in float aPid;
 ${GL_CAM}
 flat out vec3 vNrm; flat out vec3 vCol; flat out float vPid; out float vDepth;
 void main(){ gl_Position = place(aPos, aPid, vDepth); vNrm = aNrm; vCol = aCol; vPid = aPid; }`;
@@ -2460,7 +2480,7 @@ void main(){
 }`;
 /* A guide or a ghost: its own target, its own depth, one shade per face, composed below. */
 const GL_VS_FLAT = `#version 300 es
-in vec3 aPos; in vec3 aNrm;
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm;
 ${GL_CAM}
 flat out vec3 vNrm; out float vDepth;
 void main(){ gl_Position = place(aPos, 0.0, vDepth); vNrm = aNrm; }`;
@@ -2475,7 +2495,7 @@ void main(){
   o = vec4(0.55 + 0.45*max(0.0, dot(n, uL)), 0.0, 0.0, 1.0);
 }`;
 const GL_VS_QUAD = `#version 300 es
-in vec2 aQ; void main(){ gl_Position = vec4(aQ, 0.0, 1.0); }`;
+layout(location=0) in vec2 aQ; void main(){ gl_Position = vec4(aQ, 0.0, 1.0); }`;
 /* THE COMPOSITION, one pixel at a time, in the order the renderer below paints: the page, the
    model, the guide where it is nearer, the ghost, the outlines, the ring. Every test reads the
    pixel's four neighbours from the model's own records, as below; a neighbour off the edge of the
@@ -2691,7 +2711,11 @@ function renderPreview(o){
      step: every 3D picture is drawn by this function, and it reads the selection the workspace holds
      at the moment it draws. */
   pvSel = selPiece();
-  if(!o && pvUseGL && glReady()) return glRender();   /* the full view: the graphics card draws it - see the block above */
+  if(!o && pvUseGL && glReady()){                      /* the full view: the graphics card draws it - see the block above */
+    try{ glRender(); }
+    catch(e){ glFail = true; setTimeout(() => say("The 3D View stopped drawing through the graphics card: " + e.message + " - reload the page."), 0); }
+    return;
+  }
   const pv=(o&&o.cv)||$("pv"), g=pv.getContext("2d",{willReadFrequently:true}), W=pv.width, H=pv.height;   // the z-buffer reads back every frame - hint the browser so getImageData is fast
   /* THE FULL VIEW SITS ON THE CORK, like the 2D canvas: everything around the model stays
      transparent so the board shows through, and only the model itself is painted (Glen,
