@@ -2709,21 +2709,60 @@ function glRender(){
 /* WHAT IS UNDER A POINT OF THE PICTURE: the piece number, 0 for nothing, and its depth along the
    line of sight in mm, read back from the records the last frame left on the card. */
 function glPick(x, y){
-  const R = glR; if(!gl || !R || !R.mt || !R.dep) return {n: 0, d: Infinity};
-  const px = new Uint8Array(4);
-  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, R.mt.fb); gl.readBuffer(gl.COLOR_ATTACHMENT2);
-  gl.readPixels(Math.floor(x), R.H - 1 - Math.floor(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  const R = glR; if(!gl || !R || !R.mt || !R.dep) return {n: 0, d: Infinity, nrm: null};
+  const px = new Uint8Array(4), nb = new Uint8Array(4), X = Math.floor(x), Y = R.H - 1 - Math.floor(y);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, R.mt.fb);
+  gl.readBuffer(gl.COLOR_ATTACHMENT2); gl.readPixels(X, Y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  gl.readBuffer(gl.COLOR_ATTACHMENT1); gl.readPixels(X, Y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, nb);
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
   const n = px[0] + 256*px[1];
-  return {n: n, d: n ? R.dep[0] + (px[2]*256 + px[3])/65535*(R.dep[1] - R.dep[0]) : Infinity};
+  if(!n) return {n: 0, d: Infinity, nrm: null};
+  /* the depth as the card kept it carries the piece-sized bias the tie-break needs; taken off here,
+     it is the surface's own depth, which is what a point in the model is made from */
+  return {n: n, d: R.dep[0] + (px[2]*256 + px[3])/65535*(R.dep[1] - R.dep[0]) + n*1e-3,
+          nrm: [nb[0]/255*2 - 1, nb[1]/255*2 - 1, nb[2]/255*2 - 1]};
 }
 /* The same question of whichever renderer drew the last frame: the JavaScript renderer keeps the
    piece and the depth of every pixel in its own arrays. x and y are canvas pixels. */
 function pvPieceAt(x, y){
   if(gl && glR && !glFail) return glPick(x, y);
   const pv = $("pv"), i = Math.floor(y)*pv.width + Math.floor(x);
-  if(!pvIdBuf || pvIdBuf.length !== pv.width*pv.height || i < 0 || i >= pvIdBuf.length) return {n: 0, d: Infinity};
-  return {n: pvIdBuf[i], d: pvZbuf[i]};
+  if(!pvIdBuf || pvIdBuf.length !== pv.width*pv.height || i < 0 || i >= pvIdBuf.length || !pvIdBuf[i]) return {n: 0, d: Infinity, nrm: null};
+  const q = i*3;
+  return {n: pvIdBuf[i], d: pvZbuf[i] + pvIdBuf[i]*1e-3, nrm: [pvNrm[q]/127, pvNrm[q+1]/127, pvNrm[q+2]/127]};
+}
+/* ---------- FROM THE SCREEN BACK INTO THE MODEL ----------
+   The camera turns a model point into a screen point and a depth: proj() in the JavaScript renderer
+   and place() in the shaders, both the same arithmetic. These are that arithmetic written once in
+   JavaScript, forward and back, for the building that happens in this view: a click knows its
+   screen point and, from the pick above, the depth of the surface under it, and from those two
+   the point in the model it touched. The camera is passed in, or read live, so the check in
+   tools/check_camera.js can hand in any camera without a page. */
+function pvCamera(){
+  const pv = $("pv");
+  return {ca: Math.cos(pvYaw), sa: Math.sin(pvYaw), ce: Math.cos(pvPitch), se: Math.sin(pvPitch),
+          scale: pvBase*pvZoom, cx: pv.width/2 + pvPanX, cy: pv.height/2 + pvPanY, C: pvCenter};
+}
+function pvProject(p, cam){
+  const k = cam || pvCamera(), x = p[0] - k.C[0], y = p[1] - k.C[1], z = p[2] - k.C[2];
+  const rx = x*k.ca - y*k.sa, ry = x*k.sa + y*k.ca;
+  return [k.cx + rx*k.scale, k.cy - (ry*k.se + z*k.ce)*k.scale, ry*k.ce - z*k.se];
+}
+function pvUnproject(sx, sy, d, cam){
+  const k = cam || pvCamera();
+  const rx = (sx - k.cx)/k.scale, pz = (k.cy - sy)/k.scale;
+  const ry = pz*k.se + d*k.ce, z = pz*k.ce - d*k.se;
+  return [k.C[0] + rx*k.ca + ry*k.sa, k.C[1] - rx*k.sa + ry*k.ca, k.C[2] + z];
+}
+/* the line of sight through a screen point, where it meets the plane through q with normal n;
+   null where the plane is seen edge-on. The view is orthographic, so every line of sight runs
+   the same way: the direction depth increases in. */
+function pvOnPlane(sx, sy, q, n, cam){
+  const k = cam || pvCamera(), P0 = pvUnproject(sx, sy, 0, k), v = [k.ce*k.sa, k.ce*k.ca, -k.se];
+  const nv = n[0]*v[0] + n[1]*v[1] + n[2]*v[2];
+  if(Math.abs(nv) < 1e-9) return null;
+  const t = (n[0]*(q[0] - P0[0]) + n[1]*(q[1] - P0[1]) + n[2]*(q[2] - P0[2]))/nv;
+  return [P0[0] + v[0]*t, P0[1] + v[1]*t, P0[2] + v[2]*t];
 }
 /* Piece numbers are handed out by bricksToTris, one per brick that is not parked on the cork, in
    the order of `bricks`; selPiece counts the same way forward, and these two count it the same
