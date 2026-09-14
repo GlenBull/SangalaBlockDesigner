@@ -121,7 +121,10 @@
      which is the whole reason Studio's workspace is always fully on screen and never depends on how a
      row or a flex box happened to resolve. The canvas is the whole workspace; the plate is drawn on it. */
   canvas{display:block;width:100%;height:calc(100vh - 178px);border-radius:6px;touch-action:none;background:transparent}
-  #pv{position:absolute;border-radius:8px;cursor:grab;touch-action:none}   /* Studio's: the 3D view overlays the design canvas rather than stacking below it */
+  /* Studio's: the 3D view overlays the design canvas rather than stacking below it. Pinned to the
+     board's content box - the 14px is the board's own padding - because the plan's canvas now stays
+     in the flow beneath it, invisible, to hold the board at the window's height. */
+  #pv{position:absolute;top:14px;left:14px;border-radius:8px;cursor:grab;touch-action:none}
   #pv:active{cursor:grabbing}
   #empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#6b5a44;text-align:center;font-size:1rem;line-height:1.6;user-select:none;pointer-events:none;opacity:.95}
   #empty b{display:block;font-size:1.15rem;margin-bottom:.3rem;color:#4a3620}
@@ -4450,8 +4453,14 @@ function openView3D(){
   view3D=true; pvOn=true;
   $("bView3D").classList.add("on");
   closeMenus(); hover=null;
-  sizePvToCv();                            /* measure the 2D canvas while it is still on screen */
-  $("cv").style.display="none";
+  sizePvToCv();
+  /* THE PLAN'S CANVAS STAYS IN THE FLOW, INVISIBLE, rather than being taken out of it. The board
+     is a grid cell that takes its height from what is in it; with the plan's canvas gone the
+     board fell to the control panel's height while the 3D canvas, laid over it, kept the window's,
+     and the picture ran off the cork onto the blue with the scroll bars following it (Jo Watts,
+     2026-09-14, with a screenshot). Invisible, the plan's canvas holds the board at the height
+     the 3D canvas is sized to, and takes no clicks. */
+  $("cv").style.visibility="hidden";
   $("pv").style.display="";
   setTool("select");
   syncView3D(true);                        /* built and framed: the view is being opened */
@@ -4462,7 +4471,7 @@ $("bView3D").onclick=()=>{
   view3D=false; pvOn=false;
   $("bView3D").classList.remove("on");
   closeMenus(); hover=null;
-  $("cv").style.display=""; $("pv").style.display="none";
+  $("cv").style.visibility=""; $("pv").style.display="none";
   say(""); draw();
 };
 let setupOpen=false;
