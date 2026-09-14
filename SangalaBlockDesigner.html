@@ -2502,8 +2502,8 @@ layout(location=0) in vec2 aQ; void main(){ gl_Position = vec4(aQ, 0.0, 1.0); }`
    picture is not consulted, and a neighbour with nothing drawn is the background. */
 const GL_FS_COMP = `#version 300 es
 precision highp float;
-uniform sampler2D tCol, tNrm, tId, tDep, tGuide, tGDep, tGhost, tHDep;
-uniform vec2 uScr, uDep; uniform float uET, uSel, uHasG, uHasH; uniform vec4 uPage;
+uniform sampler2D tCol, tNrm, tId, tDep, tGuide, tGDep, tGhost, tHDep, tSel;
+uniform vec2 uScr, uDep; uniform float uET, uHasG, uHasH; uniform vec4 uPage;
 out vec4 o;
 bool inside(ivec2 p){ return p.x >= 0 && p.y >= 0 && p.x < int(uScr.x) && p.y < int(uScr.y); }
 float dep(ivec2 p){ return texelFetch(tDep, p, 0).r; }           /* 1.0 = nothing drawn */
@@ -2536,9 +2536,11 @@ bool line(ivec2 p){
   }
   return false;
 }
-/* the ring's outer pixel: the selected piece with anything else beside it, the picture's edge included */
-bool rim(ivec2 p){
-  for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(!inside(k) || id(k) != uSel) return true; }
+/* a chosen piece: one flag per piece number in a 256 by 256 table, so a set is ringed piece by piece */
+bool chosen(float i){ if(i <= 0.0) return false; int k = int(i + 0.5); return texelFetch(tSel, ivec2(k - (k/256)*256, k/256), 0).r > 0.5; }
+/* the ring's outer pixel: a chosen piece with anything else beside it, the picture's edge included */
+bool rim(ivec2 p, float ip){
+  for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(!inside(k) || id(k) != ip) return true; }
   return false;
 }
 void main(){
@@ -2566,9 +2568,10 @@ void main(){
     if(!heavy) for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(inside(k) && sil(k)){ heavy = true; break; } }   /* widened inward by one pixel */
     float f = heavy ? 0.35 : line(p) ? 0.55 : 1.0;
     col.rgb = floor(col.rgb*255.0*f)/255.0;
-    if(uSel > 0.0 && id(p) == uSel){
-      bool ring = rim(p);
-      if(!ring) for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(inside(k) && id(k) == uSel && rim(k)){ ring = true; break; } }
+    float ip = id(p);
+    if(chosen(ip)){
+      bool ring = rim(p, ip);
+      if(!ring) for(int j = 0; j < 4; j++){ ivec2 k = p + DIRS[j]; if(inside(k) && id(k) == ip && rim(k, ip)){ ring = true; break; } }
       if(ring) col = vec4(26.0, 95.0, 180.0, 255.0)/255.0;
     }
   }
@@ -2641,6 +2644,8 @@ function glBuild(){
   const q = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, q);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
+  /* the selection, one byte per piece number; the composition rings every piece flagged here */
+  R.selTex = glTex(gl.R8, gl.RED, gl.UNSIGNED_BYTE, 256, 256); R.selKey = null;
   glR = R;
 }
 function glSize(W, H){
@@ -2650,7 +2655,6 @@ function glSize(W, H){
   R.W = W; R.H = H;
 }
 function glRender(){
-  pvSel = selPiece();
   const pv = $("pv"), W = pv.width, H = pv.height;
   if(!W || !H) return;
   if(!glR) glBuild();
@@ -2659,6 +2663,15 @@ function glRender(){
   if(R.trisRef !== pvTris){ glLoad(R.mesh, pvTris, pvCol, pvPart); R.trisRef = pvTris; }
   if(R.guideRef !== pvGuide){ glLoad(R.guide, pvGuide, null, null); R.guideRef = pvGuide; }
   if(R.ghostRef !== pvGhost){ glLoad(R.ghost, pvGhost, null, null); R.ghostRef = pvGhost; }
+  /* WHICH PIECES ARE CHOSEN IS ASKED HERE, EVERY FRAME, for the reason the renderer below gives:
+     a remembered copy of the selection is the fault itself. The table goes to the card only when
+     the answer changes. */
+  const sel = selPieces(), selKey = sel.join(",");
+  if(selKey !== R.selKey){
+    const mask = new Uint8Array(65536); sel.forEach(n => { if(n < 65536) mask[n] = 255; });
+    gl.bindTexture(gl.TEXTURE_2D, R.selTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 256, gl.RED, gl.UNSIGNED_BYTE, mask);
+    R.selKey = selKey;
+  }
   /* the camera, exactly as proj() below reads it */
   const ca = Math.cos(pvYaw), sa = Math.sin(pvYaw), ce = Math.cos(pvPitch), se = Math.sin(pvPitch);
   const scale = pvBase*pvZoom, cx = W/2 + pvPanX, cy = H/2 + pvPanY, C = pvCenter;
@@ -2667,6 +2680,7 @@ function glRender(){
   [R.mesh.box, R.guide.box, R.ghost.box].forEach(bx => { if(!bx) return;
     for(let k = 0; k < 8; k++) r = Math.max(r, Math.hypot(bx[k&1?3:0] - C[0], bx[k&2?4:1] - C[1], bx[k&4?5:2] - C[2])); });
   const dMin = -r - 2 - R.mesh.maxPid*1e-3, dMax = r + 2;
+  R.dep = [dMin, dMax];                       /* kept for glPick, which turns a read-back depth into mm */
   const L = [0.38, -0.42, 0.82], Ll = Math.hypot(L[0], L[1], L[2]);
   const ceA = Math.abs(ce) || 1e-6, seA = Math.abs(se) || 1e-6;
   const eT = Math.max(0.3, 1.8*Math.max(ceA/seA, seA/ceA)/scale);   /* the largest depth step a flat face can show across one pixel, and then some */
@@ -2684,13 +2698,71 @@ function glRender(){
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.disable(gl.DEPTH_TEST);
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   const P = R.comp; gl.useProgram(P.p);
-  [R.mt.col[0], R.mt.col[1], R.mt.col[2], R.mt.dep, R.gt.col[0], R.gt.dep, R.ht.col[0], R.ht.dep].forEach((t, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t); });
-  ["tCol", "tNrm", "tId", "tDep", "tGuide", "tGDep", "tGhost", "tHDep"].forEach((n, i) => gl.uniform1i(P.u[n], i));
-  gl.uniform2f(P.u.uScr, W, H); gl.uniform2f(P.u.uDep, dMin, dMax); gl.uniform1f(P.u.uET, eT); gl.uniform1f(P.u.uSel, pvSel);
+  [R.mt.col[0], R.mt.col[1], R.mt.col[2], R.mt.dep, R.gt.col[0], R.gt.dep, R.ht.col[0], R.ht.dep, R.selTex].forEach((t, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t); });
+  ["tCol", "tNrm", "tId", "tDep", "tGuide", "tGDep", "tGhost", "tHDep", "tSel"].forEach((n, i) => gl.uniform1i(P.u[n], i));
+  gl.uniform2f(P.u.uScr, W, H); gl.uniform2f(P.u.uDep, dMin, dMax); gl.uniform1f(P.u.uET, eT);
   gl.uniform1f(P.u.uHasG, R.guide.n ? 1 : 0); gl.uniform1f(P.u.uHasH, R.ghost.n ? 1 : 0);
   /* the page, an upright rectangle that pans and zooms with the picture and never turns - see below */
   gl.uniform4f(P.u.uPage, cx + (0 - C[0])*scale, cy - (modelH - C[2])*scale, cx + (modelW - C[0])*scale, cy - (0 - C[2])*scale);
   gl.bindVertexArray(R.quad); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
+}
+/* WHAT IS UNDER A POINT OF THE PICTURE: the piece number, 0 for nothing, and its depth along the
+   line of sight in mm, read back from the records the last frame left on the card. */
+function glPick(x, y){
+  const R = glR; if(!gl || !R || !R.mt || !R.dep) return {n: 0, d: Infinity};
+  const px = new Uint8Array(4);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, R.mt.fb); gl.readBuffer(gl.COLOR_ATTACHMENT2);
+  gl.readPixels(Math.floor(x), R.H - 1 - Math.floor(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  const n = px[0] + 256*px[1];
+  return {n: n, d: n ? R.dep[0] + (px[2]*256 + px[3])/65535*(R.dep[1] - R.dep[0]) : Infinity};
+}
+/* The same question of whichever renderer drew the last frame: the JavaScript renderer keeps the
+   piece and the depth of every pixel in its own arrays. x and y are canvas pixels. */
+function pvPieceAt(x, y){
+  if(gl && glR && !glFail) return glPick(x, y);
+  const pv = $("pv"), i = Math.floor(y)*pv.width + Math.floor(x);
+  if(!pvIdBuf || pvIdBuf.length !== pv.width*pv.height || i < 0 || i >= pvIdBuf.length) return {n: 0, d: Infinity};
+  return {n: pvIdBuf[i], d: pvZbuf[i]};
+}
+/* Piece numbers are handed out by bricksToTris, one per brick that is not parked on the cork, in
+   the order of `bricks`; selPiece counts the same way forward, and these two count it the same
+   way back and over the whole selection. */
+function pieceBrick(n){ let k = 0; for(const b of bricks){ if(parked(b)) continue; if(++k === n) return b; } return null; }
+function selPieces(){
+  const chosen = selectedBricks(); if(!chosen.length) return [];
+  const out = []; let k = 0;
+  for(const b of bricks){ if(parked(b)) continue; k++; if(chosen.indexOf(b) >= 0) out.push(k); }
+  return out;
+}
+/* A CLICK IN THE 3D VIEW SELECTS, by the plan's own rules (its mousedown handler): Shift adds the
+   brick's whole outermost group to the set and starts nothing; a member of the set leaves the set
+   standing; a grouped brick brings its whole group; a loose brick is selected alone and the palette
+   follows it; bare ground clears, unless Shift is held. cx and cy are where the pointer pressed. */
+function pvClick(cx, cy, shift){
+  const pv = $("pv"), r = pv.getBoundingClientRect();
+  const x = (cx - r.left)*(pv.width/Math.max(1, r.width)), y = (cy - r.top)*(pv.height/Math.max(1, r.height));
+  const b = pieceBrick(pvPieceAt(x, y).n);
+  if(!b){
+    if(shift) return;
+    if(selBrick || selMulti.length || selFrame.length){ selBrick = null; selMulti = []; selFrame = []; draw(); say(""); }
+    return;
+  }
+  if(shift){
+    const set = selMulti.length ? selMulti.slice() : wholeGroup(selNow());
+    wholeGroup(b).forEach(x2 => { if(set.indexOf(x2) < 0) set.push(x2); });
+    selMulti = set; selBrick = null; draw();
+    say(set.length + " bricks selected — Group binds them.");
+    return;
+  }
+  if(selMulti.length && selMulti.indexOf(b) >= 0) return;
+  if(b.group != null){
+    const g = wholeGroup(b);
+    if(!(selMulti.length === g.length && g.every(x2 => selMulti.indexOf(x2) >= 0))){ selMulti = g; selBrick = null; draw(); }
+    return;
+  }
+  if(selBrick !== b || selMulti.length){ selBrick = b; selMulti = [];
+    if(b.colorIdx >= 0 && b.colorIdx !== selCol){ selCol = b.colorIdx; swatches(); } draw(); }
 }
 
 /* ONE RENDERER, TWO VIEWS. It used to read the single camera off the module globals and draw into
@@ -3001,16 +3073,26 @@ function renderPreview(o){
        a plain drag turns the model as it always has */
     if(spaceHeld || e.button===1){ pvDrag={pan:true, sx:e.clientX, sy:e.clientY, px:pvPanX, py:pvPanY};
       pv.style.cursor="grabbing"; e.preventDefault(); return; }
-    pvDrag=[e.clientX,e.clientY,pvYaw,pvPitch]; e.preventDefault(); });
+    if(e.button!==0) return;
+    /* A PRESS IS A CLICK UNTIL THE HAND MOVES. One press begins both an orbit and a selection, and
+       which it was is known only when it ends: a hand that stayed within a few pixels clicked. Until
+       it leaves that circle the picture does not turn, or every click would nudge the view. */
+    pvDrag=[e.clientX,e.clientY,pvYaw,pvPitch]; pvDrag.moved=false; pvDrag.shift=e.shiftKey; e.preventDefault(); });
   window.addEventListener("mousemove",e=>{ if(!pvDrag)return;
     if(pvDrag.pan){
       /* client px -> canvas px, so the picture stays under the hand at any buffer scale */
       const k=pv.width/Math.max(1,pv.getBoundingClientRect().width);
       pvPanX=pvDrag.px+(e.clientX-pvDrag.sx)*k; pvPanY=pvDrag.py+(e.clientY-pvDrag.sy)*k;
       pvClampPan(); renderPreview(); return; }
+    if(!pvDrag.moved){ if(Math.hypot(e.clientX-pvDrag[0], e.clientY-pvDrag[1]) < 4) return; pvDrag.moved=true; }
     pvYaw=pvDrag[2]+(e.clientX-pvDrag[0])*0.01;
     pvPitch=Math.max(-1.45,Math.min(1.45,pvDrag[3]+(e.clientY-pvDrag[1])*0.01)); renderPreview(); });   // past level, to see the underside
-  window.addEventListener("mouseup",()=>{ if(pvDrag&&pvDrag.pan) pv.style.cursor=""; pvDrag=null; });
+  window.addEventListener("mouseup",()=>{
+    if(!pvDrag) return;
+    const d=pvDrag; pvDrag=null;
+    if(d.pan){ pv.style.cursor=""; return; }
+    if(!d.moved) pvClick(d[0], d[1], d.shift);       /* it never turned: it was a click */
+  });
   /* The wheel range widened when the base stopped being the fit: pvBase is now the 2D view's own
      scale at whatever zoom the plan was at, so the wheel must be able to reach well past it both ways. */
   pv.addEventListener("wheel",e=>{ e.preventDefault(); pvZoom=Math.max(0.05,Math.min(20,pvZoom*Math.exp(-e.deltaY*0.0012))); renderPreview(); },{passive:false});
