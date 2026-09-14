@@ -25,11 +25,9 @@ function playwright(){
   const browser = await playwright().chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
   const page = await browser.newPage({ viewport: { width: W, height: H } });
   page.on("pageerror", e => console.error("page error:", e.message));
-  await page.goto(`http://127.0.0.1:${port}/`);
+  await page.goto(`http://127.0.0.1:${port}/${old ? "?renderer=js" : ""}`);   /* the page opens in the 3D View; the address chooses the renderer before its first frame */
   await page.setInputFiles("#fOpen", design);
   await page.waitForFunction(() => bricks.length > 0);
-  if(old) await page.evaluate(() => { pvUseGL = false; });     /* before the first 3D frame: a canvas that has drawn through WebGL cannot go back */
-  await page.click("#bView3D");
   /* every part asked for has arrived: the fetches in flight are counted, and a mesh still on its way is null */
   await page.waitForFunction(() => Object.keys(ldrMesh).length > 0 && ldrWaiting === 0
                                    && Object.values(ldrMesh).every(v => v !== null), null, { timeout: 180000 });

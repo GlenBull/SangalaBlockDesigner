@@ -960,6 +960,7 @@ function fit(){
   sizeCanvas(); worldParams(); clampPan();
   draw();
   offPageWarning();
+  if(view3D) syncView3D(true);   /* a design opened or rescaled is framed afresh in the 3D View */
 }
 /* Studio's answer to a design bigger than its page, copied: say so, and leave the page alone.
    SangalaStudio.html:1082 — `if(bb[2]>dw||bb[3]>dh)say("Design runs off the page - lower Scale or
@@ -2350,6 +2351,19 @@ function pvSetTris(b){   // parts are concatenated in order by buildTris, so a p
         else if(fr>=0.35){ pvOvl[a*pvNP+b2]=1; pvOvl[b2*pvNP+a]=1; }
       } } }
 }
+/* ---------- THE WORKPLANE ----------
+   The surface a part is dropped on when it is dropped on nothing: TinkerCAD's workplane, drawn as
+   a pale plane ruled every stud (8 mm), so the lattice a part snaps to is the lattice you see (Jo
+   Watts, 2026-09-14). For a standing figure it is the ground the figure stands on - the page's
+   lowest row line, level, as wide as the page and as deep, centred on the backdrop the first course
+   sits against. For a relief it is the page itself, face on, since a relief is built against its
+   plate. It is always in the camera's frame, so an empty design opens on something to build on. */
+function groundZ(){ return modelH - Math.floor(modelH/vUnit())*vUnit(); }   /* the lowest row line: a part standing on it is on the lattice */
+function workplane(){
+  if(mode==="relief") return {kind: 2, n: [0, 1, 0], d: 0, u: [0, modelW], v: [0, modelH], box: [0, 0, 0, modelW, 0, modelH]};
+  const gz = groundZ(), h = modelW/2;
+  return {kind: 1, n: [0, 0, 1], d: gz, u: [0, modelW], v: [-h, h], box: [0, -h, gz, modelW, h, gz]};
+}
 /* Fit and centre the camera on the model. Called with no argument it sets the 3D View's own camera,
    exactly as before; called with a canvas it MEASURES that one and returns the fit instead of assigning
    it, which is how the inset gets its own framing without disturbing the full view's. */
@@ -2360,26 +2374,21 @@ function pvBounds(cvEl){   // fit/center on the model
   // the bug the ghost was added to fix.
   const framed = pvTris.concat(pvGuide || [], pvGhost || []);
   framed.forEach(t=>t.forEach(p=>{ for(let i=0;i<3;i++){ if(p[i]<mn[i])mn[i]=p[i]; if(p[i]>mx[i])mx[i]=p[i]; } }));
+  /* THE WORKPLANE IS ALWAYS IN THE FRAME, so an empty design opens on a plane to build on rather
+     than on a degenerate box projected off the canvas, and a figure is seen standing on its ground. */
+  const wp = workplane();
+  for(let i=0;i<3;i++){ mn[i]=Math.min(mn[i], wp.box[i]); mx[i]=Math.max(mx[i], wp.box[3+i]); }
   let bx0=mn[0],bx1=mx[0],by0=mn[1],by1=mx[1],bz0=mn[2],bz1=mx[2];
   const el=cvEl||$("pv");
   const center=[(bx0+bx1)/2,(by0+by1)/2,(bz0+bz1)/2];
   const span=Math.max(bx1-bx0,by1-by0,bz1-bz0)||1, base=Math.min(el.width,el.height)*0.62/span;
   if(!cvEl){
-    /* THE FULL VIEW OPENS AS THE PLAN STANDS - same scale, same place, facing the page (Glen,
-       2026-08-24: "The 2D and 3D workspace need to be the same size, and the object should not
-       shift on the page in the transition"). So instead of fitting-and-centering, the camera takes
-       the 2D view's own framing: one mm is SCALE100*view.zoom of these CSS pixels, the view opens
-       front-on (the very elevation the plan draws), and the model's centre is pinned to the screen
-       point the plan shows it at. Orbit, wheel and the bars then move off that anchor; the fitted
-       `base` below still serves the inset, which passes cvEl. */
-    pvCenter=center; pvSpan=span;
-    /* Opened TURNED, not dead front-on - about a quarter turn, so the viewer can see 3D mode is
-       enabled (Glen, 2026-08-24). The turn is about the model's own centre, which stays pinned
-       to its 2D screen point, so nothing shifts; these two angles are the only knobs. */
-    pvBase=SCALE100*view.zoom; pvZoom=1; pvYaw=-0.7; pvPitch=0.4;
-    const xPage=placeX+center[0], yPage=placeY+(modelH-center[2]);   /* world -> page mm: z runs up from the page bottom */
-    pvPanX=(view.panX+(MX+xPage)*PX)/DPR - el.width/2;
-    pvPanY=(view.panY+(MY+yPage)*PX)/DPR - el.height/2;
+    /* THE FULL VIEW FITS ITS FRAME - the model and the workplane centred in the window - seen from
+       the three-quarter angle above and in front it has always opened at. It used to take the
+       plan's own framing, pinned to the plan's screen point, so the two views changed places
+       without a jump (Glen, 2026-08-24); with the plan no longer shown there is nothing to jump
+       from, and a view that opens on an empty workplane needs a fit of its own. */
+    pvCenter=center; pvSpan=span; pvBase=base; pvZoom=1; pvYaw=-0.7; pvPitch=0.4; pvPanX=0; pvPanY=0;
     pvClampPan();
   }
   return {center:center, base:base};
@@ -2503,8 +2512,16 @@ layout(location=0) in vec2 aQ; void main(){ gl_Position = vec4(aQ, 0.0, 1.0); }`
 const GL_FS_COMP = `#version 300 es
 precision highp float;
 uniform sampler2D tCol, tNrm, tId, tDep, tGuide, tGDep, tGhost, tHDep, tSel;
-uniform vec2 uScr, uDep; uniform float uET, uHasG, uHasH; uniform vec4 uPage;
+uniform vec2 uScr, uDep; uniform float uET, uHasG, uHasH;
+uniform vec4 uCamA; uniform vec3 uCamB; uniform vec3 uC;       /* ca sa ce se; scale cx cy; the pinned centre - pvUnproject's own numbers */
+uniform vec4 uPlane; uniform vec4 uRect; uniform float uPlaneKind;   /* the workplane: normal and offset; its two extents; 1 level, 2 face on, 0 none */
 out vec4 o;
+/* pvUnproject, in the shader: the model point at a screen point and a depth */
+vec3 unproj(vec2 s, float d){
+  float rx = (s.x - uCamB.y)/uCamB.x, pz = (uCamB.z - s.y)/uCamB.x;
+  float ry = pz*uCamA.w + d*uCamA.z, z = pz*uCamA.z - d*uCamA.w;
+  return uC + vec3(rx*uCamA.x + ry*uCamA.y, -rx*uCamA.y + ry*uCamA.x, z);
+}
 bool inside(ivec2 p){ return p.x >= 0 && p.y >= 0 && p.x < int(uScr.x) && p.y < int(uScr.y); }
 float dep(ivec2 p){ return texelFetch(tDep, p, 0).r; }           /* 1.0 = nothing drawn */
 float mm(float d01){ return uDep.x + d01*(uDep.y - uDep.x); }
@@ -2545,11 +2562,26 @@ bool rim(ivec2 p, float ip){
 }
 void main(){
   ivec2 p = ivec2(gl_FragCoord.xy);
-  float px = gl_FragCoord.x, py = uScr.y - gl_FragCoord.y;      /* canvas pixels, y down */
+  vec2 s = vec2(gl_FragCoord.x, uScr.y - gl_FragCoord.y);      /* canvas pixels, y down, at the pixel's centre */
   vec4 col = vec4(0.0);
-  if(px >= uPage.x && px < uPage.z && py >= uPage.y && py < uPage.w){
-    bool edge = px < uPage.x + 1.0 || px >= uPage.z - 1.0 || py < uPage.y + 1.0 || py >= uPage.w - 1.0;
-    col = edge ? vec4(0.796, 0.718, 0.561, 1.0) : vec4(1.0);
+  /* THE WORKPLANE, found where this pixel's line of sight meets it and ruled every stud in the
+     model's own millimetres, so the lines stay a stud apart at any zoom and any angle. It lies
+     behind everything: a drawn pixel replaces it below. */
+  if(uPlaneKind > 0.5){
+    vec3 P0 = unproj(s, 0.0), v = vec3(uCamA.z*uCamA.y, uCamA.z*uCamA.x, -uCamA.w);
+    float nv = dot(uPlane.xyz, v);
+    if(abs(nv) > 1e-6){
+      vec3 P = P0 + v*((uPlane.w - dot(uPlane.xyz, P0))/nv);
+      vec2 uv = uPlaneKind < 1.5 ? P.xy : P.xz;
+      if(uv.x >= uRect.x && uv.x <= uRect.y && uv.y >= uRect.z && uv.y <= uRect.w){
+        vec2 gq = uv/8.0, f = abs(fract(gq - 0.5) - 0.5)/max(fwidth(gq), vec2(1e-4));
+        float line = 1.0 - min(min(f.x, f.y), 1.0);
+        float edge = min(min(uv.x - uRect.x, uRect.y - uv.x), min(uv.y - uRect.z, uRect.w - uv.y));
+        vec3 c = mix(vec3(0.925, 0.953, 0.980), vec3(0.62, 0.77, 0.89), line);
+        if(edge < 2.0) c = vec3(0.55, 0.72, 0.86);
+        col = vec4(c, 1.0);
+      }
+    }
   }
   float z01 = dep(p); bool drawn = z01 < 1.0;
   if(drawn) col = vec4(texelFetch(tCol, p, 0).rgb, 1.0);
@@ -2677,7 +2709,7 @@ function glRender(){
   const scale = pvBase*pvZoom, cx = W/2 + pvPanX, cy = H/2 + pvPanY, C = pvCenter;
   /* the depth range: a sphere about the pinned centre that holds everything drawn, at any turn */
   let r = 1;
-  [R.mesh.box, R.guide.box, R.ghost.box].forEach(bx => { if(!bx) return;
+  [R.mesh.box, R.guide.box, R.ghost.box, workplane().box].forEach(bx => { if(!bx) return;
     for(let k = 0; k < 8; k++) r = Math.max(r, Math.hypot(bx[k&1?3:0] - C[0], bx[k&2?4:1] - C[1], bx[k&4?5:2] - C[2])); });
   const dMin = -r - 2 - R.mesh.maxPid*1e-3, dMax = r + 2;
   R.dep = [dMin, dMax];                       /* kept for glPick, which turns a read-back depth into mm */
@@ -2702,8 +2734,9 @@ function glRender(){
   ["tCol", "tNrm", "tId", "tDep", "tGuide", "tGDep", "tGhost", "tHDep", "tSel"].forEach((n, i) => gl.uniform1i(P.u[n], i));
   gl.uniform2f(P.u.uScr, W, H); gl.uniform2f(P.u.uDep, dMin, dMax); gl.uniform1f(P.u.uET, eT);
   gl.uniform1f(P.u.uHasG, R.guide.n ? 1 : 0); gl.uniform1f(P.u.uHasH, R.ghost.n ? 1 : 0);
-  /* the page, an upright rectangle that pans and zooms with the picture and never turns - see below */
-  gl.uniform4f(P.u.uPage, cx + (0 - C[0])*scale, cy - (modelH - C[2])*scale, cx + (modelW - C[0])*scale, cy - (0 - C[2])*scale);
+  const wp = workplane();
+  gl.uniform4f(P.u.uCamA, ca, sa, ce, se); gl.uniform3f(P.u.uCamB, scale, cx, cy); gl.uniform3f(P.u.uC, C[0], C[1], C[2]);
+  gl.uniform4f(P.u.uPlane, wp.n[0], wp.n[1], wp.n[2], wp.d); gl.uniform4f(P.u.uRect, wp.u[0], wp.u[1], wp.v[0], wp.v[1]); gl.uniform1f(P.u.uPlaneKind, wp.kind);
   gl.bindVertexArray(R.quad); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
 }
 /* WHAT IS UNDER A POINT OF THE PICTURE: the piece number, 0 for nothing, and its depth along the
@@ -2831,11 +2864,20 @@ function pvDrop(x, y){
     setDepth(rec, away ? d + t : d);
     return rec;
   }
-  const P = pvOnPlane(x, y, [0, 0, 0], [0, 1, 0]);      /* the page, the backdrop the figure stands against */
+  /* ON THE WORKPLANE, or nowhere. A standing figure's part stands on the ground at the stud
+     touched, in the layer touched; a relief's lands on the plate as the plan lands it, against the
+     plate or just clear of whatever already stands in those cells. */
+  const wp = workplane(), P = pvOnPlane(x, y, [wp.n[0]*wp.d, wp.n[1]*wp.d, wp.n[2]*wp.d], wp.n);
   if(!P) return null;
+  const u = P[0], v = wp.kind === 1 ? P[1] : P[2];
+  if(u < wp.u[0] || u > wp.u[1] || v < wp.v[0] || v > wp.v[1]) return null;
   const c = worldToCell(P);
-  rec.col = c.col; rec.row = c.row;
-  return settle(rec);
+  rec.col = c.col;
+  if(wp.kind === 2){ rec.row = c.row; return settle(rec); }
+  rec.row = Math.floor(modelH/vUnit()) - rowsFor(rec);
+  const t = thickB(rec), d = Math.round(c.depth - t/2);
+  setDepth(rec, facedAway(rec) ? d + t : d);
+  return rec;
 }
 /* Piece numbers are handed out by bricksToTris, one per brick that is not parked on the cork, in
    the order of `bricks`; selPiece counts the same way forward, and these two count it the same
@@ -4398,18 +4440,30 @@ $("spUp").onclick =(e)=>jogHalf(0.5, e.ctrlKey || e.metaKey);
 $("spDn").onclick =(e)=>jogHalf(-0.5, e.ctrlKey || e.metaKey);
 /* The 3D View is a way of looking, not a mode you build in - so it puts the tools down while it
    is up, exactly as Studio does ("press 3D View again to edit"). */
-$("bView3D").onclick=()=>{
-  view3D=!view3D; pvOn=view3D;
-  $("bView3D").classList.toggle("on", view3D);
+/* OPENING THE 3D VIEW, which the application now does for itself at startup: the 3D View is the
+   workspace, and the plan stays behind it for reference and for the checks (Jo Watts,
+   2026-09-14). The button that toggled the two is hidden at startup, with the Front/Back button
+   that only meant anything in a plan seen from one side; both stay in the markup and the code, so
+   the plan can be brought back if it is ever wanted. */
+function openView3D(){
+  if(view3D) return;
+  view3D=true; pvOn=true;
+  $("bView3D").classList.add("on");
   closeMenus(); hover=null;
-  if(view3D) sizePvToCv();                 /* measure the 2D canvas while it is still on screen */
-  $("cv").style.display = view3D ? "none" : "";
-  $("pv").style.display = view3D ? "" : "none";
-  if(view3D){
-    setTool("select");
-    syncView3D(true);                      /* built and framed: the view is being opened */
-    say("");
-  } else { say(""); draw(); }
+  sizePvToCv();                            /* measure the 2D canvas while it is still on screen */
+  $("cv").style.display="none";
+  $("pv").style.display="";
+  setTool("select");
+  syncView3D(true);                        /* built and framed: the view is being opened */
+  say("");
+}
+$("bView3D").onclick=()=>{
+  if(!view3D){ openView3D(); return; }
+  view3D=false; pvOn=false;
+  $("bView3D").classList.remove("on");
+  closeMenus(); hover=null;
+  $("cv").style.display=""; $("pv").style.display="none";
+  say(""); draw();
 };
 let setupOpen=false;
 $("bSettings").onclick=()=>{
@@ -8032,6 +8086,14 @@ $("aClose").onclick=()=>$("about").classList.remove("show");
    event re-based the guide geometry and rebuilt the frame before drawing twice. Nothing about the
    plate depends on the window, so there is nothing for fit() to recompute. */
 swatches(); syncSizeFields(); updateZoomUI(); applyFrameScale(); syncAxes();
+/* THE 3D VIEW IS THE WORKSPACE FROM THE FIRST MOMENT (Jo Watts, 2026-09-14). ?renderer=js in the
+   address asks for the JavaScript renderer, for comparing the two; nothing else reads the address.
+   Guarded so the geometry check, which runs this script without a page, does not open a view. */
+if(typeof location.search === "string"){
+  pvUseGL = !/[?&]renderer=js\b/.test(location.search);
+  $("bView3D").style.display="none"; $("tSide").style.display="none";
+  openView3D();
+}
 /* The empty workspace is the first snapshot, so the first brick placed has something to go back to.
    applyFrameScale has already committed; this only guards a future boot path that does not. */
 if(!hist.length) commit();
