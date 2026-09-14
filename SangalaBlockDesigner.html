@@ -2776,6 +2776,67 @@ function worldToCell(P){
   return {col: Math.floor(mmx/STUD), row: Math.floor(mmy/vUnit()), depth: -P[1]/(mode==="standing" ? STUD : PLATE),
           mmx: mmx, mmy: mmy, mirrored: false};
 }
+/* A depth in layers, snapped to the finest unit the library draws in - an LDraw unit, 0.4 mm,
+   twenty to a stud and eight to a plate - because every face of every part lies on that lattice
+   and a depth read back from the picture is a hair off it. */
+function snapDepth(d){ const per = Math.round((mode==="standing" ? STUD : PLATE)/LDU); return Math.round(d*per)/per; }
+/* A depth written the way the records hold one: whole layers in base, a half step in half, the
+   rest in dz as LDraw units - jogHalf's own split - so a part dropped in the 3D View reads, jogs
+   and saves like any other. */
+function setDepth(rec, dl){
+  const per = Math.round((mode==="standing" ? STUD : PLATE)/LDU), u = Math.round(dl*per);
+  rec.base = Math.floor(u/per); const rem = u - rec.base*per;
+  rec.half = undefined; rec.dz = undefined;
+  if(mode==="standing" && rem === per/2) rec.half = 0.5; else if(rem) rec.dz = rem;
+}
+/* WHERE THE NEXT PART WOULD GO, under a screen point of the 3D View - the record the ghost is drawn
+   from and the click places, built once here so the two cannot differ.
+   ON A FACE OF A PART it comes to rest against that face, whichever way the face looks: beside it
+   off a side, on top of it or under it off a top or an underside, in front of it or behind it off
+   a front or a back - the way a shape dropped onto a surface lands in TinkerCAD. The face's own
+   axis is settled by the face; the other two come from the point touched, snapped to the stud
+   lattice as cell() snaps the plan's pointer. Beside or on top of a part, the new one takes the
+   host's own layer, so the two mount on one face and a half-stepped host is followed exactly.
+   OVER THE PAGE it lands as the plan lands it at that cell: settle() puts it against the backdrop,
+   or just clear of whatever already stands in those cells.
+   Nothing is placed here. It answers where; the ghost shows it and the click does it. */
+function pvDrop(x, y){
+  const k = pvPieceAt(x, y), part = cur();
+  const rec = {p: part, colorIdx: selCol, col: 0, row: 0, base: 0, turn: armed.turn==="up" ? undefined : armed.turn, rot: armed.rot};
+  const host = k.n ? pieceBrick(k.n) : null;
+  if(host && k.nrm){
+    const P = pvUnproject(x, y, k.d), n = k.nrm, c = worldToCell(P);
+    const ax = Math.abs(n[0]) >= Math.abs(n[1]) && Math.abs(n[0]) >= Math.abs(n[2]) ? 0 : Math.abs(n[1]) >= Math.abs(n[2]) ? 1 : 2;
+    const t = thickB(rec), away = facedAway(rec);
+    rec.col = c.col; rec.row = c.row;
+    /* d is the layer the new part's BODY starts at, counting away from the viewer; a part whose
+       studs face away mounts by the other end of its body, so its base is d plus its thickness -
+       the two ways bricksToTris grows a body from its mounting face */
+    let d;
+    if(ax === 1){
+      /* against a front or a back, the body ends at the face. The face's depth is read back from
+         the picture and snapped to the library's own unit, since every face of a part lies on it. */
+      const fd = snapDepth(c.depth);
+      d = n[1] < 0 ? fd : fd - t;
+    } else {
+      if(ax === 0){ const e = Math.round(P[0]/STUD); rec.col = n[0] > 0 ? e : e - acrossOf(rec); }
+      else { const e = Math.round(c.mmy/vUnit()); rec.row = n[2] > 0 ? e - rowsFor(rec) : e; }
+      /* beside or on top, the part takes the host's own layers - so a half-stepped host is
+         followed exactly - and among them the ones nearest the point touched, as far as the
+         part fits within the host's depth: pointing at the front of a deep part puts the new one
+         at its front, at the back at its back. */
+      const back = rearB(host), room = Math.max(0, thickB(host) - t);
+      d = back + Math.max(0, Math.min(room, Math.round(c.depth - back - t/2)));
+    }
+    setDepth(rec, away ? d + t : d);
+    return rec;
+  }
+  const P = pvOnPlane(x, y, [0, 0, 0], [0, 1, 0]);      /* the page, the backdrop the figure stands against */
+  if(!P) return null;
+  const c = worldToCell(P);
+  rec.col = c.col; rec.row = c.row;
+  return settle(rec);
+}
 /* Piece numbers are handed out by bricksToTris, one per brick that is not parked on the cork, in
    the order of `bricks`; selPiece counts the same way forward, and these two count it the same
    way back and over the whole selection. */
@@ -2793,6 +2854,17 @@ function selPieces(){
 function pvClick(cx, cy, shift){
   const pv = $("pv"), r = pv.getBoundingClientRect();
   const x = (cx - r.left)*(pv.width/Math.max(1, r.width)), y = (cy - r.top)*(pv.height/Math.max(1, r.height));
+  /* THE ERASE AND PART TOOLS, as the plan's own click serves them: erase takes off the brick under
+     the pointer; place puts the next part down where the ghost stood, and it becomes the selected
+     brick, so Delete takes off the piece just put down (the plan's reason). */
+  if(tool === "erase"){
+    const b = pieceBrick(pvPieceAt(x, y).n); if(!b) return;
+    bricks.splice(bricks.indexOf(b), 1); draw(); commit(); return;
+  }
+  if(tool === "place"){
+    const nb = pvDrop(x, y); if(!nb) return;
+    bricks.push(nb); selBrick = nb; hover = null; pvGhost = null; say(""); draw(); commit(); return;
+  }
   const b = pieceBrick(pvPieceAt(x, y).n);
   if(!b){
     if(shift) return;
@@ -3144,6 +3216,20 @@ function renderPreview(o){
     if(d.pan){ pv.style.cursor=""; return; }
     if(!d.moved) pvClick(d[0], d[1], d.shift);       /* it never turned: it was a click */
   });
+  /* THE GHOST OF THE NEXT PART follows the pointer while the Part tool is up, as it does on the
+     plan: the record pvDrop answers with, built into triangles the way every placed brick is, and
+     drawn on the ghost channel the renderers already have. It is not part of the model - the
+     stamp does not see it - so the next rebuild of the model clears it and the next movement of
+     the hand brings it back. */
+  const clearGhost=()=>{ if(pvGhost || hover){ pvGhost=null; hover=null; renderPreview(); } };
+  pv.addEventListener("mousemove",e=>{
+    if(pvDrag || tool!=="place"){ clearGhost(); return; }
+    const r=pv.getBoundingClientRect(), x=(e.clientX-r.left)*(pv.width/Math.max(1,r.width)), y=(e.clientY-r.top)*(pv.height/Math.max(1,r.height));
+    hover=pvDrop(x, y);
+    pvGhost=hover ? bricksToTris([hover]).tris : null;
+    renderPreview();
+  });
+  pv.addEventListener("mouseleave",clearGhost);
   /* The wheel range widened when the base stopped being the fit: pvBase is now the 2D view's own
      scale at whatever zoom the plan was at, so the wheel must be able to reach well past it both ways. */
   pv.addEventListener("wheel",e=>{ e.preventDefault(); pvZoom=Math.max(0.05,Math.min(20,pvZoom*Math.exp(-e.deltaY*0.0012))); renderPreview(); },{passive:false});
@@ -3232,6 +3318,11 @@ function syncView3D(refit){
   if(geo!==pvStamp || refit){
     pvStamp=geo;
     pvSetTris(Object.assign(bricksToTris(), {guides: frameToGuideTris()}));
+    /* THE GHOST OUTLIVES A REBUILD. pvSetTris clears the ghost channel, and a rebuild comes not
+       only from an edit but from a part's shape arriving from the library - the very part the
+       ghost is showing, the first time it is picked. Rebuilt from the record the hand is still
+       holding, it comes back at once, and with the real shape now that there is one. */
+    if(view3D && hover && tool==="place") pvGhost = bricksToTris([hover]).tris;
     if(refit) pvBounds();
   }
   renderPreview();
@@ -3986,7 +4077,7 @@ function ldrTris(b, p, x0, x1, y0, y1, z0, z1){
   return out;
 }
 
-function bricksToTris(){
+function bricksToTris(list){   /* the bricks, or a list handed in: the 3D View's ghost is one record built exactly as the placed ones are */
   const H = modelH, parts=[], cols=[], tris=[];
   /* A STUD STANDS PROUD, so its walls must be wound OUTWARD and its cap must sit on the FREE
      end. Called with the face first and the tip second: wound the other way round, every wall
@@ -4011,7 +4102,7 @@ function bricksToTris(){
       out.push([[cx,cy,z1],B1,A1]);
     }
   };
-  bricks.forEach(b=>{
+  (list || bricks).forEach(b=>{
     if(parked(b)) return;        /* candidates on the cork are not part of the model, so not in 3D or the STL */
     const p=b.p, d=p.d||1, t=thick(p), mine=[], vu=vUnit(), rws=rowsOf(p), fc=faced(b);
     /* THE BAND IS THE ONE THE PLAN CLAIMS, quarter turn and all, because ldrTris centres the part's
@@ -4161,6 +4252,7 @@ function setTool(t){
   $("tPart").classList.toggle("on",   t==="place");
   $("tErase").classList.toggle("on",  t==="erase");
   cv.style.cursor = t==="place" ? "crosshair" : (t==="erase" ? "not-allowed" : "default");
+  $("pv").style.cursor = t==="place" ? "crosshair" : (t==="erase" ? "not-allowed" : "");   /* "" leaves the 3D View its grab hand */
   hover=null; draw();
 }
 $("tSelect").onclick=()=>{closeMenus();setTool("select");say("");};
