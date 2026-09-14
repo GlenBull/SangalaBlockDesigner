@@ -74,6 +74,21 @@ photograph settled. **And never rewrite a saved design on the way in** — a mig
 slopes widened them until they swallowed the stud beside them, which is the builder's work destroyed
 to satisfy a convention.
 
+## The application goes to Dropbox on every commit (Glen, 2026-09-13)
+**"The standing protocol is that whenever a commit is made, the dropbox version is also updated."**
+`Sangala Tools\Sangala Blocks Files` is what Jo, Moses and the students install from, so a copy left
+behind there is the version they actually get. `Update SangalaBlocks.cmd` pulling from GitHub does NOT
+excuse it - that serves only a tester who runs the updater. Sangala Mosaic sat nine versions behind in
+Dropbox on exactly that mistaken reasoning.
+
+**The tool is `tools\sangala_publish.py` IN THE SILHOUETTE TOOLS REPO** - it covers all three
+applications from one place, and for Blocks it also checks every LDraw part the parts list needs, which
+the updater deliberately never carries. Report, fix, confirm:
+
+    python "D:\Code Projects\Silhouette Tools	ools\sangala_publish.py"
+    python "D:\Code Projects\Silhouette Tools	ools\sangala_publish.py" --publish Blocks
+    python "D:\Code Projects\Silhouette Tools	ools\sangala_publish.py"
+
 ## Where documents go (Glen, 2026-08-14)
 A document about this application is published to Dropbox at
 `AI Sandbox\Design through Making\Sangala Tools\Sangala Blocks Files\Documents\` — Jo cannot
