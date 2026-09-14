@@ -110,6 +110,18 @@ for(const p of only){
         fail(p,turn,rot,"an upward stud off the grid", (at/2).toFixed(3), "a column centre or line");
     });
   }
+  /* 7. A POINT ON THE PART MAPS BACK TO ITS CELL: the foot's left edge to its column, the body's top
+     to its row, the mounting face to its layer. worldToCell is the inverse the 3D View builds by,
+     so a part placed where the pointer touched must come out in the cell the plan would give it. */
+  for(const turn of TURNS) for(let rot=0; rot<4; rot++){
+    const b = {p:p, colorIdx:0, col:10, row:20, base:0, turn: turn==="up" ? undefined : turn, rot:rot};
+    const H = G.worldToCell([0,0,0]).mmy, vu = G.vUnit();
+    const footLeft = G.originX(b) + G.footX(b).lo*LDU - G.alignDX(b);
+    const c = G.worldToCell([footLeft + 0.01, -G.depthOf(b)*STUD, H - b.row*vu - 0.01]);
+    if(c.col !== b.col) fail(p,turn,rot,"cell column", c.col, b.col);
+    if(c.row !== b.row) fail(p,turn,rot,"cell row", c.row, b.row);
+    if(!near(c.depth, G.depthOf(b))) fail(p,turn,rot,"cell depth", c.depth, G.depthOf(b));
+  }
   /* 6. four quarter turns about any axis come back to where they started */
   for(const axis of ["x","y","z"]){
     let st = {turn:"up", rot:0};

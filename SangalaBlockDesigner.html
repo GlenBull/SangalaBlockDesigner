@@ -2764,6 +2764,18 @@ function pvOnPlane(sx, sy, q, n, cam){
   const t = (n[0]*(q[0] - P0[0]) + n[1]*(q[1] - P0[1]) + n[2]*(q[2] - P0[2]))/nv;
   return [P0[0] + v[0]*t, P0[1] + v[1]*t, P0[2] + v[2]*t];
 }
+/* ---------- FROM A POINT IN THE MODEL TO A CELL ----------
+   bricksToTris lays a record down in the model: its claimed band starts at col*STUD across, its
+   body's top sits at modelH - row*vUnit() up, and its mounting face at -depthOf*unit in depth, the
+   unit being a stud for a standing figure and a plate for a relief. This is that arithmetic run
+   backwards for a point the pointer touched: the cell it falls in, the layer it lies at, and the
+   same millimetre coordinates cell() gives the plan - so what the plan does with a cell, the 3D
+   View does with a point. No mirror: the 3D View stands wherever its camera stands. */
+function worldToCell(P){
+  const mmx = P[0], mmy = modelH - P[2];
+  return {col: Math.floor(mmx/STUD), row: Math.floor(mmy/vUnit()), depth: -P[1]/(mode==="standing" ? STUD : PLATE),
+          mmx: mmx, mmy: mmy, mirrored: false};
+}
 /* Piece numbers are handed out by bricksToTris, one per brick that is not parked on the cork, in
    the order of `bricks`; selPiece counts the same way forward, and these two count it the same
    way back and over the whole selection. */
