@@ -76,6 +76,8 @@ to satisfy a convention.
 
 ## The application goes to Dropbox on every commit (Glen, 2026-09-13)
 **"The standing protocol is that whenever a commit is made, the dropbox version is also updated."**
+**This is a family-wide rule and its authority is the GLOBAL guide** - `C:\Users\glenb\.claude\CLAUDE.md`, section "A push to GitHub is not a delivery. Dropbox is." - because a rule about all three filed under one of them is invisible in the other two. What follows here is the same rule with this application's own paths.
+
 `Sangala Tools\Sangala Blocks Files` is what Jo, Moses and the students install from, so a copy left
 behind there is the version they actually get. `Update SangalaBlocks.cmd` pulling from GitHub does NOT
 excuse it - that serves only a tester who runs the updater. Sangala Mosaic sat nine versions behind in
