@@ -2579,7 +2579,7 @@ void main(){
         float edge = min(min(uv.x - uRect.x, uRect.y - uv.x), min(uv.y - uRect.z, uRect.w - uv.y));
         vec3 c = mix(vec3(0.925, 0.953, 0.980), vec3(0.62, 0.77, 0.89), line);
         if(edge < 2.0) c = vec3(0.55, 0.72, 0.86);
-        col = vec4(c, 1.0);
+        col = vec4(c, 0.5);      /* half transparent, so the board shows through it (Jo Watts, 2026-09-14) */
       }
     }
   }
